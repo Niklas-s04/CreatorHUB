@@ -79,5 +79,5 @@ The focus of this project is not just CRUD, but practical workflow design across
 ### 1. Clone the repository
 
 ```bash
-git clone <your-repo-url>
+git clone https://github.com/Nxklass/CreatorHUB
 cd creatorhub
