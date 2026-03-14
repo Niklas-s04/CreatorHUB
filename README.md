@@ -80,4 +80,8 @@ The focus of this project is not just CRUD, but practical workflow design across
 
 ```bash
 git clone https://github.com/Nxklass/CreatorHUB
+<<<<<<< HEAD
 cd creatorhub
+=======
+cd creatorhub
+>>>>>>> ed439fdda0b72d22068233de2c70d233aab1b6eb
