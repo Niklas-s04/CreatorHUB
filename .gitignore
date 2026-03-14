@@ -1,0 +1,7 @@
+.env
+*.pyc
+node_modules/
+dist/
+build/
+uploads/
+.cache/
