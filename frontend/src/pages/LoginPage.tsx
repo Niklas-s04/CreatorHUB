@@ -1,8 +1,8 @@
 import React, { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { getBootstrapStatus, login, requestRegistration, setupAdminPassword } from '../api'
+import { confirmPasswordReset, getBootstrapStatus, login, requestPasswordReset, requestRegistration, setupAdminPassword } from '../api'
 
-type Mode = 'login' | 'register' | 'setup'
+type Mode = 'login' | 'register' | 'setup' | 'reset'
 
 function formatError(err: unknown): string {
   const msg = err instanceof Error ? err.message : String(err)
@@ -19,6 +19,8 @@ export default function LoginPage() {
   const [username, setUsername] = useState('admin')
   const [password, setPassword] = useState('')
   const [password2, setPassword2] = useState('')
+  const [otp, setOtp] = useState('')
+  const [resetToken, setResetToken] = useState('')
   const [err, setErr] = useState<string | null>(null)
   const [msg, setMsg] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -55,8 +57,21 @@ export default function LoginPage() {
         setMsg('Registrierungsanfrage wurde an den Admin gesendet.')
         setPassword('')
         setPassword2('')
+      } else if (mode === 'reset') {
+        if (resetToken.trim()) {
+          if (password !== password2) throw new Error('Passwörter stimmen nicht überein')
+          await confirmPasswordReset(resetToken, password)
+          setMsg('Passwort wurde zurückgesetzt. Bitte einloggen.')
+          setMode('login')
+          setPassword('')
+          setPassword2('')
+          setResetToken('')
+        } else {
+          const res = await requestPasswordReset(username)
+          setMsg(res.reset_token ? `Reset-Token: ${res.reset_token}` : 'Falls der Benutzer existiert, wurde ein Reset ausgelöst.')
+        }
       } else {
-        await login(username, password)
+        await login(username, password, otp)
         nav('/')
       }
     } catch (e: any) {
@@ -78,6 +93,7 @@ export default function LoginPage() {
           <div className="mode-switch">
             <button className={`btn ${mode === 'login' ? 'primary' : ''}`} type="button" onClick={() => { setMode('login'); setErr(null); setMsg(null) }}>Login</button>
             <button className={`btn ${mode === 'register' ? 'primary' : ''}`} type="button" onClick={() => { setMode('register'); setErr(null); setMsg(null) }}>Registrieren</button>
+            <button className={`btn ${mode === 'reset' ? 'primary' : ''}`} type="button" onClick={() => { setMode('reset'); setErr(null); setMsg(null) }}>Passwort-Reset</button>
           </div>
         )}
 
@@ -100,10 +116,24 @@ export default function LoginPage() {
             <input className="w100" type="password" value={password} onChange={e => setPassword(e.target.value)} />
           </div>
 
-          {(mode === 'setup' || mode === 'register') && (
+          {mode === 'login' && (
+            <div>
+              <div className="field-label">MFA-Code (optional)</div>
+              <input className="w100" value={otp} onChange={e => setOtp(e.target.value)} placeholder="TOTP oder Recovery-Code" />
+            </div>
+          )}
+
+          {(mode === 'setup' || mode === 'register' || mode === 'reset') && (
             <div>
               <div className="field-label">Password wiederholen</div>
               <input className="w100" type="password" value={password2} onChange={e => setPassword2(e.target.value)} />
+            </div>
+          )}
+
+          {mode === 'reset' && (
+            <div>
+              <div className="field-label">Reset-Token (optional für Bestätigung)</div>
+              <input className="w100" value={resetToken} onChange={e => setResetToken(e.target.value)} placeholder="Token einfügen, um neues Passwort zu setzen" />
             </div>
           )}
 
@@ -111,7 +141,7 @@ export default function LoginPage() {
           {msg && <div className="muted">{msg}</div>}
 
           <button className="btn primary w100" disabled={busy}>
-            {busy ? '...' : mode === 'setup' ? 'Admin-Passwort setzen' : mode === 'register' ? 'Anfrage senden' : 'Login'}
+            {busy ? '...' : mode === 'setup' ? 'Admin-Passwort setzen' : mode === 'register' ? 'Anfrage senden' : mode === 'reset' ? (resetToken.trim() ? 'Passwort setzen' : 'Reset anfordern') : 'Login'}
           </button>
         </form>
       </div>

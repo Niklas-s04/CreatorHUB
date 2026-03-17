@@ -14,7 +14,8 @@ class Settings(BaseSettings):
     DATABASE_URL: str = "postgresql+psycopg://creator:creator@localhost:5432/creator_suite"
 
     JWT_SECRET: str = "change_me"
-    JWT_EXPIRE_MINUTES: int = 60 * 24 * 7  # 7 Tage
+    JWT_ACCESS_EXPIRE_MINUTES: int = 15
+    JWT_REFRESH_EXPIRE_MINUTES: int = 60 * 24 * 14
 
     UPLOADS_DIR: str = "/data/uploads"
     CACHE_DIR: str = "/data/cache"
@@ -44,10 +45,27 @@ class Settings(BaseSettings):
     TRUST_PROXY_HEADERS: bool = False
     SECURITY_HSTS_SECONDS: int = 31536000
     AUTH_COOKIE_NAME: str = "creatorhub_auth"
+    AUTH_ACCESS_COOKIE_NAME: str = "creatorhub_access"
+    AUTH_REFRESH_COOKIE_NAME: str = "creatorhub_refresh"
     AUTH_COOKIE_SECURE: bool = False
     AUTH_COOKIE_SAMESITE: Literal["lax", "strict", "none"] = "lax"
-    AUTH_COOKIE_MAX_AGE_SECONDS: int = 60 * 60 * 24 * 7
+    AUTH_ACCESS_COOKIE_MAX_AGE_SECONDS: int = 60 * 15
+    AUTH_REFRESH_COOKIE_MAX_AGE_SECONDS: int = 60 * 60 * 24 * 14
+    AUTH_COOKIE_MAX_AGE_SECONDS: int = 60 * 60 * 24 * 14
     CSRF_COOKIE_NAME: str = "creatorhub_csrf"
+
+    SESSION_IDLE_TIMEOUT_MINUTES: int = 60
+    SESSION_ABSOLUTE_TIMEOUT_MINUTES: int = 60 * 24 * 30
+
+    AUTH_MAX_FAILED_ATTEMPTS: int = 5
+    AUTH_LOCK_MINUTES: int = 30
+    AUTH_SUSPICIOUS_FAILED_THRESHOLD: int = 5
+    AUTH_SUSPICIOUS_WINDOW_MINUTES: int = 15
+
+    MFA_TOTP_ISSUER: str = "CreatorHUB"
+    MFA_RECOVERY_CODES_COUNT: int = 8
+
+    PASSWORD_RESET_TOKEN_TTL_MINUTES: int = 30
 
     BOOTSTRAP_ADMIN_USERNAME: str = "admin"
     BOOTSTRAP_ADMIN_PASSWORD: str = "admin"

@@ -11,6 +11,8 @@ class UserOut(BaseModel):
     role: UserRole
     is_active: bool
     needs_password_setup: bool
+    mfa_enabled: bool
+    active_sessions: int = 0
 
     class Config:
         from_attributes = True
