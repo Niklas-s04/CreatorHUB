@@ -6,15 +6,52 @@ from contextlib import suppress
 import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from app.core.config import settings
+from app.core.web_security import SecurityHeadersMiddleware, RequestSizeLimitMiddleware, RateLimitMiddleware, CsrfProtectionMiddleware
 from app.api.routers import auth, products, assets, content, email, images, knowledge, health, deals, audit
 from app.seed import bootstrap_if_needed
 from app.services.auto_archive import auto_archive_daemon
 
 
+def _validate_security_settings() -> None:
+    if settings.ENV.lower() == "prod" and settings.JWT_SECRET == "change_me":
+        raise RuntimeError("JWT_SECRET must be set to a strong value in production")
+
+    if settings.ENV.lower() == "prod":
+        if not settings.AUTH_COOKIE_SECURE:
+            raise RuntimeError("AUTH_COOKIE_SECURE must be true in production")
+        origins = [o.strip() for o in settings.CORS_ORIGINS.split(",") if o.strip()]
+        if any(o == "*" for o in origins):
+            raise RuntimeError("CORS wildcard is not allowed in production")
+
+
 def create_app() -> FastAPI:
+    _validate_security_settings()
     app = FastAPI(title=settings.PROJECT_NAME, version="1.0.0")
+
+    trusted_hosts = [h.strip() for h in settings.TRUSTED_HOSTS.split(",") if h.strip()]
+    if trusted_hosts:
+        app.add_middleware(TrustedHostMiddleware, allowed_hosts=trusted_hosts)
+
+    app.add_middleware(RequestSizeLimitMiddleware, max_body_size=settings.MAX_REQUEST_BODY_BYTES)
+    app.add_middleware(
+        CsrfProtectionMiddleware,
+        auth_cookie_name=settings.AUTH_COOKIE_NAME,
+        csrf_cookie_name=settings.CSRF_COOKIE_NAME,
+    )
+    if settings.RATE_LIMIT_ENABLED:
+        app.add_middleware(
+            RateLimitMiddleware,
+            redis_url=settings.REDIS_URL,
+            redis_prefix=settings.RATE_LIMIT_REDIS_PREFIX,
+            trust_proxy_headers=settings.TRUST_PROXY_HEADERS,
+            global_limit=settings.RATE_LIMIT_GLOBAL,
+            window_seconds=settings.RATE_LIMIT_WINDOW_SECONDS,
+            auth_limit=settings.RATE_LIMIT_AUTH,
+        )
+    app.add_middleware(SecurityHeadersMiddleware, hsts_seconds=settings.SECURITY_HSTS_SECONDS)
 
     origins = [o.strip() for o in settings.CORS_ORIGINS.split(",") if o.strip()]
     if origins:

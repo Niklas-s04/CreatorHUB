@@ -1,71 +1,21 @@
-import { useEffect, useMemo, useState } from "react";
-import { Link, NavLink as RouterNavLink, useLocation } from "react-router-dom";
-
-type NavItem = { to: string; label: string };
-
-const NAV_ITEMS: NavItem[] = [
-  { to: "/dashboard", label: "Dashboard" },
-  { to: "/products", label: "Inventory" },
-  { to: "/assets", label: "Assets" },
-  { to: "/content", label: "Content" },
-  { to: "/email", label: "Email" },
-  { to: "/settings", label: "Settings" },
-];
-
-function NavLink({ to, label }: NavItem) {
-  return (
-    <RouterNavLink
-      to={to}
-      className={({ isActive }) => (isActive ? "active" : "")}
-      end={to === "/dashboard"}
-    >
-      {label}
-    </RouterNavLink>
-  );
-}
-
-export default function TopBar() {
-  const loc = useLocation();
-  const [menuOpen, setMenuOpen] = useState(false);
-
-  useEffect(() => {
-    setMenuOpen(false);
-  }, [loc.pathname]);
-
-  const currentLabel = useMemo(() => {
-    const found = NAV_ITEMS.find(item => loc.pathname === item.to || loc.pathname.startsWith(item.to + "/"));
-    return found?.label ?? "CreatorHUB";
-  }, [loc.pathname]);
-
+export default function TopBar({ onToggleMenu }: { onToggleMenu: () => void }) {
   return (
     <div className="topbar">
       <div className="topbar-inner">
-        <Link className="brand" to="/dashboard">CreatorHUB</Link>
-        <div className="current-page">{currentLabel}</div>
-        <div className="nav nav-main">
-          {NAV_ITEMS.map(item => (
-            <NavLink key={item.to} to={item.to} label={item.label} />
-          ))}
+        <button className="topbar-menu-btn" onClick={onToggleMenu} aria-label="Navigation öffnen">☰</button>
+        <div className="topbar-search-wrap">
+          <input className="topbar-search" placeholder="Suchen …" aria-label="Suchen" />
         </div>
-        <div className="nav nav-actions">
-          <Link to="/products" className="btn primary small-btn">+ Produkt</Link>
-          <Link to="/email" className="btn small-btn">E-Mail</Link>
-        </div>
-        <button
-          type="button"
-          className="menu-toggle"
-          onClick={() => setMenuOpen(v => !v)}
-          aria-expanded={menuOpen}
-          aria-label="Navigation öffnen"
-        >
-          Menü
-        </button>
-      </div>
-      <div className={menuOpen ? "mobile-menu open" : "mobile-menu"}>
-        <div className="mobile-menu-inner">
-          {NAV_ITEMS.map(item => (
-            <NavLink key={`m-${item.to}`} to={item.to} label={item.label} />
-          ))}
+        <div className="topbar-right">
+          <div className="topbar-icon-btn" aria-label="Benachrichtigungen">
+            🔔
+            <span className="badge">3</span>
+          </div>
+          <div className="topbar-icon-btn" aria-label="Nachrichten">
+            ✉
+            <span className="badge">7</span>
+          </div>
+          <div className="topbar-profile" aria-label="Profil">NH</div>
         </div>
       </div>
     </div>

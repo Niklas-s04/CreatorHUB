@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { apiFetch } from "../api";
 
 type ContentItem = {
   id: number;
@@ -45,16 +46,7 @@ const PLATFORM_FILTERS: { value: PlatformFilter; label: string }[] = [
 ];
 
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`/api${path}`, {
-    headers: { "Content-Type": "application/json" },
-    credentials: "include",
-    ...init,
-  });
-  if (!res.ok) {
-    const msg = await res.text();
-    throw new Error(msg || `HTTP ${res.status}`);
-  }
-  return res.json();
+  return apiFetch(path, init) as Promise<T>;
 }
 
 export default function ContentPage() {
@@ -162,41 +154,46 @@ export default function ContentPage() {
   }, [laneData, platformFilter]);
 
   return (
-    <div className="split">
-      <div className="split-main">
-        <div className="container">
-          <div className="row" style={{ justifyContent: "space-between" }}>
-            <h2 style={{ margin: 0 }}>Content</h2>
-            <div className="row">
-              <input
-                placeholder="Titel…"
-                value={newTitle}
-                onChange={(e) => setNewTitle(e.target.value)}
-                style={{ width: 280 }}
-              />
-              <select value={newPlatform} onChange={(e) => setNewPlatform(e.target.value)}>
-                <option value="youtube">YouTube</option>
-                <option value="instagram">Instagram</option>
-                <option value="tiktok">TikTok</option>
-                <option value="blog">Blog</option>
-                <option value="podcast">Podcast</option>
-              </select>
-              <select value={newType} onChange={(e) => setNewType(e.target.value)}>
-                <option value="video">Video</option>
-                <option value="short">Short/Reel</option>
-                <option value="post">Post</option>
-                <option value="article">Article</option>
-                <option value="podcast">Podcast</option>
-              </select>
-              <button className="btn primary" onClick={() => createItem().catch(alert)}>
-                + Add
-              </button>
-              <button className="btn" onClick={() => load().catch(alert)}>
-                Refresh
-              </button>
-            </div>
+    <div className="container board-layout">
+      <div className="page-header">
+        <div>
+          <h2 className="page-title">Content</h2>
+          <div className="page-subtitle">Planung, Status und Tasks pro Plattform.</div>
+        </div>
+        <div className="page-actions">
+          <div className="control-row">
+            <input
+              className="composer-input"
+              placeholder="Titel…"
+              value={newTitle}
+              onChange={(e) => setNewTitle(e.target.value)}
+            />
+            <select value={newPlatform} onChange={(e) => setNewPlatform(e.target.value)}>
+              <option value="youtube">YouTube</option>
+              <option value="instagram">Instagram</option>
+              <option value="tiktok">TikTok</option>
+              <option value="blog">Blog</option>
+              <option value="podcast">Podcast</option>
+            </select>
+            <select value={newType} onChange={(e) => setNewType(e.target.value)}>
+              <option value="video">Video</option>
+              <option value="short">Short/Reel</option>
+              <option value="post">Post</option>
+              <option value="article">Article</option>
+              <option value="podcast">Podcast</option>
+            </select>
           </div>
+          <button className="btn primary" onClick={() => createItem().catch(alert)}>
+            + Add
+          </button>
+          <button className="btn" onClick={() => load().catch(alert)}>
+            Refresh
+          </button>
+        </div>
+      </div>
 
+      <div className="content-shell">
+        <div className="content-main">
           <div className="board-filters">
             {PLATFORM_FILTERS.map((option) => (
               <button
@@ -222,15 +219,15 @@ export default function ContentPage() {
                     return (
                       <div key={col.value} className="swimlane-column">
                         <div className="swimlane-column-title">{col.label}</div>
-                        <div className="stack" style={{ gap: 8 }}>
+                        <div className="stack">
                           {cards.map((it) => (
                             <div
                               key={it.id}
                               className={it.id === selectedId ? "kanban-card active" : "kanban-card"}
                               onClick={() => setSelectedId(it.id)}
                             >
-                              <div style={{ fontWeight: 900 }}>{it.title}</div>
-                              <div className="small muted" style={{ marginTop: 4 }}>
+                              <div>{it.title}</div>
+                              <div className="small muted">
                                 {(it.platform || "").toUpperCase()} • {(it.content_type || "").toUpperCase()}
                               </div>
 
@@ -245,7 +242,6 @@ export default function ContentPage() {
                                         e.stopPropagation();
                                         updateItem(it.id, { status: next.value }).catch(alert);
                                       }}
-                                      style={{ padding: "4px 8px" }}
                                     >
                                       → {next.label}
                                     </button>
@@ -263,10 +259,8 @@ export default function ContentPage() {
             ))}
           </div>
         </div>
-      </div>
 
-      <div className="split-side">
-        <div className="container">
+        <div className="content-side">
           {!selected ? (
             <div className="card">
               <h3>Details</h3>
@@ -275,8 +269,8 @@ export default function ContentPage() {
           ) : (
             <div className="stack">
               <div className="card">
-                <div className="row" style={{ justifyContent: "space-between" }}>
-                  <h3 style={{ margin: 0 }}>{selected.title}</h3>
+                <div className="section-head">
+                  <h3 className="no-margin">{selected.title}</h3>
                   <button className="btn danger" onClick={() => deleteItem(selected.id).catch(alert)}>
                     Delete
                   </button>
@@ -284,15 +278,13 @@ export default function ContentPage() {
 
                 <hr />
 
-                <div className="stack" style={{ gap: 10 }}>
+                <div className="stack">
                   <div>
-                    <div className="muted small" style={{ marginBottom: 6 }}>
-                      Status
-                    </div>
+                    <div className="field-label">Status</div>
                     <select
+                      className="full-width"
                       value={selected.status}
                       onChange={(e) => updateItem(selected.id, { status: e.target.value }).catch(alert)}
-                      style={{ width: "100%" }}
                     >
                       {STATUS_COLUMNS.map((st) => (
                         <option key={st.value} value={st.value}>
@@ -303,41 +295,37 @@ export default function ContentPage() {
                   </div>
 
                   <div>
-                    <div className="muted small" style={{ marginBottom: 6 }}>
-                      Notes
-                    </div>
+                    <div className="field-label">Notes</div>
                     <textarea
                       value={selected.notes || ""}
                       onChange={(e) =>
                         updateItem(selected.id, { notes: e.target.value }).catch(console.error)
                       }
                       placeholder="Notizen…"
-                      style={{ minHeight: 90 }}
                     />
                   </div>
                 </div>
               </div>
 
               <div className="card">
-                <div style={{ fontWeight: 900, marginBottom: 8 }}>Tasks</div>
+                <div className="title-strong">Tasks</div>
                 <TaskComposer onAdd={(t) => createTask(selected.id, t).catch(alert)} />
 
-                <div className="stack" style={{ gap: 8, marginTop: 10 }}>
+                <div className="stack section-gap">
                   {selectedTasks.map((t) => (
                     <div key={t.id} className="card tight">
-                      <div className="row" style={{ justifyContent: "space-between" }}>
-                        <div style={{ fontWeight: 900 }}>{t.title}</div>
+                      <div className="section-head no-margin">
+                        <div>{t.title}</div>
                         <button className="btn" onClick={() => deleteTask(t.id).catch(alert)}>
                           ✕
                         </button>
                       </div>
-                      <div className="row" style={{ marginTop: 8 }}>
+                      <div className="control-row section-gap">
                         {["todo", "doing", "done"].map((st) => (
                           <button
                             key={st}
                             className={t.status === st ? "btn primary" : "btn"}
                             onClick={() => updateTask(t.id, { status: st }).catch(alert)}
-                            style={{ padding: "5px 10px" }}
                           >
                             {st}
                           </button>
@@ -359,12 +347,12 @@ export default function ContentPage() {
 function TaskComposer({ onAdd }: { onAdd: (title: string) => void }) {
   const [title, setTitle] = useState("");
   return (
-    <div className="row" style={{ alignItems: "stretch" }}>
+    <div className="control-row stretch">
       <input
+        className="grow"
         value={title}
         onChange={(e) => setTitle(e.target.value)}
         placeholder="Neue Task…"
-        style={{ flex: 1 }}
       />
       <button
         className="btn primary"

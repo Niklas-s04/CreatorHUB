@@ -397,8 +397,11 @@ export default function EmailPage() {
 
   return (
     <div className="container">
-      <div className="row between" style={{ marginBottom: 16 }}>
-        <h2>E-Mail Threads</h2>
+      <div className="page-header">
+        <div>
+          <h2 className="page-title">E-Mail Threads</h2>
+          <div className="page-subtitle">Drafting, QA, Deal-Intake und Verlauf in einer Oberfläche.</div>
+        </div>
         <button className="btn" onClick={loadThreads} disabled={threadsLoading}>
           {threadsLoading ? 'Aktualisiere…' : 'Refresh'}
         </button>
@@ -406,9 +409,9 @@ export default function EmailPage() {
 
       {err && <div className="error">{err}</div>}
 
-      <div className="row" style={{ alignItems: 'flex-start', gap: 16 }}>
-        <div className="card" style={{ width: 320, padding: 16 }}>
-          <div className="row between" style={{ marginBottom: 8 }}>
+      <div className="email-layout">
+        <div className="card email-sidebar">
+          <div className="section-head">
             <h3>Letzte Threads</h3>
             <span className="muted small">{threads.length} offen</span>
           </div>
@@ -417,7 +420,7 @@ export default function EmailPage() {
             <div className="muted small">Noch keine Threads.</div>
           )}
 
-          <div className="stack" style={{ gap: 8 }}>
+          <div className="stack">
             {threads.map(t => (
               <button
                 key={t.id}
@@ -434,9 +437,9 @@ export default function EmailPage() {
           </div>
         </div>
 
-        <div className="grow" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <div className="email-main">
           <div className="card">
-            <div className="row" style={{ gap: 8, marginBottom: 12 }}>
+            <div className="control-row no-margin">
               <input
                 className="grow"
                 placeholder="Subject (optional)"
@@ -460,15 +463,15 @@ export default function EmailPage() {
             />
           </div>
 
-          <div className="card" style={{ minHeight: 400 }}>
+          <div className="card email-thread-pane">
             {threadLoading && <div className="muted">Lade Thread…</div>}
             {!threadLoading && !threadDetail && (
               <div className="muted">Thread auswählen oder neuen Draft generieren.</div>
             )}
 
             {!threadLoading && threadDetail && (
-              <div className="stack" style={{ gap: 16 }}>
-                <div className="row between" style={{ alignItems: 'flex-start' }}>
+              <div className="stack">
+                <div className="section-head">
                   <div>
                     <h3>{threadDetail.subject || '(ohne Betreff)'}</h3>
                     <div className="muted small">Intent: {threadDetail.detected_intent}</div>
@@ -478,14 +481,14 @@ export default function EmailPage() {
 
                 <div>
                   <div className="muted small">Original E-Mail</div>
-                  <div className="prebox" style={{ maxHeight: 180, overflow: 'auto' }}>{threadDetail.raw_body}</div>
+                  <div className="prebox prebox-scroll">{threadDetail.raw_body}</div>
                 </div>
 
-                <div className="row" style={{ gap: 16, alignItems: 'flex-start' }}>
-                  <div className="card" style={{ flex: 1 }}>
-                    <div className="row between" style={{ marginBottom: 8 }}>
+                <div className="email-draft-layout">
+                  <div className="card email-draft-main">
+                    <div className="section-head">
                       <h3>Drafts</h3>
-                      <div className="row" style={{ gap: 8 }}>
+                      <div className="control-row">
                         {currentDraft && (
                           <button className="btn" onClick={() => copy(`${currentDraft.draft_subject || ''}\n\n${currentDraft.draft_body}`)}>
                             Copy
@@ -509,7 +512,7 @@ export default function EmailPage() {
 
                     {threadDetail.drafts.length === 0 && <div className="muted">Noch keine Drafts.</div>}
 
-                    <div className="stack" style={{ gap: 12 }}>
+                    <div className="stack">
                       {threadDetail.drafts.map(d => (
                         <div
                           key={d.id}
@@ -521,16 +524,16 @@ export default function EmailPage() {
                             <span className="muted small">{formatDate(d.created_at)}</span>
                           </div>
                           <div className="muted small">Tone: {d.tone}</div>
-                          <p className="prebox" style={{ maxHeight: 120, overflow: 'auto' }}>{d.draft_body}</p>
+                          <p className="prebox draft-snippet">{d.draft_body}</p>
                         </div>
                       ))}
                     </div>
                   </div>
 
-                  <div className="card" style={{ width: 360 }}>
+                  <div className="card email-checks">
                     <h3>Checks</h3>
                     <div className="muted small">Risk Flags</div>
-                    <div className="row" style={{ flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
+                    <div className="control-row mt8">
                       {flags.length ? (
                         flags.map(flag => (
                           <span key={flag} className="pill">{flag}</span>
@@ -543,7 +546,7 @@ export default function EmailPage() {
                     <hr />
 
                     <div className="muted small">Rückfragen</div>
-                    <ul style={{ marginTop: 8 }}>
+                    <ul className="ul-tight">
                       {questions.length ? (
                         questions.map((q, i) => <li key={i}>{q}</li>)
                       ) : (
@@ -552,7 +555,7 @@ export default function EmailPage() {
                     </ul>
 
                     {questions.length > 0 && (
-                      <div className="stack" style={{ gap: 10, marginTop: 12 }}>
+                      <div className="stack section-gap">
                         {questions.map((q, i) => (
                           <div key={i}>
                             <div className="muted small">{q}</div>
@@ -577,7 +580,7 @@ export default function EmailPage() {
                 </div>
 
                 <div className="card">
-                  <div className="row between" style={{ alignItems: 'flex-start' }}>
+                  <div className="section-head">
                     <div>
                       <h3>Deal Intake</h3>
                       <div className="muted small">
@@ -587,7 +590,7 @@ export default function EmailPage() {
                         <div className="muted small">Auto-Analyse liefert beste Ergebnisse bei Sponsoring-Mails.</div>
                       )}
                     </div>
-                    <div className="row" style={{ gap: 8 }}>
+                    <div className="control-row">
                       <button className="btn" onClick={autoFillDealDraft} disabled={dealAutoLoading || !threadDetail}>
                         {dealAutoLoading ? 'Analysiere…' : 'Auto aus Mail'}
                       </button>
@@ -597,26 +600,26 @@ export default function EmailPage() {
                     </div>
                   </div>
 
-                  {dealErr && <div className="error small" style={{ marginTop: 8 }}>{dealErr}</div>}
+                  {dealErr && <div className="error small mt8">{dealErr}</div>}
 
-                  <div className="row" style={{ gap: 12, flexWrap: 'wrap', marginTop: 12 }}>
-                    <div className="stack" style={{ flex: '1 1 220px' }}>
+                  <div className="deal-fields-grid section-gap">
+                    <div className="stack">
                       <span className="muted small">Brand</span>
                       <input value={dealForm.brand_name} onChange={e => updateDealField('brand_name', e.target.value)} placeholder="Brand" />
                     </div>
-                    <div className="stack" style={{ flex: '1 1 220px' }}>
+                    <div className="stack">
                       <span className="muted small">Kontakt</span>
                       <input value={dealForm.contact_name} onChange={e => updateDealField('contact_name', e.target.value)} placeholder="Name" />
                     </div>
-                    <div className="stack" style={{ flex: '1 1 220px' }}>
+                    <div className="stack">
                       <span className="muted small">Kontakt E-Mail</span>
                       <input value={dealForm.contact_email} onChange={e => updateDealField('contact_email', e.target.value)} placeholder="brand@example.com" />
                     </div>
-                    <div className="stack" style={{ flex: '1 1 160px' }}>
+                    <div className="stack">
                       <span className="muted small">Budget</span>
                       <input value={dealForm.budget} onChange={e => updateDealField('budget', e.target.value)} placeholder="z.B. 2.500 EUR" />
                     </div>
-                    <div className="stack" style={{ flex: '0 0 160px' }}>
+                    <div className="stack">
                       <span className="muted small">Status</span>
                       <select value={dealForm.status} onChange={e => updateDealStatus(e.target.value as DealDraftStatus)}>
                         {dealStatusOptions.map(opt => (
@@ -626,20 +629,20 @@ export default function EmailPage() {
                     </div>
                   </div>
 
-                  <div className="row" style={{ gap: 12, flexWrap: 'wrap', marginTop: 12 }}>
-                    <div className="stack" style={{ flex: '1 1 280px' }}>
+                  <div className="deal-fields-grid-large section-gap">
+                    <div className="stack">
                       <span className="muted small">Deliverables</span>
                       <textarea rows={3} value={dealForm.deliverables} onChange={e => updateDealField('deliverables', e.target.value)} placeholder="z.B. 1x YT Integration; 2x Stories" />
                     </div>
-                    <div className="stack" style={{ flex: '1 1 280px' }}>
+                    <div className="stack">
                       <span className="muted small">Usage Rights</span>
                       <textarea rows={3} value={dealForm.usage_rights} onChange={e => updateDealField('usage_rights', e.target.value)} placeholder="Paid social 3 Monate; Newsletter" />
                     </div>
-                    <div className="stack" style={{ flex: '1 1 280px' }}>
+                    <div className="stack">
                       <span className="muted small">Deadlines</span>
                       <textarea rows={3} value={dealForm.deadlines} onChange={e => updateDealField('deadlines', e.target.value)} placeholder="Briefing: 12.03; Publish: 28.03" />
                     </div>
-                    <div className="stack" style={{ flex: '1 1 280px' }}>
+                    <div className="stack">
                       <span className="muted small">Notes</span>
                       <textarea rows={3} value={dealForm.notes} onChange={e => updateDealField('notes', e.target.value)} placeholder="Zusätzliche Auflagen, Freigaben, etc." />
                     </div>
@@ -648,7 +651,7 @@ export default function EmailPage() {
 
                 {currentDraft && compareOptions.length > 0 && (
                   <div className="card">
-                    <div className="row between" style={{ marginBottom: 8 }}>
+                    <div className="section-head">
                       <h3>Vergleich</h3>
                       <select
                         value={compareDraftId || ''}
@@ -696,7 +699,7 @@ export default function EmailPage() {
 
                 <div>
                   <h3>Verlauf</h3>
-                  <div className="stack" style={{ gap: 8 }}>
+                  <div className="stack">
                     {threadDetail.messages.length === 0 && <div className="muted">Noch kein Verlauf.</div>}
                     {threadDetail.messages.map(msg => (
                       <div key={msg.id} className={`message-pill ${msg.role}`}>
@@ -706,7 +709,7 @@ export default function EmailPage() {
                             <span className="pill muted small">{msg.payload.action}</span>
                           )}
                         </div>
-                        <div className="prebox" style={{ whiteSpace: 'pre-wrap' }}>
+                        <div className="prebox">
                           {msg.content || JSON.stringify(msg.payload, null, 2)}
                         </div>
                       </div>

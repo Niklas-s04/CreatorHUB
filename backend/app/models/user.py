@@ -22,3 +22,4 @@ class User(Base, UUIDMixin, TimestampMixin):
     hashed_password: Mapped[str] = mapped_column(String(256))
     role: Mapped[UserRole] = mapped_column(Enum(UserRole), default=UserRole.admin)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    needs_password_setup: Mapped[bool] = mapped_column(Boolean, default=False)

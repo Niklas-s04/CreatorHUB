@@ -10,12 +10,13 @@ class UserOut(BaseModel):
     username: str
     role: UserRole
     is_active: bool
+    needs_password_setup: bool
 
     class Config:
         from_attributes = True
 
 
 class UserCreate(BaseModel):
-    username: str = Field(min_length=3, max_length=64)
-    password: str = Field(min_length=8, max_length=128)
+    username: str = Field(min_length=3, max_length=64, pattern=r"^[A-Za-z0-9_.-]{3,64}$")
+    password: str = Field(min_length=12, max_length=128)
     role: UserRole = UserRole.editor

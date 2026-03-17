@@ -29,14 +29,18 @@ export default function SettingsPage() {
 
   return (
     <div className="container">
-      <h2>Einstellungen</h2>
-      <div className="muted">
-        Brand Voice / Policy / Templates (werden vom E-Mail-Assistenten zusätzlich zu festen Creator-Regeln verwendet).
+      <div className="page-header">
+        <div>
+          <h2 className="page-title">Einstellungen</h2>
+          <div className="page-subtitle">
+            Brand Voice / Policy / Templates für den E-Mail-Assistenten.
+          </div>
+        </div>
       </div>
       {err && <div className="error">{err}</div>}
-      <div style={{ marginTop: 12 }}>
+      <div className="section-gap">
         {docs.map(d => <DocEditor key={d.id} doc={d} onSave={save} />)}
-        {!docs.length && <div className="muted">Keine Docs.</div>}
+        {!docs.length && <div className="empty-state">Keine Docs.</div>}
       </div>
     </div>
   )
@@ -47,21 +51,21 @@ function DocEditor({ doc, onSave }: any) {
   const [content, setContent] = useState(doc.content)
 
   return (
-    <div className="card" style={{ marginBottom: 12 }}>
-      <div className="row" style={{ justifyContent: 'space-between' }}>
+    <div className="card section-gap no-margin">
+      <div className="page-header no-margin">
         <div>
           <div className="pill">{doc.type}</div>
-          <div style={{ fontSize: 18, fontWeight: 800, marginTop: 6 }}>{doc.title}</div>
+          <div className="title-strong mt8">{doc.title}</div>
         </div>
         <button className="btn" onClick={() => onSave({ ...doc, title, content })}>Speichern</button>
       </div>
-      <div style={{ marginTop: 10 }}>
-        <div className="muted">Titel</div>
-        <input value={title} onChange={e => setTitle(e.target.value)} style={{ width: '100%' }} />
+      <div className="section-gap">
+        <div className="field-label">Titel</div>
+        <input className="full-width" value={title} onChange={e => setTitle(e.target.value)} />
       </div>
-      <div style={{ marginTop: 10 }}>
-        <div className="muted">Inhalt</div>
-        <textarea value={content} onChange={e => setContent(e.target.value)} rows={10} style={{ width: '100%' }} />
+      <div className="section-gap">
+        <div className="field-label">Inhalt</div>
+        <textarea className="full-width" value={content} onChange={e => setContent(e.target.value)} rows={10} />
       </div>
     </div>
   )

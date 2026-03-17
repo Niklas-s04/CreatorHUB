@@ -68,20 +68,23 @@ export default function ProductsPage() {
 
   return (
     <div className="container">
-      <div className="row between">
-        <h2>Inventar</h2>
-        <div className="row">
+      <div className="page-header">
+        <div>
+          <h2 className="page-title">Inventar</h2>
+          <div className="page-subtitle">Produkte verwalten, filtern und exportieren.</div>
+        </div>
+        <div className="page-actions">
           <button className="btn primary" onClick={() => setShowNew(v => !v)}>
             {showNew ? 'Schließen' : '+ Produkt'}
           </button>
-          <div className="row" style={{ gap: 8, alignItems: 'center' }}>
+          <div className="control-row">
             <select value={exportDataset} onChange={e => setExportDataset(e.target.value as typeof exportDataset)}>
               <option value="products">Produkte</option>
               <option value="transactions">Transaktionen</option>
               <option value="value_history">Wert-Historie</option>
             </select>
             <input
-              style={{ width: 180 }}
+              className="w180"
               placeholder="Jahre z.B. 2023,2024"
               value={exportYears}
               onChange={e => setExportYears(e.target.value)}
@@ -96,13 +99,13 @@ export default function ProductsPage() {
       {err && <div className="error">{err}</div>}
 
       {showNew && (
-        <div className="card mt12">
-          <div className="row between">
+        <div className="card section-gap">
+          <div className="page-header no-margin">
             <h3>Neues Produkt</h3>
             <button className="btn" onClick={create} disabled={!newTitle.trim()}>Speichern</button>
           </div>
 
-          <div className="row mt12">
+          <div className="control-row section-gap">
             <input className="grow" placeholder="Titel*" value={newTitle} onChange={e => setNewTitle(e.target.value)} />
             <input placeholder="Brand" value={newBrand} onChange={e => setNewBrand(e.target.value)} />
             <input placeholder="Model" value={newModel} onChange={e => setNewModel(e.target.value)} />
@@ -111,9 +114,9 @@ export default function ProductsPage() {
         </div>
       )}
 
-      <div className="card mt12">
-        <div className="row between" style={{ marginBottom: 10 }}>
-          <div className="row">
+      <div className="card section-gap">
+        <div className="page-header mb10">
+          <div className="control-row flex1">
             <input className="grow" placeholder="Suche…" value={q} onChange={e => setQ(e.target.value)} />
             <select value={status} onChange={e => setStatus(e.target.value)}>
               <option value="">Status: alle</option>

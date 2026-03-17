@@ -192,18 +192,21 @@ export default function ProductDetailPage() {
 
   return (
     <div className="container">
-      <div className="row between">
-        <h2>Produkt</h2>
+      <div className="page-header">
+        <div>
+          <h2 className="page-title">Produkt</h2>
+          <div className="page-subtitle">Detailansicht und Asset-/Statusverwaltung.</div>
+        </div>
         <span className="muted small">ID {product.id}</span>
       </div>
 
       {err && <div className="error">{err}</div>}
 
-      <div className="row" style={{ alignItems: 'stretch' }}>
-        <div className="card grow" style={{ minWidth: 320 }}>
+      <div className="product-layout">
+        <div className="card product-main">
           <div className="row between">
             <div>
-              <div style={{ fontWeight: 900, fontSize: 18 }}>{product.title}</div>
+              <div className="title-strong">{product.title}</div>
               <div className="muted small">
                 {[product.brand, product.model].filter(Boolean).join(' • ') || '—'}
               </div>
@@ -218,7 +221,7 @@ export default function ProductDetailPage() {
 
           <div className="row">
             <div className="grow">
-              <div className="muted small" style={{ marginBottom: 6 }}>Status</div>
+              <div className="field-label">Status</div>
               <select className="w100" value={status} onChange={e => setStatus(e.target.value)}>
                 <option value="active">active</option>
                 <option value="sold">sold</option>
@@ -229,11 +232,11 @@ export default function ProductDetailPage() {
               </select>
             </div>
             <div>
-              <div className="muted small" style={{ marginBottom: 6 }}>Datum</div>
+              <div className="field-label">Datum</div>
               <input type="date" value={txDate} onChange={e => setTxDate(e.target.value)} />
             </div>
             <div>
-              <div className="muted small" style={{ marginBottom: 6 }}>Betrag</div>
+              <div className="field-label">Betrag</div>
               <input placeholder="z.B. 120" value={amount} onChange={e => setAmount(e.target.value)} />
             </div>
             <button className="btn primary" onClick={changeStatus}>Apply</button>
@@ -241,7 +244,7 @@ export default function ProductDetailPage() {
 
           <hr />
 
-          <div className="muted small" style={{ marginBottom: 6 }}>Notes</div>
+          <div className="field-label">Notes</div>
           <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={8} />
           <div className="row mt12">
             <button className="btn primary" onClick={saveNotes} disabled={saving}>
@@ -250,7 +253,7 @@ export default function ProductDetailPage() {
           </div>
         </div>
 
-        <div className="card" style={{ width: 420 }}>
+        <div className="card product-side">
           <div className="row between">
             <h3>Bild</h3>
             <span className="muted small">{primary ? 'primary' : '—'}</span>
@@ -264,7 +267,7 @@ export default function ProductDetailPage() {
 
           <hr />
 
-          <div className="muted small" style={{ marginBottom: 6 }}>Upload</div>
+          <div className="field-label">Upload</div>
           <input type="file" onChange={e => {
             const f = e.target.files?.[0]
             if (f) upload(f)
@@ -272,7 +275,7 @@ export default function ProductDetailPage() {
 
           <hr />
 
-          <div className="muted small" style={{ marginBottom: 6 }}>Web-Bild (Quelle)</div>
+          <div className="field-label">Web-Bild (Quelle)</div>
           <div className="row">
             <input className="grow" value={imageQuery} onChange={e => setImageQuery(e.target.value)} placeholder="Query…" />
             <select value={imageSource} onChange={e => setImageSource(e.target.value)}>
@@ -364,7 +367,7 @@ function AssetCard({
     <div className={asset.review_state === 'pending' ? 'card tight' : 'card tight'}>
       {thumb ? <img src={thumb} className="img" /> : <div className="muted">No preview</div>}
 
-      <div style={{ marginTop: 8, fontWeight: 900, fontSize: 13 }}>
+      <div className="asset-title">
         {asset.title || `asset ${asset.id}`}
       </div>
 
@@ -373,7 +376,7 @@ function AssetCard({
       </div>
 
       {(asset.license_type || asset.attribution) && (
-        <div className="muted small" style={{ marginTop: 6 }}>
+        <div className="muted small mt6">
           {asset.license_type ? `Lizenz: ${asset.license_type}` : ''}
           {asset.license_type && asset.attribution ? ' • ' : ''}
           {asset.attribution ? `Attribution: ${stripHtml(asset.attribution)}` : ''}
@@ -381,14 +384,14 @@ function AssetCard({
       )}
 
       {(asset.source_url || asset.license_url) && (
-        <div className="muted small" style={{ marginTop: 6 }}>
+        <div className="muted small mt6">
           {asset.source_url ? <a href={asset.source_url} target="_blank" rel="noreferrer">Quelle</a> : null}
           {asset.source_url && asset.license_url ? ' • ' : null}
           {asset.license_url ? <a href={asset.license_url} target="_blank" rel="noreferrer">Lizenz</a> : null}
         </div>
       )}
 
-      <div className="row" style={{ marginTop: 10 }}>
+      <div className="row mt10">
         <button className="btn" onClick={() => onPrimary(asset.id)}>Primary</button>
         {asset.review_state !== 'approved' && (
           <button className="btn primary" onClick={() => onReview(asset.id, 'approved')}>Approve</button>

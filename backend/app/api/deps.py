@@ -2,15 +2,16 @@ from __future__ import annotations
 
 from typing import Generator
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 
 from app.core.security import decode_token
+from app.core.config import settings
 from app.db.session import SessionLocal
 from app.models.user import User, UserRole
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/token")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/token", auto_error=False)
 
 
 def get_db() -> Generator[Session, None, None]:
@@ -21,9 +22,17 @@ def get_db() -> Generator[Session, None, None]:
         db.close()
 
 
-def get_current_user(db: Session = Depends(get_db), token: str = Depends(oauth2_scheme)) -> User:
+def get_current_user(
+    request: Request,
+    db: Session = Depends(get_db),
+    token: str | None = Depends(oauth2_scheme),
+) -> User:
+    token_value = token or request.cookies.get(settings.AUTH_COOKIE_NAME)
+    if not token_value:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
+
     try:
-        payload = decode_token(token)
+        payload = decode_token(token_value)
         username = payload.get("sub")
         if not username:
             raise ValueError("missing sub")

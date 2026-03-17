@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -32,6 +34,20 @@ class Settings(BaseSettings):
     OPENVERSE_API_BASE: str = "https://api.openverse.engineering/v1"
 
     CORS_ORIGINS: str = "http://localhost:3000"
+    TRUSTED_HOSTS: str = "localhost,127.0.0.1"
+    MAX_REQUEST_BODY_BYTES: int = 2_000_000
+    RATE_LIMIT_ENABLED: bool = True
+    RATE_LIMIT_WINDOW_SECONDS: int = 60
+    RATE_LIMIT_GLOBAL: int = 240
+    RATE_LIMIT_AUTH: int = 10
+    RATE_LIMIT_REDIS_PREFIX: str = "rl"
+    TRUST_PROXY_HEADERS: bool = False
+    SECURITY_HSTS_SECONDS: int = 31536000
+    AUTH_COOKIE_NAME: str = "creatorhub_auth"
+    AUTH_COOKIE_SECURE: bool = False
+    AUTH_COOKIE_SAMESITE: Literal["lax", "strict", "none"] = "lax"
+    AUTH_COOKIE_MAX_AGE_SECONDS: int = 60 * 60 * 24 * 7
+    CSRF_COOKIE_NAME: str = "creatorhub_csrf"
 
     BOOTSTRAP_ADMIN_USERNAME: str = "admin"
     BOOTSTRAP_ADMIN_PASSWORD: str = "admin"

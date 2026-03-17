@@ -187,24 +187,24 @@ export default function AssetsPage() {
   }
 
   return (
-    <div className="container pt60">
+    <div className="container">
       <div className="row between">
         <div>
           <h2>Mediathek</h2>
           <div className="muted">Suche, filtere und exportiere geprüfte Assets.</div>
         </div>
-        <div className="row" style={{ gap: 12 }}>
+        <div className="control-row">
           <div className="card tight">
             <div className="muted small">Gefiltert</div>
             <div className="kpi">{assets.length}</div>
           </div>
           <div className="card tight">
             <div className="muted small">Lizenz ok</div>
-            <div className="kpi" style={{ fontSize: 24 }}>{stats.licensed}</div>
+            <div className="kpi metric-kpi">{stats.licensed}</div>
           </div>
           <div className="card tight">
             <div className="muted small">Primary</div>
-            <div className="kpi" style={{ fontSize: 24 }}>{stats.primary}</div>
+            <div className="kpi metric-kpi">{stats.primary}</div>
           </div>
         </div>
       </div>
@@ -212,7 +212,7 @@ export default function AssetsPage() {
       {err && <div className="error mt12">{err}</div>}
 
       <div className="card asset-controls mt16">
-        <div className="row" style={{ alignItems: 'stretch' }}>
+        <div className="control-row stretch">
           <input
             className="grow"
             placeholder="Suche (Titel, Quelle, URL)"
@@ -221,7 +221,7 @@ export default function AssetsPage() {
           />
           <button className="btn" onClick={reload} disabled={loading}>Refresh</button>
         </div>
-        <div className="row" style={{ flexWrap: 'wrap' }}>
+        <div className="control-row">
           <select value={ownerType} onChange={e => setOwnerType(e.target.value as AssetOwnerType | '')}>
             {ownerTypeOptions.map(opt => (
               <option key={opt.value || 'all'} value={opt.value}>{opt.label}</option>
@@ -274,7 +274,7 @@ export default function AssetsPage() {
                 )}
               </div>
               <div className="asset-card-body">
-                <div className="row between" style={{ alignItems: 'flex-start' }}>
+                <div className="row between">
                   <strong>{asset.title || 'Ohne Titel'}</strong>
                   <span className={`asset-license ${licenseOk ? 'ok' : 'missing'}`}>
                     {licenseOk ? 'Lizenz ok' : 'Lizenz fehlt'}
@@ -319,7 +319,7 @@ export default function AssetsPage() {
           )
         })}
         {!assets.length && !loading && (
-          <div className="card" style={{ gridColumn: '1 / -1' }}>
+          <div className="card asset-empty-full">
             <div className="muted">Keine Assets gefunden. Filter anpassen.</div>
           </div>
         )}

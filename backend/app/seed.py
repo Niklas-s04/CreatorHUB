@@ -28,6 +28,7 @@ DEFAULT_POLICY = """- Keine Bankdaten, Adresse, Telefonnummer ausgeben oder wied
 
 def bootstrap_if_needed() -> None:
     import os
+    import secrets
     if os.getenv("SKIP_BOOTSTRAP", "false").lower() in ("true", "1", "yes"):
         print("SKIP_BOOTSTRAP is set - skipping bootstrap")
         return
@@ -41,9 +42,10 @@ def bootstrap_if_needed() -> None:
         if not admin:
             db.add(User(
                 username=settings.BOOTSTRAP_ADMIN_USERNAME,
-                hashed_password=hash_password(settings.BOOTSTRAP_ADMIN_PASSWORD),
+                hashed_password=hash_password(secrets.token_urlsafe(48)),
                 role=UserRole.admin,
                 is_active=True,
+                needs_password_setup=True,
             ))
             db.commit()
 
