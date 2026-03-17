@@ -1,82 +1,180 @@
 # CreatorHUB
 
-Local-first platform for product inventory, content workflows, AI-assisted email drafting, and image sourcing.
+CreatorHUB is a full-stack platform for inventory operations, content planning, asset handling, and AI-assisted communication.
 
-CreatorHUB is a full-stack web application built to support small creator, reseller, and operations-heavy workflows in one place. The project combines product management, asset handling, content task tracking, knowledge-based AI assistance, and asynchronous background jobs in a single self-hosted setup.
+It combines product lifecycle workflows, media sourcing/review, content task tracking, and guarded email drafting in one self-hosted project.
 
-## Why I built this
+## Features
 
-Many small workflows are spread across spreadsheets, chat tools, draft emails, and shared folders. CreatorHUB is an attempt to bring those operational steps together into one system:
+- Product inventory with status transitions and transaction history
+- Asset library with upload/web sources, review state, and primary asset selection
+- Content workflow board (platform lanes + status columns + tasks)
+- AI-assisted email drafting and refinement with risk checks and deal-intake support
+- Knowledge base for reusable policy/brand context
+- Image search pipeline (open sources + optional model-assisted scoring)
+- Audit endpoints and asynchronous worker jobs
+- Admin bootstrap + registration-request approval flow
+- Web security middleware (CSRF, rate limiting, security headers, trusted hosts, request-size limit)
 
-- manage products and their status
-- organize assets and media
-- track content tasks
-- draft emails with local AI support
-- keep reusable policy and brand knowledge in the app
-- run background processing with a worker queue
-
-The focus of this project is not just CRUD, but practical workflow design across backend, frontend, storage, and async processing.
-
-## Core features
-
-- Product management with detail views and status tracking
-- Asset management for uploaded media and related records
-- Content workflow with task-oriented views
-- AI-assisted email drafting with guardrails
-- Knowledge base for reusable brand/policy context
-- Image sourcing from open sources
-- Audit-related endpoints and operational background jobs
-- Self-hosted architecture using Docker, Postgres, Redis, and Ollama
-
-## Stack
+## Tech Stack
 
 ### Backend
 - FastAPI
-- SQLAlchemy
-- Alembic
+- SQLAlchemy + Alembic
 - PostgreSQL
-- Redis + RQ worker
-- Pydantic
+- Redis + RQ
+- Pydantic Settings
 
 ### Frontend
-- React
-- TypeScript
+- React + TypeScript
 - Vite
 - React Router
 
-### Infrastructure
-- Docker
-- Docker Compose
-- Ollama for local LLM usage
+## Repository Structure
 
-## Architecture overview
+- `backend/` API, models, services, migrations, worker
+- `frontend/` React UI
+- `.env.example` environment template
 
-- `frontend/` contains the React application
-- `backend/` contains the FastAPI API, business logic, models, and worker code
-- `postgres` stores application data
-- `redis` powers background jobs and queue processing
-- `ollama` provides local model inference for AI-related features
-- persistent volumes are used for uploads, cache, exports, and database storage
+## Prerequisites
 
-## Main modules
+- Python 3.11+
+- Node.js 20+
+- PostgreSQL
+- Redis
+- (Optional) Ollama for local LLM features
 
-- **Products**: product records, value/status information, detail pages
-- **Assets**: file and asset-related operations
-- **Content**: workflow tasks for operational and publishing processes
-- **Email**: AI-assisted draft generation with policy constraints
-- **Knowledge**: stored brand voice and policy documents
-- **Images**: image search/fetch pipeline using open sources
-- **Deals / Audit**: additional workflow and traceability endpoints
+## Quick Start (Local Development)
 
-## Run locally
-
-### Prerequisites
-
-- Docker
-- Docker Compose
-- enough local resources to run Postgres, Redis, frontend, backend, and Ollama
-
-### 1. Clone the repository
+### 1) Clone
 
 ```bash
 git clone https://github.com/Nxklass/CreatorHUB
+cd CreatorHUB
+```
+
+### 2) Configure environment
+
+Copy `.env.example` to `.env` and set at least:
+
+- `ENV=dev`
+- `DATABASE_URL`
+- `REDIS_URL`
+- `JWT_SECRET`
+- `CORS_ORIGINS` (e.g. `http://localhost:3000`)
+
+For production, also ensure:
+
+- strong `JWT_SECRET`
+- `AUTH_COOKIE_SECURE=true`
+- non-wildcard `CORS_ORIGINS`
+
+### 3) Backend setup
+
+```bash
+cd backend
+python -m pip install -r requirements.txt
+alembic upgrade head
+python -m app.main
+```
+
+Backend runs on `http://localhost:8000`.
+
+### 4) Worker (optional but recommended)
+
+Open a second terminal:
+
+```bash
+cd backend
+python -m app.workers.run_worker
+```
+
+### 5) Frontend setup
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Frontend runs on `http://localhost:3000`.
+
+## Docker
+
+This repository includes Dockerfiles for backend and frontend:
+
+- `backend/Dockerfile`
+- `frontend/Dockerfile`
+
+You can build/run these images directly or integrate them into your own compose stack.
+
+## Authentication & Admin Bootstrap
+
+- Auth is cookie-based (`creatorhub_auth`) with CSRF protection (`creatorhub_csrf`).
+- On first setup, bootstrap admin may require password initialization.
+- Registration is request-based and can be approved/rejected in the admin area.
+
+Relevant auth/admin endpoints are under `/api/auth/*`.
+
+## Security Notes
+
+The backend adds middleware for:
+
+- Security headers (`CSP`, `X-Frame-Options`, etc.)
+- Request body size limit
+- Rate limiting (global + auth-sensitive)
+- CSRF checks for unsafe API methods
+- Trusted host validation
+
+Security behavior is environment-aware and stricter in production.
+
+## Useful Commands
+
+### Frontend
+
+```bash
+cd frontend
+npm run dev
+npm run build
+npm run preview
+```
+
+### Backend
+
+```bash
+cd backend
+alembic upgrade head
+python -m app.main
+python -m app.workers.run_worker
+```
+
+## API Overview
+
+Main route groups:
+
+- `/api/auth`
+- `/api/products`
+- `/api/assets`
+- `/api/content`
+- `/api/email`
+- `/api/images`
+- `/api/knowledge`
+- `/api/deals`
+- `/api/audit`
+
+Health route:
+
+- `/health`
+
+## Troubleshooting
+
+- **`JWT_SECRET must be set...`**
+	- Set `ENV=dev` for local dev or configure a secure `JWT_SECRET`.
+- **TypeScript server command in terminal fails**
+	- `TypeScript: Restart TS Server` is a VS Code command, not a shell command.
+- **Auth/CSRF errors on write requests**
+	- Ensure frontend and backend origins/cookies are configured correctly.
+
+## License
+
+See `LICENSE`.
