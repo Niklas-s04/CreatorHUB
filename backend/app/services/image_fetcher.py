@@ -4,9 +4,10 @@ import re
 from typing import Any, Iterable
 from urllib.parse import urljoin, urlparse
 
-import requests
+from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.services.outbound_http import request_outbound
 
 
 WIKIMEDIA_API = "https://commons.wikimedia.org/w/api.php"
@@ -29,7 +30,7 @@ _IMG_TAG_RE = re.compile(
 _BAD_IMG_HINTS = ("sprite", "icon", "logo", "favicon", "data:")
 
 
-def wikimedia_search_images(query: str, limit: int = 12) -> list[dict[str, Any]]:
+def wikimedia_search_images(query: str, limit: int = 12, db: Session | None = None) -> list[dict[str, Any]]:
     """Search Wikimedia Commons for file pages and return image info candidates."""
     params = {
         "action": "query",
@@ -43,9 +44,15 @@ def wikimedia_search_images(query: str, limit: int = 12) -> list[dict[str, Any]]
         "format": "json",
         "origin": "*",
     }
-    r = requests.get(WIKIMEDIA_API, params=params, timeout=30, headers={"User-Agent": "creatorhub/1.0"})
-    r.raise_for_status()
-    data = r.json()
+    response = request_outbound(
+        url=WIKIMEDIA_API,
+        method="GET",
+        params=params,
+        headers={"User-Agent": "creatorhub/1.0"},
+        db=db,
+        require_https=True,
+    )
+    data = response.json()
     pages = (data.get("query") or {}).get("pages") or {}
     out: list[dict[str, Any]] = []
     for _, page in pages.items():
@@ -80,7 +87,7 @@ def wikimedia_search_images(query: str, limit: int = 12) -> list[dict[str, Any]]
     return out[:limit]
 
 
-def openverse_search_images(query: str, limit: int = 12) -> list[dict[str, Any]]:
+def openverse_search_images(query: str, limit: int = 12, db: Session | None = None) -> list[dict[str, Any]]:
     """Search Openverse (no key) for openly licensed images."""
     base = settings.OPENVERSE_API_BASE.rstrip("/")
     url = f"{base}/images"
@@ -91,9 +98,15 @@ def openverse_search_images(query: str, limit: int = 12) -> list[dict[str, Any]]
         # Openverse liefert Lizenztyp und Lizenz-URL pro Treffer.
         "license_type": "commercial,modification",
     }
-    r = requests.get(url, params=params, timeout=30, headers={"User-Agent": "creatorhub/1.0"})
-    r.raise_for_status()
-    data = r.json()
+    response = request_outbound(
+        url=url,
+        method="GET",
+        params=params,
+        headers={"User-Agent": "creatorhub/1.0"},
+        db=db,
+        require_https=True,
+    )
+    data = response.json()
     results = data.get("results") or []
     out: list[dict[str, Any]] = []
     for it in results:
@@ -128,14 +141,22 @@ def _openverse_attribution(it: dict[str, Any]) -> str | None:
     return None
 
 
-def opengraph_images_from_page(url: str, timeout: int = 20) -> list[dict[str, Any]]:
+def opengraph_images_from_page(url: str, timeout: int = 20, db: Session | None = None) -> list[dict[str, Any]]:
     """Extract likely hero images from a given page (OG/Twitter + a few <img> fallbacks).
     This does not imply license.
     """
     try:
-        r = requests.get(url, timeout=timeout, headers={"User-Agent": "creatorhub/1.0"})
-        r.raise_for_status()
-        html = r.text or ""
+        response = request_outbound(
+            url=url,
+            method="GET",
+            headers={"User-Agent": "creatorhub/1.0"},
+            db=db,
+            require_https=True,
+            timeout_read=timeout,
+            max_bytes=min(settings.OUTBOUND_MAX_RESPONSE_BYTES, 2 * 1024 * 1024),
+            max_redirects=1,
+        )
+        html = response.text or ""
     except Exception:
         return []
 
@@ -195,7 +216,7 @@ def opengraph_images_from_page(url: str, timeout: int = 20) -> list[dict[str, An
     return out
 
 
-def manufacturer_url_candidates(urls: Iterable[str], per_url_limit: int = 6) -> list[dict[str, Any]]:
+def manufacturer_url_candidates(urls: Iterable[str], per_url_limit: int = 6, db: Session | None = None) -> list[dict[str, Any]]:
     """User-provided manufacturer/product page URLs → extract likely images from each page.
     No keys, no search engine.
     """
@@ -205,9 +226,10 @@ def manufacturer_url_candidates(urls: Iterable[str], per_url_limit: int = 6) -> 
         if not u:
             continue
         if not (u.startswith("http://") or u.startswith("https://")):
-            # Ohne Schema standardmäßig HTTPS ergänzen.
             u = "https://" + u
-        items = opengraph_images_from_page(u)
+        if u.startswith("http://"):
+            u = "https://" + u[len("http://"):]
+        items = opengraph_images_from_page(u, db=db)
         for it in items[:per_url_limit]:
             it["source"] = "manufacturer"
         out.extend(items[:per_url_limit])

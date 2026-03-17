@@ -92,16 +92,16 @@ def image_hunt_job(product_id: str, query: str | None = None, max_results: int =
         for i, src in enumerate(sources):
             lim = per + (remainder if i == 0 else 0)
             if src == "wikimedia":
-                candidates.extend(wikimedia_search_images(q, limit=lim))
+                candidates.extend(wikimedia_search_images(q, limit=lim, db=db))
             elif src == "openverse":
-                candidates.extend(openverse_search_images(q, limit=lim))
+                candidates.extend(openverse_search_images(q, limit=lim, db=db))
             elif src == "manufacturer":
                 if q.startswith("http://") or q.startswith("https://"):
-                    candidates.extend(manufacturer_url_candidates([q], per_url_limit=lim))
+                    candidates.extend(manufacturer_url_candidates([q], per_url_limit=lim, db=db))
             elif src == "opengraph":
                 # OpenGraph braucht URLs; bei URL-ähnlicher Query als Fallback verwenden.
                 if q.startswith("http://") or q.startswith("https://"):
-                    candidates.extend(opengraph_images_from_page(q))
+                    candidates.extend(opengraph_images_from_page(q, db=db))
             else:
                 continue
 
@@ -135,7 +135,7 @@ def image_hunt_job(product_id: str, query: str | None = None, max_results: int =
                 continue
             seen_url.add(url)
 
-            stored = cache_download(url, subdir="web")
+            stored = cache_download(url, subdir="web", db=db)
 
             duplicate_asset = existing_by_hash.get(stored.sha256)
             if not duplicate_asset:

@@ -3,10 +3,10 @@ from __future__ import annotations
 import json
 import time
 from typing import Any, Optional
-
-import requests
+from urllib.parse import urlparse
 
 from app.core.config import settings
+from app.services.outbound_http import request_outbound
 
 
 class OllamaError(RuntimeError):
@@ -28,13 +28,24 @@ def ollama_chat(model: str, system: str, user: str, images_b64: Optional[list[st
     if force_json:
         payload["format"] = "json"
 
+    host = (urlparse(url).hostname or "").lower()
+    allow_hosts = {host} if host else None
+
     t0 = time.time()
-    r = requests.post(url, json=payload, timeout=180)
+    response = request_outbound(
+        url=url,
+        method="POST",
+        json_body=payload,
+        timeout_read=180,
+        require_https=False,
+        allow_private_ips=True,
+        allowed_hosts=allow_hosts,
+    )
     dt = time.time() - t0
 
-    if r.status_code != 200:
-        raise OllamaError(f"Ollama error {r.status_code}: {r.text[:500]}")
-    data = r.json()
+    if response.status_code != 200:
+        raise OllamaError(f"Ollama error {response.status_code}: {response.text[:500]}")
+    data = response.json()
     content = (data.get("message") or {}).get("content") or ""
     meta = {k: v for k, v in data.items() if k != "message"}
     meta["duration_sec"] = round(dt, 3)

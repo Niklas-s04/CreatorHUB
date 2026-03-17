@@ -3,13 +3,12 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 import re
 import uuid
-import secrets
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status, Form
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response, status, Form
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 
 from app.api.deps import AuthContext, get_db, get_current_auth_context, get_current_user, require_role, get_client_ip
-from app.core.security import verify_password, hash_password, decode_token, hash_token
+from app.core.security import verify_password, hash_password, decode_token, hash_token, create_csrf_token
 from app.core.config import settings
 from app.models.auth_session import AuthSession, LoginHistory, PasswordResetToken
 from app.models.registration_request import RegistrationRequest, RegistrationRequestStatus
@@ -33,6 +32,8 @@ from app.schemas.auth import (
     PasswordResetConfirmIn,
 )
 from app.schemas.user import UserOut, UserCreate
+from app.services.audit import record_audit_log
+from app.services.bootstrap import assert_bootstrap_active, assert_valid_bootstrap_token, finalize_bootstrap
 from app.services.auth_security import (
     create_session_and_tokens,
     rotate_refresh_token,
@@ -92,15 +93,30 @@ def _apply_failed_login(user: User) -> None:
         user.locked_until = _utcnow() + timedelta(minutes=settings.AUTH_LOCK_MINUTES)
 
 
-def _set_auth_cookies(response: Response, access_token: str, refresh_token: str) -> None:
+def _cookie_lifetime_seconds(*, session: AuthSession) -> tuple[int, int, int]:
+    now = _utcnow()
+    absolute_remaining = max(0, int((session.expires_at - now).total_seconds()))
+    idle_remaining = max(0, int((session.idle_expires_at - now).total_seconds()))
+
+    access_max_age = max(1, min(settings.AUTH_ACCESS_COOKIE_MAX_AGE_SECONDS, absolute_remaining, idle_remaining))
+    refresh_max_age = max(1, min(settings.AUTH_REFRESH_COOKIE_MAX_AGE_SECONDS, absolute_remaining))
+    csrf_max_age = access_max_age
+    return access_max_age, refresh_max_age, csrf_max_age
+
+
+def _set_auth_cookies(response: Response, access_token: str, refresh_token: str, session: AuthSession) -> None:
+    access_max_age, refresh_max_age, csrf_max_age = _cookie_lifetime_seconds(session=session)
+    domain = settings.AUTH_COOKIE_DOMAIN
+
     response.set_cookie(
         key=settings.AUTH_ACCESS_COOKIE_NAME,
         value=access_token,
         httponly=True,
         secure=settings.AUTH_COOKIE_SECURE,
         samesite=settings.AUTH_COOKIE_SAMESITE,
-        max_age=settings.AUTH_ACCESS_COOKIE_MAX_AGE_SECONDS,
-        path="/",
+        max_age=access_max_age,
+        path="/api",
+        domain=domain,
     )
     response.set_cookie(
         key=settings.AUTH_REFRESH_COOKIE_NAME,
@@ -108,8 +124,9 @@ def _set_auth_cookies(response: Response, access_token: str, refresh_token: str)
         httponly=True,
         secure=settings.AUTH_COOKIE_SECURE,
         samesite=settings.AUTH_COOKIE_SAMESITE,
-        max_age=settings.AUTH_REFRESH_COOKIE_MAX_AGE_SECONDS,
-        path="/",
+        max_age=refresh_max_age,
+        path="/api/auth",
+        domain=domain,
     )
     response.set_cookie(
         key=settings.AUTH_COOKIE_NAME,
@@ -117,25 +134,28 @@ def _set_auth_cookies(response: Response, access_token: str, refresh_token: str)
         httponly=True,
         secure=settings.AUTH_COOKIE_SECURE,
         samesite=settings.AUTH_COOKIE_SAMESITE,
-        max_age=settings.AUTH_ACCESS_COOKIE_MAX_AGE_SECONDS,
-        path="/",
+        max_age=access_max_age,
+        path="/api",
+        domain=domain,
     )
     response.set_cookie(
         key=settings.CSRF_COOKIE_NAME,
-        value=secrets.token_urlsafe(24),
+        value=create_csrf_token(str(session.id)),
         httponly=False,
         secure=settings.AUTH_COOKIE_SECURE,
         samesite=settings.AUTH_COOKIE_SAMESITE,
-        max_age=settings.AUTH_REFRESH_COOKIE_MAX_AGE_SECONDS,
+        max_age=csrf_max_age,
         path="/",
+        domain=domain,
     )
 
 
 def _clear_auth_cookies(response: Response) -> None:
-    response.delete_cookie(settings.AUTH_ACCESS_COOKIE_NAME, path="/")
-    response.delete_cookie(settings.AUTH_REFRESH_COOKIE_NAME, path="/")
-    response.delete_cookie(settings.AUTH_COOKIE_NAME, path="/")
-    response.delete_cookie(settings.CSRF_COOKIE_NAME, path="/")
+    domain = settings.AUTH_COOKIE_DOMAIN
+    response.delete_cookie(settings.AUTH_ACCESS_COOKIE_NAME, path="/api", domain=domain)
+    response.delete_cookie(settings.AUTH_REFRESH_COOKIE_NAME, path="/api/auth", domain=domain)
+    response.delete_cookie(settings.AUTH_COOKIE_NAME, path="/api", domain=domain)
+    response.delete_cookie(settings.CSRF_COOKIE_NAME, path="/", domain=domain)
 
 
 def _verify_mfa(user: User, code: str) -> bool:
@@ -247,7 +267,7 @@ def login(
         reason=None,
     )
 
-    _, access_token, refresh_token, _, _ = create_session_and_tokens(
+    session, access_token, refresh_token, _, _ = create_session_and_tokens(
         db,
         user=user,
         ip_address=ip_address,
@@ -256,12 +276,16 @@ def login(
     )
     db.commit()
 
-    _set_auth_cookies(response, access_token, refresh_token)
+    _set_auth_cookies(response, access_token, refresh_token, session)
     return TokenOut(access_token=access_token)
 
 
 @router.get("/bootstrap-status", response_model=AdminBootstrapStatusOut)
-def bootstrap_status(db: Session = Depends(get_db)) -> AdminBootstrapStatusOut:
+def bootstrap_status(
+    db: Session = Depends(get_db),
+    bootstrap_token: str | None = Header(default=None, alias="X-Bootstrap-Token"),
+) -> AdminBootstrapStatusOut:
+    assert_valid_bootstrap_token(db, bootstrap_token)
     admin = db.query(User).filter(User.username == settings.BOOTSTRAP_ADMIN_USERNAME).first()
     if not admin:
         return AdminBootstrapStatusOut(admin_username=settings.BOOTSTRAP_ADMIN_USERNAME, needs_password_setup=True)
@@ -272,7 +296,14 @@ def bootstrap_status(db: Session = Depends(get_db)) -> AdminBootstrapStatusOut:
 
 
 @router.post("/setup-admin-password", response_model=TokenOut)
-def setup_admin_password(response: Response, payload: AdminPasswordSetupIn, db: Session = Depends(get_db)) -> TokenOut:
+def setup_admin_password(
+    request: Request,
+    response: Response,
+    payload: AdminPasswordSetupIn,
+    db: Session = Depends(get_db),
+    bootstrap_token: str | None = Header(default=None, alias="X-Bootstrap-Token"),
+) -> TokenOut:
+    bootstrap_state = assert_valid_bootstrap_token(db, bootstrap_token)
     password = _validate_password_strength(payload.password)
 
     admin = db.query(User).filter(User.username == settings.BOOTSTRAP_ADMIN_USERNAME).first()
@@ -285,7 +316,23 @@ def setup_admin_password(response: Response, payload: AdminPasswordSetupIn, db: 
     admin.needs_password_setup = False
     admin.is_active = True
     admin.password_changed_at = _utcnow()
-    _, access_token, refresh_token, _, _ = create_session_and_tokens(
+    finalize_bootstrap(bootstrap_state, completed_by=admin.username)
+
+    record_audit_log(
+        db,
+        actor=admin,
+        action="initial_admin_setup_completed",
+        entity_type="bootstrap",
+        entity_id=str(bootstrap_state.id),
+        description="Initial admin setup completed and bootstrap disabled",
+        metadata={
+            "ip": get_client_ip(request),
+            "user_agent": (request.headers.get("user-agent") or "")[:512] or None,
+            "bootstrap_completed_at": bootstrap_state.setup_completed_at.isoformat() if bootstrap_state.setup_completed_at else None,
+        },
+    )
+
+    session, access_token, refresh_token, _, _ = create_session_and_tokens(
         db,
         user=admin,
         ip_address=None,
@@ -293,7 +340,7 @@ def setup_admin_password(response: Response, payload: AdminPasswordSetupIn, db: 
         mfa_verified=False,
     )
     db.commit()
-    _set_auth_cookies(response, access_token, refresh_token)
+    _set_auth_cookies(response, access_token, refresh_token, session)
     return TokenOut(access_token=access_token)
 
 
@@ -351,7 +398,7 @@ def refresh_token(request: Request, response: Response, db: Session = Depends(ge
 
     access_token, refresh_token_value, _, _ = rotate_refresh_token(db, user=user, session=session)
     db.commit()
-    _set_auth_cookies(response, access_token, refresh_token_value)
+    _set_auth_cookies(response, access_token, refresh_token_value, session)
     return TokenOut(access_token=access_token)
 
 
@@ -671,7 +718,7 @@ def mfa_enable(
     context.session.mfa_verified = True
     access_token, refresh_token_value, _, _ = rotate_refresh_token(db, user=context.user, session=context.session)
     db.commit()
-    _set_auth_cookies(response, access_token, refresh_token_value)
+    _set_auth_cookies(response, access_token, refresh_token_value, context.session)
     return MfaEnableOut(recovery_codes=codes)
 
 
@@ -693,7 +740,7 @@ def mfa_disable(
     context.session.mfa_verified = False
     access_token, refresh_token_value, _, _ = rotate_refresh_token(db, user=context.user, session=context.session)
     db.commit()
-    _set_auth_cookies(response, access_token, refresh_token_value)
+    _set_auth_cookies(response, access_token, refresh_token_value, context.session)
     return MfaStatusOut(enabled=False)
 
 
@@ -722,7 +769,7 @@ def change_password(
 
     access_token, refresh_token_value, _, _ = rotate_refresh_token(db, user=context.user, session=context.session)
     db.commit()
-    _set_auth_cookies(response, access_token, refresh_token_value)
+    _set_auth_cookies(response, access_token, refresh_token_value, context.session)
     return TokenOut(access_token=access_token)
 
 

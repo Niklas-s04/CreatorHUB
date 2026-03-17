@@ -94,16 +94,19 @@ export async function refreshSession(): Promise<void> {
   setToken('1')
 }
 
-export async function getBootstrapStatus(): Promise<BootstrapStatus> {
-  const res = await fetch(`${API_BASE}/auth/bootstrap-status`, { credentials: 'include' })
+export async function getBootstrapStatus(bootstrapToken: string): Promise<BootstrapStatus> {
+  const res = await fetch(`${API_BASE}/auth/bootstrap-status`, {
+    credentials: 'include',
+    headers: { 'X-Bootstrap-Token': bootstrapToken }
+  })
   if (!res.ok) throw new Error(await res.text())
   return res.json()
 }
 
-export async function setupAdminPassword(password: string): Promise<void> {
+export async function setupAdminPassword(password: string, bootstrapToken: string): Promise<void> {
   const res = await fetch(`${API_BASE}/auth/setup-admin-password`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', 'X-Bootstrap-Token': bootstrapToken },
     body: JSON.stringify({ password }),
     credentials: 'include'
   })

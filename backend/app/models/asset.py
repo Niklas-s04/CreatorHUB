@@ -32,6 +32,9 @@ class AssetSource(str, enum.Enum):
 
 
 class AssetReviewState(str, enum.Enum):
+    quarantine = "quarantine"
+    pending_review = "pending_review"
+    needs_review = "needs_review"
     pending = "pending"
     approved = "approved"
     rejected = "rejected"
@@ -62,5 +65,5 @@ class Asset(Base, UUIDMixin, TimestampMixin):
     hash: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     perceptual_hash: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
 
-    review_state: Mapped[AssetReviewState] = mapped_column(Enum(AssetReviewState), default=AssetReviewState.approved)
+    review_state: Mapped[AssetReviewState] = mapped_column(Enum(AssetReviewState), default=AssetReviewState.pending_review)
     is_primary: Mapped[bool] = mapped_column(Boolean, default=False)

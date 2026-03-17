@@ -47,8 +47,9 @@ class Settings(BaseSettings):
     AUTH_COOKIE_NAME: str = "creatorhub_auth"
     AUTH_ACCESS_COOKIE_NAME: str = "creatorhub_access"
     AUTH_REFRESH_COOKIE_NAME: str = "creatorhub_refresh"
-    AUTH_COOKIE_SECURE: bool = False
+    AUTH_COOKIE_SECURE: bool = True
     AUTH_COOKIE_SAMESITE: Literal["lax", "strict", "none"] = "lax"
+    AUTH_COOKIE_DOMAIN: str | None = None
     AUTH_ACCESS_COOKIE_MAX_AGE_SECONDS: int = 60 * 15
     AUTH_REFRESH_COOKIE_MAX_AGE_SECONDS: int = 60 * 60 * 24 * 14
     AUTH_COOKIE_MAX_AGE_SECONDS: int = 60 * 60 * 24 * 14
@@ -67,8 +68,30 @@ class Settings(BaseSettings):
 
     PASSWORD_RESET_TOKEN_TTL_MINUTES: int = 30
 
+    OUTBOUND_CONNECT_TIMEOUT_SECONDS: int = 5
+    OUTBOUND_READ_TIMEOUT_SECONDS: int = 20
+    OUTBOUND_MAX_RESPONSE_BYTES: int = 8 * 1024 * 1024
+    OUTBOUND_MAX_REDIRECTS: int = 2
+    OUTBOUND_RETRIES: int = 1
+    OUTBOUND_ALLOWED_PORTS: str = "443"
+    OUTBOUND_REQUIRE_HTTPS: bool = True
+    OUTBOUND_ALLOWLIST_HOSTS: str = ""
+    OUTBOUND_SENSITIVE_ALLOWLIST_HOSTS: str = ""
+    OUTBOUND_BLOCK_PRIVATE_RANGES: bool = True
+
+    UPLOAD_ALLOWED_IMAGE_EXTENSIONS: str = ".jpg,.jpeg,.png,.webp,.gif"
+    UPLOAD_ALLOWED_PDF_EXTENSIONS: str = ".pdf"
+    UPLOAD_MAX_IMAGE_BYTES: int = 8 * 1024 * 1024
+    UPLOAD_MAX_PDF_BYTES: int = 15 * 1024 * 1024
+    UPLOAD_MAX_IMAGE_WIDTH: int = 8000
+    UPLOAD_MAX_IMAGE_HEIGHT: int = 8000
+    UPLOAD_MAX_IMAGE_PIXELS: int = 30_000_000
+    ASSET_MAX_DELIVERY_BYTES: int = 25 * 1024 * 1024
+    ENABLE_OPTIONAL_MALWARE_SCAN: bool = False
+
     BOOTSTRAP_ADMIN_USERNAME: str = "admin"
     BOOTSTRAP_ADMIN_PASSWORD: str = "admin"
+    BOOTSTRAP_INSTALL_TOKEN: str = ""
 
     AUTO_ARCHIVE_ENABLED: bool = True
     AUTO_ARCHIVE_INTERVAL_MINUTES: int = 720  # Standard: zweimal täglich

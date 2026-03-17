@@ -9,3 +9,4 @@ from app.models.ai_runs import AiRun
 from app.models.deal import DealDraft
 from app.models.registration_request import RegistrationRequest
 from app.models.auth_session import AuthSession, RevokedToken, LoginHistory, PasswordResetToken
+from app.models.bootstrap_state import BootstrapState

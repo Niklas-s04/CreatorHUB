@@ -26,15 +26,19 @@ export default function LoginPage() {
   const [busy, setBusy] = useState(false)
   const [mode, setMode] = useState<Mode>('login')
   const [adminUsername, setAdminUsername] = useState('admin')
+  const [bootstrapToken, setBootstrapToken] = useState('')
 
   React.useEffect(() => {
     ;(async () => {
       try {
-        const status = await getBootstrapStatus()
+        const token = localStorage.getItem('bootstrap_token') || ''
+        if (!token) return
+        const status = await getBootstrapStatus(token)
         setAdminUsername(status.admin_username)
         if (status.needs_password_setup) {
           setMode('setup')
           setUsername(status.admin_username)
+          setBootstrapToken(token)
         }
       } catch {
       }
@@ -48,8 +52,10 @@ export default function LoginPage() {
     setBusy(true)
     try {
       if (mode === 'setup') {
+        if (!bootstrapToken.trim()) throw new Error('Bootstrap-Token erforderlich')
         if (password !== password2) throw new Error('Passwörter stimmen nicht überein')
-        await setupAdminPassword(password)
+        await setupAdminPassword(password, bootstrapToken)
+        localStorage.removeItem('bootstrap_token')
         nav('/admin')
       } else if (mode === 'register') {
         if (password !== password2) throw new Error('Passwörter stimmen nicht überein')
@@ -81,6 +87,25 @@ export default function LoginPage() {
     }
   }
 
+  async function checkBootstrap() {
+    setErr(null)
+    setMsg(null)
+    try {
+      if (!bootstrapToken.trim()) throw new Error('Bootstrap-Token erforderlich')
+      const status = await getBootstrapStatus(bootstrapToken)
+      if (!status.needs_password_setup) {
+        setMsg('Erstsetup bereits abgeschlossen.')
+        return
+      }
+      setAdminUsername(status.admin_username)
+      setMode('setup')
+      setUsername(status.admin_username)
+      setMsg('Erstsetup freigeschaltet.')
+    } catch (e: any) {
+      setErr(formatError(e))
+    }
+  }
+
   return (
     <div className="login-shell">
       <div className="card login-card">
@@ -96,6 +121,21 @@ export default function LoginPage() {
             <button className={`btn ${mode === 'reset' ? 'primary' : ''}`} type="button" onClick={() => { setMode('reset'); setErr(null); setMsg(null) }}>Passwort-Reset</button>
           </div>
         )}
+
+        <div className="section-gap">
+          <div className="field-label">Bootstrap-Token (nur Erstsetup)</div>
+          <input
+            className="w100"
+            value={bootstrapToken}
+            onChange={e => {
+              const value = e.target.value
+              setBootstrapToken(value)
+              localStorage.setItem('bootstrap_token', value)
+            }}
+            placeholder="Install-Token"
+          />
+          <button className="btn mt8" type="button" onClick={checkBootstrap}>Erstsetup prüfen</button>
+        </div>
 
         {mode === 'setup' ? (
           <div className="muted small">Erststart: Admin-Passwort für Benutzer {adminUsername} setzen.</div>

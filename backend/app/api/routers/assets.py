@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import enum
 import os
+import mimetypes
 import uuid
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
@@ -12,7 +13,7 @@ from app.api.deps import get_db, get_current_user, require_role
 from app.models.asset import Asset, AssetOwnerType, AssetKind, AssetSource, AssetReviewState
 from app.models.user import User, UserRole
 from app.schemas.asset import AssetOut, AssetCreateWeb, AssetUpdate
-from app.services.storage import save_upload, cache_download, ensure_thumbnail
+from app.services.storage import save_upload_validated, cache_download, ensure_thumbnail
 from app.services.audit import record_audit_log
 
 router = APIRouter()
@@ -24,16 +25,62 @@ class LicenseFilter(str, enum.Enum):
     missing = "missing"
 
 
+def _expected_kind(kind: AssetKind) -> str:
+    if kind == AssetKind.image:
+        return "image"
+    if kind == AssetKind.pdf:
+        return "pdf"
+    raise HTTPException(status_code=400, detail="Only image and pdf uploads are allowed")
+
+
+def _upload_purpose_allowed(owner_type: AssetOwnerType, kind: AssetKind) -> bool:
+    if kind == AssetKind.pdf and owner_type not in {AssetOwnerType.product, AssetOwnerType.deal, AssetOwnerType.content}:
+        return False
+    if kind == AssetKind.image:
+        return True
+    return False
+
+
+def _enforce_asset_access(current_user: User, asset: Asset) -> None:
+    privileged = current_user.role in {UserRole.admin, UserRole.editor}
+    if asset.review_state != AssetReviewState.approved and not privileged:
+        raise HTTPException(status_code=403, detail="Asset not approved")
+
+
+def _delivery_headers(asset: Asset, path: str) -> tuple[str | None, str, dict[str, str]]:
+    media_type = asset.kind.value
+    if asset.kind == AssetKind.image:
+        guessed, _ = mimetypes.guess_type(path)
+        media_type = guessed or "application/octet-stream"
+        disposition = "inline"
+    elif asset.kind == AssetKind.pdf:
+        media_type = "application/pdf"
+        disposition = "inline"
+    else:
+        media_type = "application/octet-stream"
+        disposition = "attachment"
+
+    filename = os.path.basename(path)
+    cache_control = "private, max-age=300" if asset.review_state == AssetReviewState.approved else "no-store"
+    headers = {
+        "Content-Disposition": f'{disposition}; filename="{filename}"',
+        "Cache-Control": cache_control,
+    }
+    return media_type, filename, headers
+
+
 @router.get("", response_model=list[AssetOut])
 def list_assets(
     owner_type: AssetOwnerType,
     owner_id: uuid.UUID,
     include_pending: bool = True,
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ) -> list[AssetOut]:
     q = db.query(Asset).filter(Asset.owner_type == owner_type, Asset.owner_id == owner_id)
-    if not include_pending:
+    if current_user.role == UserRole.viewer:
+        q = q.filter(Asset.review_state == AssetReviewState.approved)
+    elif not include_pending:
         q = q.filter(Asset.review_state == AssetReviewState.approved)
     return q.order_by(Asset.created_at.desc()).all()
 
@@ -48,7 +95,7 @@ def list_library_assets(
     license_filter: LicenseFilter = LicenseFilter.any,
     limit: int = 100,
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ) -> list[AssetOut]:
     q = db.query(Asset)
     if owner_type:
@@ -57,7 +104,9 @@ def list_library_assets(
         q = q.filter(Asset.kind == kind)
     if primary_only:
         q = q.filter(Asset.is_primary.is_(True))
-    if approved_only:
+    if current_user.role == UserRole.viewer:
+        q = q.filter(Asset.review_state == AssetReviewState.approved)
+    elif approved_only:
         q = q.filter(Asset.review_state == AssetReviewState.approved)
     if search:
         pattern = f"%{search.lower()}%"
@@ -87,9 +136,20 @@ async def upload_asset(
     db: Session = Depends(get_db),
     _: User = Depends(require_role(UserRole.admin, UserRole.editor)),
 ) -> AssetOut:
+    if not _upload_purpose_allowed(owner_type, kind):
+        raise HTTPException(status_code=400, detail="This file type is not allowed for the selected upload purpose")
+
     data = await file.read()
     owner_folder = f"{owner_type.value}/{owner_id}"
-    stored = save_upload(owner_folder=owner_folder, filename=file.filename or "upload.bin", data=data)
+    try:
+        stored = save_upload_validated(
+            owner_folder=owner_folder,
+            filename=file.filename or "upload.bin",
+            data=data,
+            expected_kind=_expected_kind(kind),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     asset = Asset(
         owner_type=owner_type,
@@ -97,15 +157,16 @@ async def upload_asset(
         kind=kind,
         source=AssetSource.upload,
         local_path=stored.local_path,
-        title=title or file.filename,
+        title=title or stored.safe_filename,
         license_type=None,
         attribution=None,
+        source_name="upload",
         width=stored.width,
         height=stored.height,
         size_bytes=stored.size_bytes,
         hash=stored.sha256,
         perceptual_hash=stored.perceptual_hash,
-        review_state=AssetReviewState.approved,
+        review_state=AssetReviewState.pending_review,
         is_primary=False,
     )
     # Duplikate per Hash vermeiden und vorhandenes Asset wiederverwenden.
@@ -127,7 +188,9 @@ def create_web_asset(payload: AssetCreateWeb, db: Session = Depends(get_db), _: 
         existing = db.query(Asset).filter(Asset.hash == payload.hash).first()
     if existing:
         return existing
-    asset = Asset(**payload.model_dump())
+    data = payload.model_dump()
+    data["review_state"] = AssetReviewState.needs_review
+    asset = Asset(**data)
     db.add(asset)
     db.commit()
     db.refresh(asset)
@@ -182,14 +245,22 @@ def update_asset(
 
 
 @router.get("/{asset_id}/file")
-def get_asset_file(asset_id: uuid.UUID, db: Session = Depends(get_db), _: User = Depends(get_current_user)) -> FileResponse:
+def get_asset_file(asset_id: uuid.UUID, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> FileResponse:
     asset = db.query(Asset).filter(Asset.id == asset_id).first()
     if not asset:
         raise HTTPException(status_code=404, detail="Asset not found")
 
+    _enforce_asset_access(current_user, asset)
+
     path = asset.local_path
     if not path and asset.url:
-        stored = cache_download(asset.url, subdir="web")
+        expected_kind = "image" if asset.kind == AssetKind.image else "pdf" if asset.kind == AssetKind.pdf else None
+        if expected_kind is None:
+            raise HTTPException(status_code=400, detail="Unsupported remote asset kind")
+        try:
+            stored = cache_download(asset.url, subdir="web", db=db, expected_kind=expected_kind)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
         asset.local_path = stored.local_path
         asset.hash = asset.hash or stored.sha256
         asset.size_bytes = stored.size_bytes
@@ -200,18 +271,30 @@ def get_asset_file(asset_id: uuid.UUID, db: Session = Depends(get_db), _: User =
 
     if not path or not os.path.exists(path):
         raise HTTPException(status_code=404, detail="File not available")
-    return FileResponse(path, filename=os.path.basename(path))
+    size = asset.size_bytes or os.path.getsize(path)
+    if size > settings.ASSET_MAX_DELIVERY_BYTES:
+        raise HTTPException(status_code=413, detail="Asset exceeds delivery size limit")
+
+    media_type, filename, headers = _delivery_headers(asset, path)
+    return FileResponse(path, filename=filename, media_type=media_type, headers=headers)
 
 
 @router.get("/{asset_id}/thumb")
-def get_asset_thumb(asset_id: uuid.UUID, db: Session = Depends(get_db), _: User = Depends(get_current_user)) -> FileResponse:
+def get_asset_thumb(asset_id: uuid.UUID, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> FileResponse:
     asset = db.query(Asset).filter(Asset.id == asset_id).first()
     if not asset:
         raise HTTPException(status_code=404, detail="Asset not found")
 
+    _enforce_asset_access(current_user, asset)
+    if asset.kind != AssetKind.image:
+        raise HTTPException(status_code=400, detail="Thumbnails are only available for images")
+
     path = asset.local_path
     if not path and asset.url:
-        stored = cache_download(asset.url, subdir="web")
+        try:
+            stored = cache_download(asset.url, subdir="web", db=db, expected_kind="image")
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
         asset.local_path = stored.local_path
         asset.hash = asset.hash or stored.sha256
         asset.size_bytes = stored.size_bytes
@@ -223,5 +306,34 @@ def get_asset_thumb(asset_id: uuid.UUID, db: Session = Depends(get_db), _: User 
     if not path or not os.path.exists(path):
         raise HTTPException(status_code=404, detail="File not available")
 
-    thumb = ensure_thumbnail(path)
-    return FileResponse(thumb, filename=os.path.basename(thumb))
+    try:
+        thumb = ensure_thumbnail(path)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    headers = {
+        "Content-Disposition": f'inline; filename="{os.path.basename(thumb)}"',
+        "Cache-Control": "private, max-age=300",
+    }
+    thumb_mime, _ = mimetypes.guess_type(thumb)
+    return FileResponse(thumb, filename=os.path.basename(thumb), media_type=thumb_mime or "application/octet-stream", headers=headers)
+
+
+@router.get("/review-queue", response_model=list[AssetOut])
+def review_queue(
+    owner_type: AssetOwnerType | None = None,
+    limit: int = 200,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_role(UserRole.admin, UserRole.editor)),
+) -> list[AssetOut]:
+    q = db.query(Asset).filter(
+        Asset.review_state.in_([
+            AssetReviewState.quarantine,
+            AssetReviewState.pending_review,
+            AssetReviewState.needs_review,
+            AssetReviewState.pending,
+        ])
+    )
+    if owner_type:
+        q = q.filter(Asset.owner_type == owner_type)
+    return q.order_by(Asset.created_at.asc()).limit(max(1, min(limit, 500))).all()

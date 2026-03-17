@@ -13,26 +13,39 @@ from starlette.responses import JSONResponse, Response
 from starlette.types import ASGIApp
 from starlette.middleware.base import BaseHTTPMiddleware
 
+from app.core.security import decode_token, validate_csrf_token
+
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
-    def __init__(self, app: ASGIApp, hsts_seconds: int = 31536000) -> None:
+    def __init__(self, app: ASGIApp, hsts_seconds: int = 31536000, trust_proxy_headers: bool = False, env: str = "prod") -> None:
         super().__init__(app)
         self.hsts_seconds = hsts_seconds
+        self.trust_proxy_headers = trust_proxy_headers
+        self.env = env.lower()
+
+    def _is_https(self, request: Request) -> bool:
+        if request.url.scheme == "https":
+            return True
+        if self.trust_proxy_headers:
+            proto = request.headers.get("x-forwarded-proto", "")
+            if proto.split(",")[0].strip().lower() == "https":
+                return True
+        return False
 
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
         response = await call_next(request)
         response.headers.setdefault("X-Content-Type-Options", "nosniff")
         response.headers.setdefault("X-Frame-Options", "DENY")
-        response.headers.setdefault("Referrer-Policy", "no-referrer")
-        response.headers.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+        response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+        response.headers.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=(), browsing-topics=()")
         response.headers.setdefault("Cross-Origin-Opener-Policy", "same-origin")
         response.headers.setdefault("Cross-Origin-Resource-Policy", "same-origin")
         response.headers.setdefault(
             "Content-Security-Policy",
-            "default-src 'self'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'",
+            "default-src 'self'; base-uri 'self'; frame-ancestors 'none'; object-src 'none'; form-action 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; connect-src 'self'; font-src 'self'; upgrade-insecure-requests",
         )
 
-        if request.url.scheme == "https" and self.hsts_seconds > 0:
+        if self.env == "prod" and self._is_https(request) and self.hsts_seconds > 0:
             response.headers.setdefault("Strict-Transport-Security", f"max-age={self.hsts_seconds}; includeSubDomains")
 
         return response
@@ -170,6 +183,7 @@ class CsrfProtectionMiddleware(BaseHTTPMiddleware):
         self.auth_cookie_name = auth_cookie_name
         self.csrf_cookie_name = csrf_cookie_name
         self.unsafe_methods = {"POST", "PUT", "PATCH", "DELETE"}
+        self.exempt_paths = {"/api/auth/token"}
 
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
         if request.method not in self.unsafe_methods:
@@ -179,7 +193,7 @@ class CsrfProtectionMiddleware(BaseHTTPMiddleware):
         if not path.startswith("/api"):
             return await call_next(request)
 
-        if path in {"/api/auth/token", "/api/auth/register-request", "/api/auth/setup-admin-password"}:
+        if path in self.exempt_paths:
             return await call_next(request)
 
         auth_cookie = request.cookies.get(self.auth_cookie_name)
@@ -189,6 +203,17 @@ class CsrfProtectionMiddleware(BaseHTTPMiddleware):
         csrf_cookie = request.cookies.get(self.csrf_cookie_name)
         csrf_header = request.headers.get("x-csrf-token")
         if not csrf_cookie or not csrf_header or csrf_cookie != csrf_header:
+            return JSONResponse(status_code=403, content={"detail": "CSRF validation failed"})
+
+        try:
+            payload = decode_token(auth_cookie)
+            sid = payload.get("sid")
+            token_type = payload.get("typ")
+            if token_type != "access" or not sid:
+                raise ValueError("invalid session context")
+            if not validate_csrf_token(csrf_cookie, str(sid)):
+                raise ValueError("invalid csrf token")
+        except Exception:
             return JSONResponse(status_code=403, content={"detail": "CSRF validation failed"})
 
         return await call_next(request)

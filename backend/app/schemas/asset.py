@@ -32,7 +32,7 @@ class AssetBase(BaseModel):
     hash: Optional[str] = None
     perceptual_hash: Optional[str] = None
 
-    review_state: AssetReviewState = AssetReviewState.approved
+    review_state: AssetReviewState = AssetReviewState.pending_review
     is_primary: bool = False
 
 
