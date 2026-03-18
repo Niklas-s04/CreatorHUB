@@ -7,9 +7,9 @@ Create Date: 2026-03-17
 """
 from __future__ import annotations
 
-from alembic import op
 import sqlalchemy as sa
 
+from alembic import op
 
 revision = "0010"
 down_revision = "0009"
@@ -18,9 +18,11 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.execute("ALTER TYPE assetreviewstate ADD VALUE IF NOT EXISTS 'quarantine'")
-    op.execute("ALTER TYPE assetreviewstate ADD VALUE IF NOT EXISTS 'pending_review'")
-    op.execute("ALTER TYPE assetreviewstate ADD VALUE IF NOT EXISTS 'needs_review'")
+    context = op.get_context()
+    with context.autocommit_block():
+        op.execute("ALTER TYPE assetreviewstate ADD VALUE IF NOT EXISTS 'quarantine'")
+        op.execute("ALTER TYPE assetreviewstate ADD VALUE IF NOT EXISTS 'pending_review'")
+        op.execute("ALTER TYPE assetreviewstate ADD VALUE IF NOT EXISTS 'needs_review'")
     op.alter_column(
         "assets",
         "review_state",
