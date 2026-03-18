@@ -12,8 +12,8 @@ import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
 
-revision = "0008_auth_sessions_security_hardening"
-down_revision = "0007_admin_setup_and_registration_requests"
+revision = "0008"
+down_revision = "0007"
 branch_labels = None
 depends_on = None
 
@@ -116,3 +116,4 @@ def downgrade() -> None:
     op.drop_column("users", "password_changed_at")
     op.drop_column("users", "locked_until")
     op.drop_column("users", "failed_login_attempts")
+

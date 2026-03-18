@@ -10,8 +10,8 @@ from __future__ import annotations
 from alembic import op
 
 # Revisionsdaten für Alembic.
-revision = "0006_tasktype_defaults"
-down_revision = "0005_deal_drafts"
+revision = "0006"
+down_revision = "0005"
 branch_labels = None
 depends_on = None
 
@@ -32,3 +32,4 @@ def downgrade() -> None:
     op.execute("DROP TYPE tasktype")
     op.execute("ALTER TYPE tasktype_old RENAME TO tasktype")
     op.execute("ALTER TABLE content_tasks ALTER COLUMN type SET DEFAULT 'record'::tasktype")
+

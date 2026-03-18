@@ -11,8 +11,8 @@ from alembic import op
 import sqlalchemy as sa
 
 
-revision = "0010_asset_upload_security_review_states"
-down_revision = "0009_bootstrap_install_token_hardening"
+revision = "0010"
+down_revision = "0009"
 branch_labels = None
 depends_on = None
 
@@ -38,3 +38,4 @@ def downgrade() -> None:
         server_default=sa.text("'approved'::assetreviewstate"),
         existing_nullable=False,
     )
+

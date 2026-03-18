@@ -10,8 +10,8 @@ import sqlalchemy as sa
 
 
 # Revisionsdaten für Alembic.
-revision = "0011_product_status_changed_at"
-down_revision = "0010_asset_upload_security_review_states"
+revision = "0011"
+down_revision = "0010"
 branch_labels = None
 depends_on = None
 
@@ -29,3 +29,4 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     op.drop_column("products", "status_changed_at")
+

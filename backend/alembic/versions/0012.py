@@ -11,8 +11,8 @@ from sqlalchemy.dialects import postgresql
 
 
 # Revisionsdaten für Alembic.
-revision = "0012_audit_logs"
-down_revision = "0011_product_status_changed_at"
+revision = "0012"
+down_revision = "0011"
 branch_labels = None
 depends_on = None
 
@@ -40,3 +40,4 @@ def downgrade() -> None:
     op.drop_index("ix_audit_logs_action", table_name="audit_logs")
     op.drop_index("ix_audit_logs_entity", table_name="audit_logs")
     op.drop_table("audit_logs")
+

@@ -12,8 +12,8 @@ import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
 
-revision = "0009_bootstrap_install_token_hardening"
-down_revision = "0008_auth_sessions_security_hardening"
+revision = "0009"
+down_revision = "0008"
 branch_labels = None
 depends_on = None
 
@@ -34,3 +34,4 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     op.drop_table("bootstrap_state")
+

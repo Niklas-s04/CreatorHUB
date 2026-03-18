@@ -13,8 +13,8 @@ from sqlalchemy.dialects import postgresql
 
 
 # Revisionsdaten für Alembic.
-revision = "0003_email_thread_messages"
-down_revision = "0002_assets_source_fields"
+revision = "0003"
+down_revision = "0002"
 branch_labels = None
 depends_on = None
 
@@ -65,3 +65,4 @@ def downgrade() -> None:
     op.drop_index("ix_email_thread_messages_thread_id", table_name="email_thread_messages")
     op.drop_table("email_thread_messages")
     message_role_enum.drop(op.get_bind(), checkfirst=True)
+

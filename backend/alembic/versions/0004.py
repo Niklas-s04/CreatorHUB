@@ -12,8 +12,8 @@ import sqlalchemy as sa
 
 
 # Revisionsdaten für Alembic.
-revision = "0004_asset_perceptual_hash"
-down_revision = "0003_email_thread_messages"
+revision = "0004"
+down_revision = "0003"
 branch_labels = None
 depends_on = None
 
@@ -24,3 +24,4 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     op.drop_column("assets", "perceptual_hash")
+

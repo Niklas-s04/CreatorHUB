@@ -12,8 +12,8 @@ import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
 
-revision = "0007_admin_setup_and_registration_requests"
-down_revision = "0006_tasktype_defaults"
+revision = "0007"
+down_revision = "0006"
 branch_labels = None
 depends_on = None
 
@@ -67,3 +67,4 @@ def downgrade() -> None:
 
     bind = op.get_bind()
     registrationrequeststatus_enum.drop(bind, checkfirst=True)
+

@@ -10,8 +10,8 @@ import sqlalchemy as sa
 
 
 # Revisionsdaten für Alembic.
-revision = "0002_assets_source_fields"
-down_revision = "0001_initial"
+revision = "0002"
+down_revision = "0001"
 branch_labels = None
 depends_on = None
 

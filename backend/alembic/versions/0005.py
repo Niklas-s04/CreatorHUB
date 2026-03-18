@@ -12,8 +12,8 @@ import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
 # Revisionsdaten für Alembic.
-revision = "0005_deal_drafts"
-down_revision = "0004_asset_perceptual_hash"
+revision = "0005"
+down_revision = "0004"
 branch_labels = None
 depends_on = None
 
@@ -63,3 +63,4 @@ def downgrade() -> None:
     op.drop_table("deal_drafts")
     bind = op.get_bind()
     dealdraftstatus_enum.drop(bind, checkfirst=True)
+
