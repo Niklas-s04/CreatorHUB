@@ -1,7 +1,7 @@
 """track when product status changes
 
-Revision ID: 0003_product_status_changed_at
-Revises: 0002_assets_source_fields
+Revision ID: 0011_product_status_changed_at
+Revises: 0010_asset_upload_security_review_states
 Create Date: 2026-03-04
 
 """
@@ -10,8 +10,8 @@ import sqlalchemy as sa
 
 
 # Revisionsdaten für Alembic.
-revision = "0003_product_status_changed_at"
-down_revision = "0002_assets_source_fields"
+revision = "0011_product_status_changed_at"
+down_revision = "0010_asset_upload_security_review_states"
 branch_labels = None
 depends_on = None
 

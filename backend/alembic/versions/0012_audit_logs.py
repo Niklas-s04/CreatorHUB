@@ -1,7 +1,7 @@
 """add audit logs table
 
-Revision ID: 0004_audit_logs
-Revises: 0003_product_status_changed_at
+Revision ID: 0012_audit_logs
+Revises: 0011_product_status_changed_at
 Create Date: 2026-03-04
 
 """
@@ -11,8 +11,8 @@ from sqlalchemy.dialects import postgresql
 
 
 # Revisionsdaten für Alembic.
-revision = "0004_audit_logs"
-down_revision = "0003_product_status_changed_at"
+revision = "0012_audit_logs"
+down_revision = "0011_product_status_changed_at"
 branch_labels = None
 depends_on = None
 
