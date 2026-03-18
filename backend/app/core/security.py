@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 import base64
-import hmac
-from datetime import datetime, timedelta, timezone
-from typing import Any, Optional
 import hashlib
+import hmac
 import secrets
 import uuid
+from datetime import datetime, timedelta, timezone
+from typing import Any, Optional
 
 from jose import jwt
 from passlib.context import CryptContext
@@ -64,8 +64,17 @@ def create_access_token(
     jti: str,
     expires_minutes: Optional[int] = None,
 ) -> str:
-    expire = datetime.now(timezone.utc) + timedelta(minutes=expires_minutes or settings.JWT_ACCESS_EXPIRE_MINUTES)
-    payload: dict[str, Any] = {"sub": subject, "role": role, "sid": session_id, "jti": jti, "typ": "access", "exp": expire}
+    expire = datetime.now(timezone.utc) + timedelta(
+        minutes=expires_minutes or settings.JWT_ACCESS_EXPIRE_MINUTES
+    )
+    payload: dict[str, Any] = {
+        "sub": subject,
+        "role": role,
+        "sid": session_id,
+        "jti": jti,
+        "typ": "access",
+        "exp": expire,
+    }
     return jwt.encode(payload, settings.JWT_SECRET, algorithm=ALGORITHM)
 
 
@@ -77,8 +86,17 @@ def create_refresh_token(
     jti: str,
     expires_minutes: Optional[int] = None,
 ) -> str:
-    expire = datetime.now(timezone.utc) + timedelta(minutes=expires_minutes or settings.JWT_REFRESH_EXPIRE_MINUTES)
-    payload: dict[str, Any] = {"sub": subject, "role": role, "sid": session_id, "jti": jti, "typ": "refresh", "exp": expire}
+    expire = datetime.now(timezone.utc) + timedelta(
+        minutes=expires_minutes or settings.JWT_REFRESH_EXPIRE_MINUTES
+    )
+    payload: dict[str, Any] = {
+        "sub": subject,
+        "role": role,
+        "sid": session_id,
+        "jti": jti,
+        "typ": "refresh",
+        "exp": expire,
+    }
     return jwt.encode(payload, settings.JWT_SECRET, algorithm=ALGORITHM)
 
 

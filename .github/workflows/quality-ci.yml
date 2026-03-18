@@ -1,0 +1,136 @@
+name: Quality CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  backend-quality:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: |
+            backend/requirements.txt
+            backend/requirements-dev.txt
+
+      - name: Install backend deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt -r requirements-dev.txt
+
+      - name: Lint backend (ruff)
+        run: ruff check app tests
+
+      - name: Format backend check (ruff format)
+        run: ruff format --check app tests
+
+      - name: Typecheck backend (mypy)
+        run: mypy --config-file mypy.ini
+
+      - name: Backend tests + coverage
+        run: pytest --cov=app --cov-report=term-missing --cov-report=xml
+
+      - name: Backend dependency security audit
+        continue-on-error: true
+        run: pip-audit -r requirements.txt
+
+  frontend-quality:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend deps
+        run: npm ci
+
+      - name: Lint frontend
+        run: npm run lint
+
+      - name: Format frontend check
+        run: npm run format:check
+
+      - name: Typecheck frontend
+        run: npm run typecheck
+
+      - name: Frontend unit tests + coverage
+        run: npm run test:coverage
+
+      - name: Frontend build
+        run: npm run build
+
+      - name: Frontend dependency security audit (critical only)
+        run: npm audit --audit-level=critical
+
+  migrations-check:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: creator_suite_ci
+          POSTGRES_USER: creator
+          POSTGRES_PASSWORD: creator
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U creator -d creator_suite_ci"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      DATABASE_URL: postgresql+psycopg://creator:creator@localhost:5432/creator_suite_ci
+      REDIS_URL: redis://localhost:6379/0
+      OLLAMA_URL: http://localhost:11434
+      PROJECT_NAME: creator-suite
+      CORS_ORIGINS: http://localhost:3000
+      JWT_SECRET: ci_jwt_secret_value
+      ENV: dev
+      BOOTSTRAP_INSTALL_TOKEN: ci_bootstrap_token
+      AUTH_COOKIE_SECURE: "false"
+      SKIP_BOOTSTRAP: "true"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: |
+            backend/requirements.txt
+
+      - name: Install backend deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Upgrade DB to head
+        run: alembic upgrade head
+
+      - name: Verify alembic state
+        run: alembic current

@@ -2,11 +2,15 @@ from __future__ import annotations
 
 import enum
 import uuid
+from typing import TYPE_CHECKING
 
 from sqlalchemy import Enum, ForeignKey, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.models.base import Base, UUIDMixin, TimestampMixin
+from app.models.base import Base, TimestampMixin, UUIDMixin
+
+if TYPE_CHECKING:
+    from app.models.email import EmailThread
 
 
 class DealDraftStatus(str, enum.Enum):
@@ -34,6 +38,8 @@ class DealDraft(Base, UUIDMixin, TimestampMixin):
     deadlines: Mapped[str | None] = mapped_column(Text, nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
 
-    status: Mapped[DealDraftStatus] = mapped_column(Enum(DealDraftStatus), default=DealDraftStatus.intake)
+    status: Mapped[DealDraftStatus] = mapped_column(
+        Enum(DealDraftStatus), default=DealDraftStatus.intake
+    )
 
     thread: Mapped["EmailThread | None"] = relationship("EmailThread", back_populates="deal_draft")

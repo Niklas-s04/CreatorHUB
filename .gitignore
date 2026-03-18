@@ -5,3 +5,20 @@ dist/
 build/
 uploads/
 .cache/
+
+# Python
+__pycache__/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+
+# Frontend/E2E
+frontend/coverage/
+frontend/playwright-report/
+frontend/test-results/
+
+# OS/Editor
+.DS_Store
+Thumbs.db

@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 import uuid
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_db, get_current_user, require_role
+from app.api.deps import get_current_user, get_db, require_role
 from app.models.knowledge import KnowledgeDoc, KnowledgeDocType
 from app.models.user import User, UserRole
-from app.schemas.knowledge import KnowledgeDocCreate, KnowledgeDocUpdate, KnowledgeDocOut
+from app.schemas.knowledge import KnowledgeDocCreate, KnowledgeDocOut, KnowledgeDocUpdate
 from app.services.audit import record_audit_log
 
 router = APIRouter()

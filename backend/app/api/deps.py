@@ -9,8 +9,8 @@ from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 
-from app.core.security import decode_token
 from app.core.config import settings
+from app.core.security import decode_token
 from app.db.session import SessionLocal
 from app.models.auth_session import AuthSession
 from app.models.user import User, UserRole
@@ -61,7 +61,11 @@ def get_current_auth_context(
     db: Session = Depends(get_db),
     token: str | None = Depends(oauth2_scheme),
 ) -> AuthContext:
-    token_value = token or request.cookies.get(settings.AUTH_ACCESS_COOKIE_NAME) or request.cookies.get(settings.AUTH_COOKIE_NAME)
+    token_value = (
+        token
+        or request.cookies.get(settings.AUTH_ACCESS_COOKIE_NAME)
+        or request.cookies.get(settings.AUTH_COOKIE_NAME)
+    )
     if not token_value:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
 
@@ -85,14 +89,20 @@ def get_current_auth_context(
 
     user = db.query(User).filter(User.username == username).first()
     if not user or not user.is_active:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User inactive or not found")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="User inactive or not found"
+        )
 
     try:
         session_id = uuid.UUID(str(sid))
     except Exception:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid session")
 
-    session = db.query(AuthSession).filter(AuthSession.id == session_id, AuthSession.user_id == user.id).first()
+    session = (
+        db.query(AuthSession)
+        .filter(AuthSession.id == session_id, AuthSession.user_id == user.id)
+        .first()
+    )
     if not session:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Session not found")
 
@@ -116,13 +126,18 @@ def get_current_user(context: AuthContext = Depends(get_current_auth_context)) -
     return context.user
 
 
-def get_current_auth_session(context: AuthContext = Depends(get_current_auth_context)) -> AuthSession:
+def get_current_auth_session(
+    context: AuthContext = Depends(get_current_auth_context),
+) -> AuthSession:
     return context.session
 
 
 def require_role(*roles: UserRole):
     def _dep(current_user: User = Depends(get_current_user)) -> User:
         if current_user.role not in roles:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions")
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions"
+            )
         return current_user
+
     return _dep

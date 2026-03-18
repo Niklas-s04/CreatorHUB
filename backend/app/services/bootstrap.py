@@ -44,11 +44,15 @@ def assert_valid_bootstrap_token(db: Session, provided_token: str | None) -> Boo
 
     candidate = (provided_token or "").strip()
     if not candidate:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Bootstrap token required")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Bootstrap token required"
+        )
 
     expected_hash = state.install_token_hash
     if not expected_hash:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Bootstrap token not configured")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Bootstrap token not configured"
+        )
 
     if hash_token(candidate) != expected_hash:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid bootstrap token")

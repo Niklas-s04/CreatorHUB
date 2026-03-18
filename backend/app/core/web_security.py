@@ -9,15 +9,21 @@ from typing import Callable
 from fastapi import Request
 from redis import Redis
 from redis.exceptions import RedisError
+from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse, Response
 from starlette.types import ASGIApp
-from starlette.middleware.base import BaseHTTPMiddleware
 
 from app.core.security import decode_token, validate_csrf_token
 
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
-    def __init__(self, app: ASGIApp, hsts_seconds: int = 31536000, trust_proxy_headers: bool = False, env: str = "prod") -> None:
+    def __init__(
+        self,
+        app: ASGIApp,
+        hsts_seconds: int = 31536000,
+        trust_proxy_headers: bool = False,
+        env: str = "prod",
+    ) -> None:
         super().__init__(app)
         self.hsts_seconds = hsts_seconds
         self.trust_proxy_headers = trust_proxy_headers
@@ -37,7 +43,9 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers.setdefault("X-Content-Type-Options", "nosniff")
         response.headers.setdefault("X-Frame-Options", "DENY")
         response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
-        response.headers.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=(), browsing-topics=()")
+        response.headers.setdefault(
+            "Permissions-Policy", "camera=(), microphone=(), geolocation=(), browsing-topics=()"
+        )
         response.headers.setdefault("Cross-Origin-Opener-Policy", "same-origin")
         response.headers.setdefault("Cross-Origin-Resource-Policy", "same-origin")
         response.headers.setdefault(
@@ -46,7 +54,9 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         )
 
         if self.env == "prod" and self._is_https(request) and self.hsts_seconds > 0:
-            response.headers.setdefault("Strict-Transport-Security", f"max-age={self.hsts_seconds}; includeSubDomains")
+            response.headers.setdefault(
+                "Strict-Transport-Security", f"max-age={self.hsts_seconds}; includeSubDomains"
+            )
 
         return response
 
@@ -61,9 +71,13 @@ class RequestSizeLimitMiddleware(BaseHTTPMiddleware):
         if content_length:
             try:
                 if int(content_length) > self.max_body_size:
-                    return JSONResponse(status_code=413, content={"detail": "Request body too large"})
+                    return JSONResponse(
+                        status_code=413, content={"detail": "Request body too large"}
+                    )
             except ValueError:
-                return JSONResponse(status_code=400, content={"detail": "Invalid Content-Length header"})
+                return JSONResponse(
+                    status_code=400, content={"detail": "Invalid Content-Length header"}
+                )
         return await call_next(request)
 
 
@@ -88,7 +102,9 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         self._redis: Redis | None = None
         self._redis_script = None
         try:
-            self._redis = Redis.from_url(redis_url, decode_responses=True, socket_connect_timeout=1, socket_timeout=1)
+            self._redis = Redis.from_url(
+                redis_url, decode_responses=True, socket_connect_timeout=1, socket_timeout=1
+            )
             self._redis.ping()
             self._redis_script = self._redis.register_script(
                 """

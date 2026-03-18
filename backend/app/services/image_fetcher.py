@@ -2,13 +2,12 @@ from __future__ import annotations
 
 import re
 from typing import Any, Iterable
-from urllib.parse import urljoin, urlparse
+from urllib.parse import urljoin
 
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.services.outbound_http import request_outbound
-
 
 WIKIMEDIA_API = "https://commons.wikimedia.org/w/api.php"
 
@@ -30,7 +29,9 @@ _IMG_TAG_RE = re.compile(
 _BAD_IMG_HINTS = ("sprite", "icon", "logo", "favicon", "data:")
 
 
-def wikimedia_search_images(query: str, limit: int = 12, db: Session | None = None) -> list[dict[str, Any]]:
+def wikimedia_search_images(
+    query: str, limit: int = 12, db: Session | None = None
+) -> list[dict[str, Any]]:
     """Search Wikimedia Commons for file pages and return image info candidates."""
     params = {
         "action": "query",
@@ -57,14 +58,16 @@ def wikimedia_search_images(query: str, limit: int = 12, db: Session | None = No
     out: list[dict[str, Any]] = []
     for _, page in pages.items():
         title = page.get("title")  # Beispiel: File:Something.jpg
-        imageinfo = (page.get("imageinfo") or [])
+        imageinfo = page.get("imageinfo") or []
         if not imageinfo:
             continue
         ii = imageinfo[0]
-        ext = (ii.get("extmetadata") or {})
+        ext = ii.get("extmetadata") or {}
         license_short = (ext.get("LicenseShortName") or {}).get("value")
         usage_terms = (ext.get("UsageTerms") or {}).get("value")
-        attribution = (ext.get("Artist") or {}).get("value") or (ext.get("Credit") or {}).get("value")
+        attribution = (ext.get("Artist") or {}).get("value") or (ext.get("Credit") or {}).get(
+            "value"
+        )
         license_url = (ext.get("LicenseUrl") or {}).get("value")
 
         out.append(
@@ -87,7 +90,9 @@ def wikimedia_search_images(query: str, limit: int = 12, db: Session | None = No
     return out[:limit]
 
 
-def openverse_search_images(query: str, limit: int = 12, db: Session | None = None) -> list[dict[str, Any]]:
+def openverse_search_images(
+    query: str, limit: int = 12, db: Session | None = None
+) -> list[dict[str, Any]]:
     """Search Openverse (no key) for openly licensed images."""
     base = settings.OPENVERSE_API_BASE.rstrip("/")
     url = f"{base}/images"
@@ -141,7 +146,9 @@ def _openverse_attribution(it: dict[str, Any]) -> str | None:
     return None
 
 
-def opengraph_images_from_page(url: str, timeout: int = 20, db: Session | None = None) -> list[dict[str, Any]]:
+def opengraph_images_from_page(
+    url: str, timeout: int = 20, db: Session | None = None
+) -> list[dict[str, Any]]:
     """Extract likely hero images from a given page (OG/Twitter + a few <img> fallbacks).
     This does not imply license.
     """
@@ -216,7 +223,9 @@ def opengraph_images_from_page(url: str, timeout: int = 20, db: Session | None =
     return out
 
 
-def manufacturer_url_candidates(urls: Iterable[str], per_url_limit: int = 6, db: Session | None = None) -> list[dict[str, Any]]:
+def manufacturer_url_candidates(
+    urls: Iterable[str], per_url_limit: int = 6, db: Session | None = None
+) -> list[dict[str, Any]]:
     """User-provided manufacturer/product page URLs → extract likely images from each page.
     No keys, no search engine.
     """
@@ -228,7 +237,7 @@ def manufacturer_url_candidates(urls: Iterable[str], per_url_limit: int = 6, db:
         if not (u.startswith("http://") or u.startswith("https://")):
             u = "https://" + u
         if u.startswith("http://"):
-            u = "https://" + u[len("http://"):]
+            u = "https://" + u[len("http://") :]
         items = opengraph_images_from_page(u, db=db)
         for it in items[:per_url_limit]:
             it["source"] = "manufacturer"

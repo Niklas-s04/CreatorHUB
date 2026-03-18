@@ -3,17 +3,19 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, String, Boolean, Text
+from sqlalchemy import Boolean, DateTime, ForeignKey, String, Text
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.models.base import Base, UUIDMixin, TimestampMixin, utcnow
+from app.models.base import Base, TimestampMixin, UUIDMixin, utcnow
 
 
 class AuthSession(Base, UUIDMixin, TimestampMixin):
     __tablename__ = "auth_sessions"
 
-    user_id: Mapped[uuid.UUID] = mapped_column(PG_UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
     refresh_token_hash: Mapped[str] = mapped_column(String(128), nullable=False)
     refresh_jti: Mapped[str] = mapped_column(String(64), nullable=False, index=True, unique=True)
     last_access_jti: Mapped[str | None] = mapped_column(String(64), nullable=True)
@@ -43,9 +45,16 @@ class RevokedToken(Base, UUIDMixin):
 class LoginHistory(Base, UUIDMixin):
     __tablename__ = "login_history"
 
-    user_id: Mapped[uuid.UUID | None] = mapped_column(PG_UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    user_id: Mapped[uuid.UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     username: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
-    occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+    occurred_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, index=True
+    )
     ip_address: Mapped[str | None] = mapped_column(String(64), nullable=True)
     user_agent: Mapped[str | None] = mapped_column(String(512), nullable=True)
     success: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
@@ -56,7 +65,9 @@ class LoginHistory(Base, UUIDMixin):
 class PasswordResetToken(Base, UUIDMixin, TimestampMixin):
     __tablename__ = "password_reset_tokens"
 
-    user_id: Mapped[uuid.UUID] = mapped_column(PG_UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
     token_hash: Mapped[str] = mapped_column(String(128), nullable=False, unique=True, index=True)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

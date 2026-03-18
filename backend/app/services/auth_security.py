@@ -25,7 +25,9 @@ def utcnow() -> datetime:
 
 def _get_redis() -> Redis | None:
     try:
-        client = Redis.from_url(settings.REDIS_URL, decode_responses=True, socket_connect_timeout=1, socket_timeout=1)
+        client = Redis.from_url(
+            settings.REDIS_URL, decode_responses=True, socket_connect_timeout=1, socket_timeout=1
+        )
         client.ping()
         return client
     except Exception:
@@ -37,9 +39,13 @@ def _redis_revoke_key(jti: str) -> str:
 
 
 def revoke_token(db: Session, *, jti: str, expires_at: datetime) -> None:
-    existing = db.query(RevokedToken).filter(RevokedToken.jti == jti).first()
-    if existing is None:
-        db.add(RevokedToken(jti=jti, expires_at=expires_at))
+    for pending in db.new:
+        if isinstance(pending, RevokedToken) and pending.jti == jti:
+            break
+    else:
+        existing = db.query(RevokedToken).filter(RevokedToken.jti == jti).first()
+        if existing is None:
+            db.add(RevokedToken(jti=jti, expires_at=expires_at))
 
     ttl = max(1, int((expires_at - utcnow()).total_seconds()))
     redis_client = _get_redis()
@@ -137,7 +143,9 @@ def create_session_and_tokens(
     return session, access_token, refresh_token, access_jti, refresh_jti
 
 
-def rotate_refresh_token(db: Session, *, user: User, session: AuthSession) -> tuple[str, str, str, str]:
+def rotate_refresh_token(
+    db: Session, *, user: User, session: AuthSession
+) -> tuple[str, str, str, str]:
     old_refresh_jti = session.refresh_jti
     old_access_jti = session.last_access_jti
 
@@ -164,9 +172,17 @@ def rotate_refresh_token(db: Session, *, user: User, session: AuthSession) -> tu
     session.idle_expires_at = now + timedelta(minutes=settings.SESSION_IDLE_TIMEOUT_MINUTES)
 
     if old_refresh_jti:
-        revoke_token(db, jti=old_refresh_jti, expires_at=now + timedelta(minutes=settings.JWT_REFRESH_EXPIRE_MINUTES))
+        revoke_token(
+            db,
+            jti=old_refresh_jti,
+            expires_at=now + timedelta(minutes=settings.JWT_REFRESH_EXPIRE_MINUTES),
+        )
     if old_access_jti:
-        revoke_token(db, jti=old_access_jti, expires_at=now + timedelta(minutes=settings.JWT_ACCESS_EXPIRE_MINUTES))
+        revoke_token(
+            db,
+            jti=old_access_jti,
+            expires_at=now + timedelta(minutes=settings.JWT_ACCESS_EXPIRE_MINUTES),
+        )
 
     return access_token, refresh_token, access_jti, refresh_jti
 
@@ -179,7 +195,11 @@ def revoke_session(db: Session, *, session: AuthSession, reason: str) -> None:
         if session.refresh_jti:
             revoke_token(db, jti=session.refresh_jti, expires_at=session.expires_at)
         if session.last_access_jti:
-            revoke_token(db, jti=session.last_access_jti, expires_at=now + timedelta(minutes=settings.JWT_ACCESS_EXPIRE_MINUTES))
+            revoke_token(
+                db,
+                jti=session.last_access_jti,
+                expires_at=now + timedelta(minutes=settings.JWT_ACCESS_EXPIRE_MINUTES),
+            )
 
 
 def record_login_attempt(
@@ -206,7 +226,9 @@ def record_login_attempt(
     )
 
 
-def is_suspicious_login(db: Session, *, user: User | None, ip_address: str | None, user_agent: str | None, success: bool) -> bool:
+def is_suspicious_login(
+    db: Session, *, user: User | None, ip_address: str | None, user_agent: str | None, success: bool
+) -> bool:
     now = utcnow()
     window_start = now - timedelta(minutes=settings.AUTH_SUSPICIOUS_WINDOW_MINUTES)
 

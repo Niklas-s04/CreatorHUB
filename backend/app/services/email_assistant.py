@@ -12,21 +12,23 @@ from app.services.ai_gateway import safe_ollama_json
 from app.services.knowledge_service import get_knowledge_bundle
 from app.services.policy_checks import detect_pii, detect_risk_keywords, redact_sensitive
 
-
 EMAIL_SCHEMA_HINT = {
-  "intent": "sponsoring|support|collab|shipping|refund|unknown",
-  "summary": "Kurzfassung der Anfrage",
-  "risk_flags": ["contains_personal_data", "unclear_terms", "scam_suspected"],
-  "questions_to_ask": ["..."],
-  "draft_subject": "...",
-  "draft_body": "..."
+    "intent": "sponsoring|support|collab|shipping|refund|unknown",
+    "summary": "Kurzfassung der Anfrage",
+    "risk_flags": ["contains_personal_data", "unclear_terms", "scam_suspected"],
+    "questions_to_ask": ["..."],
+    "draft_subject": "...",
+    "draft_body": "...",
 }
 
 
 def _build_system_prompt(db: Session) -> str:
     kb = get_knowledge_bundle(db)
     brand = kb.get("brand_voice") or "Ton: freundlich, direkt, professionell. Keine Übertreibungen."
-    policy = kb.get("policy") or "Keine sensiblen Daten. Keine rechtsverbindlichen Zusagen ohne Freigabe. Max 3 Rückfragen."
+    policy = (
+        kb.get("policy")
+        or "Keine sensiblen Daten. Keine rechtsverbindlichen Zusagen ohne Freigabe. Max 3 Rückfragen."
+    )
     templates = kb.get("templates") or ""
 
     return f"""You are a local email assistant for a creator business. Follow BRAND VOICE and POLICY.
@@ -49,12 +51,14 @@ Rules:
 """.strip()
 
 
-def generate_email_draft(db: Session, subject: str | None, raw_body: str, tone: EmailTone) -> dict[str, Any]:
+def generate_email_draft(
+    db: Session, subject: str | None, raw_body: str, tone: EmailTone
+) -> dict[str, Any]:
     system = _build_system_prompt(db)
 
     user = f"""Create an email reply draft.
 
-Input Email Subject: {subject or ''}
+Input Email Subject: {subject or ""}
 Input Email Body:
 {raw_body}
 
@@ -104,13 +108,17 @@ Schema example:
         "draft_body": draft_body,
     }
 
-    db.add(AiRun(
-        job_type="email_reply",
-        model=settings.OLLAMA_TEXT_MODEL,
-        input_summary=(subject or "")[:200] + " | " + raw_body[:500],
-        output_summary=(result["draft_subject"] or "")[:200] + " | " + result["draft_body"][:500],
-        meta_json=meta,
-    ))
+    db.add(
+        AiRun(
+            job_type="email_reply",
+            model=settings.OLLAMA_TEXT_MODEL,
+            input_summary=(subject or "")[:200] + " | " + raw_body[:500],
+            output_summary=(result["draft_subject"] or "")[:200]
+            + " | "
+            + result["draft_body"][:500],
+            meta_json=meta,
+        )
+    )
     db.commit()
 
     return result
@@ -149,11 +157,11 @@ def refine_email_draft(
 
     user = f"""Refine an email reply draft.
 
-Original Email Subject: {subject or ''}
+Original Email Subject: {subject or ""}
 Original Email Body:
 {raw_body}
 
-Previous Draft Subject: {previous_draft_subject or ''}
+Previous Draft Subject: {previous_draft_subject or ""}
 Previous Draft Body:
 {previous_draft_body}
 
@@ -221,7 +229,9 @@ Rules:
             job_type="email_refine",
             model=settings.OLLAMA_TEXT_MODEL,
             input_summary=(subject or "")[:200] + " | " + raw_body[:500],
-            output_summary=(result["draft_subject"] or "")[:200] + " | " + result["draft_body"][:500],
+            output_summary=(result["draft_subject"] or "")[:200]
+            + " | "
+            + result["draft_body"][:500],
             meta_json={
                 **(meta or {}),
                 "qa_count": len(qa_lines),

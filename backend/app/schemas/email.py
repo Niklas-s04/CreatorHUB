@@ -3,8 +3,10 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 from typing import Any
+
 from pydantic import BaseModel
-from app.models.email import EmailTone, EmailIntent, EmailThreadMessageRole
+
+from app.models.email import EmailIntent, EmailThreadMessageRole, EmailTone
 from app.schemas.deal import DealDraftOut
 
 

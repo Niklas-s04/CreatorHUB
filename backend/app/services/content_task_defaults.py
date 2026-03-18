@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from sqlalchemy.orm import Session
 
-from app.models.content import ContentItem, ContentType, ContentTask, TaskStatus, TaskType
+from app.models.content import ContentItem, ContentTask, ContentType, TaskStatus, TaskType
 
 DEFAULT_TASKS: dict[ContentType, list[tuple[TaskType, str]]] = {
     ContentType.review: [
@@ -42,7 +42,9 @@ def ensure_default_tasks_for_item(db: Session, content_item: ContentItem) -> int
     if not templates:
         return 0
 
-    existing = db.query(ContentTask.id).filter(ContentTask.content_item_id == content_item.id).first()
+    existing = (
+        db.query(ContentTask.id).filter(ContentTask.content_item_id == content_item.id).first()
+    )
     if existing:
         return 0
 

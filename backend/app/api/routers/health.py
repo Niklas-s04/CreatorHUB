@@ -1,9 +1,8 @@
 from __future__ import annotations
 
-from sqlalchemy import text
-from redis import Redis
-
 from fastapi import APIRouter, Response, status
+from redis import Redis
+from sqlalchemy import text
 
 from app.core.config import settings
 from app.db.session import SessionLocal
@@ -36,7 +35,9 @@ def readiness(response: Response) -> dict:
         db.close()
 
     try:
-        redis_client = Redis.from_url(settings.REDIS_URL, socket_connect_timeout=1, socket_timeout=1)
+        redis_client = Redis.from_url(
+            settings.REDIS_URL, socket_connect_timeout=1, socket_timeout=1
+        )
         redis_ok = bool(redis_client.ping())
     except Exception:
         redis_ok = False

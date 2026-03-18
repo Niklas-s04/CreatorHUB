@@ -4,11 +4,10 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.security import hash_password
-from app.db.session import engine, SessionLocal
+from app.db.session import SessionLocal, engine
 from app.models.base import Base
-from app.models.user import User, UserRole
 from app.models.knowledge import KnowledgeDoc, KnowledgeDocType
-
+from app.models.user import User, UserRole
 
 DEFAULT_BRAND_VOICE = """- Ton: freundlich, direkt, professionell, keine Übertreibungen
 - Länge: 6–12 Sätze Standard
@@ -29,6 +28,7 @@ DEFAULT_POLICY = """- Keine Bankdaten, Adresse, Telefonnummer ausgeben oder wied
 def bootstrap_if_needed() -> None:
     import os
     import secrets
+
     if os.getenv("SKIP_BOOTSTRAP", "false").lower() in ("true", "1", "yes"):
         print("SKIP_BOOTSTRAP is set - skipping bootstrap")
         return
@@ -40,22 +40,38 @@ def bootstrap_if_needed() -> None:
         # Standard-Admin nur einmal anlegen.
         admin = db.query(User).filter(User.username == settings.BOOTSTRAP_ADMIN_USERNAME).first()
         if not admin:
-            db.add(User(
-                username=settings.BOOTSTRAP_ADMIN_USERNAME,
-                hashed_password=hash_password(secrets.token_urlsafe(48)),
-                role=UserRole.admin,
-                is_active=True,
-                needs_password_setup=True,
-            ))
+            db.add(
+                User(
+                    username=settings.BOOTSTRAP_ADMIN_USERNAME,
+                    hashed_password=hash_password(secrets.token_urlsafe(48)),
+                    role=UserRole.admin,
+                    is_active=True,
+                    needs_password_setup=True,
+                )
+            )
             db.commit()
 
         # Standard-Wissensdokumente nur anlegen, wenn sie fehlen.
-        has_brand = db.query(KnowledgeDoc).filter(KnowledgeDoc.type == KnowledgeDocType.brand_voice).first()
+        has_brand = (
+            db.query(KnowledgeDoc).filter(KnowledgeDoc.type == KnowledgeDocType.brand_voice).first()
+        )
         if not has_brand:
-            db.add(KnowledgeDoc(type=KnowledgeDocType.brand_voice, title="Default Brand Voice", content=DEFAULT_BRAND_VOICE))
-        has_policy = db.query(KnowledgeDoc).filter(KnowledgeDoc.type == KnowledgeDocType.policy).first()
+            db.add(
+                KnowledgeDoc(
+                    type=KnowledgeDocType.brand_voice,
+                    title="Default Brand Voice",
+                    content=DEFAULT_BRAND_VOICE,
+                )
+            )
+        has_policy = (
+            db.query(KnowledgeDoc).filter(KnowledgeDoc.type == KnowledgeDocType.policy).first()
+        )
         if not has_policy:
-            db.add(KnowledgeDoc(type=KnowledgeDocType.policy, title="Default Policy", content=DEFAULT_POLICY))
+            db.add(
+                KnowledgeDoc(
+                    type=KnowledgeDocType.policy, title="Default Policy", content=DEFAULT_POLICY
+                )
+            )
         db.commit()
     finally:
         db.close()

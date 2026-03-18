@@ -249,6 +249,61 @@ cd frontend
 npm run dev
 npm run build
 npm run preview
+npm run test
+npm run test:coverage
+npm run lint
+npm run typecheck
+npm run format:check
+npm run e2e:list
+npm run e2e
+```
+
+### Backend Quality Checks
+
+```bash
+cd backend
+python -m pip install -r requirements.txt -r requirements-dev.txt
+ruff check app tests
+ruff format --check app tests
+mypy --config-file mypy.ini
+pytest --cov=app --cov-report=term-missing
+pip-audit -r requirements.txt
+```
+
+## Qualität & CI
+
+- GitHub Actions Workflow: `.github/workflows/quality-ci.yml`
+- Enthält:
+	- Backend: install, lint, format-check, typecheck, tests + coverage, dependency security audit
+	- Frontend: install, lint, format-check, typecheck, tests + coverage, build, dependency security audit
+	- Migrations-Check: `alembic upgrade head` + `alembic current`
+
+### Quality Gates (Mindestanforderungen)
+
+- Backend Coverage: mindestens **55%** (`backend/.coveragerc`)
+- Frontend Coverage: mindestens **30% lines/functions/statements**, **20% branches** (`frontend/vite.config.ts`)
+- Lint/Format/Typecheck müssen in beiden Stacks erfolgreich sein
+
+## Release & Rollback
+
+Der standardisierte Release- und Rollback-Ablauf ist dokumentiert in:
+
+- `docs/release-and-rollback.md`
+
+### End-to-End Tests (Playwright)
+
+- E2E base URL defaults to `http://127.0.0.1:3000` (`E2E_BASE_URL` override).
+- API is expected at `http://127.0.0.1:8000/api` (configured in frontend via `VITE_API_BASE`).
+- Credentials/env overrides for test login:
+	- `E2E_ADMIN_USER` (default: `admin`)
+	- `E2E_ADMIN_PASSWORD`
+	- `E2E_BOOTSTRAP_TOKEN` (optional, used only if admin first-time setup is required)
+
+Install browser binaries once:
+
+```bash
+cd frontend
+npx playwright install
 ```
 
 ### Backend

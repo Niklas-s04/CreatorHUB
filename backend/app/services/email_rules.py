@@ -8,7 +8,6 @@ Goal: keep replies pragmatic, negotiation-aware, and creator-business safe.
 
 from __future__ import annotations
 
-
 CREATOR_EMAIL_BASE_RULES = """
 You write email replies for a social media creator (creator business).
 

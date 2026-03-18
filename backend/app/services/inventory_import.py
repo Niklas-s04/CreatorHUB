@@ -44,7 +44,7 @@ def import_products_from_csv(db: Session, *, config: CsvImportConfig) -> dict[st
         raise ValueError(f"unknown_target_fields: {', '.join(invalid_targets)}")
 
     delimiter = (config.delimiter or ";").strip() or ";"
-    quotechar = (config.quotechar or '\"')[:1]
+    quotechar = (config.quotechar or '"')[:1]
 
     text = (config.csv_text or "").strip()
     if not text:
@@ -70,7 +70,9 @@ def import_products_from_csv(db: Session, *, config: CsvImportConfig) -> dict[st
     defaults = {k: v for k, v in (config.defaults or {}).items() if k in ALLOWED_FIELDS}
     dropped_defaults = set((config.defaults or {}).keys()) - ALLOWED_FIELDS
     if dropped_defaults:
-        warnings.append(f"Ignored defaults for unknown fields: {', '.join(sorted(dropped_defaults))}")
+        warnings.append(
+            f"Ignored defaults for unknown fields: {', '.join(sorted(dropped_defaults))}"
+        )
 
     rows_total = 0
     success_rows = 0

@@ -5,11 +5,11 @@ import uuid
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import Boolean, Enum, Integer, String, Text, DateTime
+from sqlalchemy import Boolean, DateTime, Enum, Integer, String, Text
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.models.base import Base, UUIDMixin, TimestampMixin
+from app.models.base import Base, TimestampMixin, UUIDMixin
 
 
 class AssetOwnerType(str, enum.Enum):
@@ -43,7 +43,9 @@ class AssetReviewState(str, enum.Enum):
 class Asset(Base, UUIDMixin, TimestampMixin):
     __tablename__ = "assets"
 
-    owner_type: Mapped[AssetOwnerType] = mapped_column(Enum(AssetOwnerType), default=AssetOwnerType.product)
+    owner_type: Mapped[AssetOwnerType] = mapped_column(
+        Enum(AssetOwnerType), default=AssetOwnerType.product
+    )
     owner_id: Mapped[uuid.UUID] = mapped_column(PGUUID(as_uuid=True))
     kind: Mapped[AssetKind] = mapped_column(Enum(AssetKind), default=AssetKind.image)
     source: Mapped[AssetSource] = mapped_column(Enum(AssetSource), default=AssetSource.upload)
@@ -65,5 +67,7 @@ class Asset(Base, UUIDMixin, TimestampMixin):
     hash: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     perceptual_hash: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
 
-    review_state: Mapped[AssetReviewState] = mapped_column(Enum(AssetReviewState), default=AssetReviewState.pending_review)
+    review_state: Mapped[AssetReviewState] = mapped_column(
+        Enum(AssetReviewState), default=AssetReviewState.pending_review
+    )
     is_primary: Mapped[bool] = mapped_column(Boolean, default=False)

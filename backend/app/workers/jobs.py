@@ -7,19 +7,19 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.db.session import SessionLocal
-from app.models.product import Product
-from app.models.asset import Asset, AssetOwnerType, AssetKind, AssetSource, AssetReviewState
 from app.models.ai_runs import AiRun
+from app.models.asset import Asset, AssetKind, AssetOwnerType, AssetReviewState, AssetSource
+from app.models.product import Product
 from app.services.image_fetcher import (
-    wikimedia_search_images,
-    openverse_search_images,
     manufacturer_url_candidates,
     opengraph_images_from_page,
+    openverse_search_images,
+    wikimedia_search_images,
 )
-from app.services.storage import cache_download
 from app.services.image_scoring import score_image
-from app.core.config import settings
+from app.services.storage import cache_download
 
 
 def _build_query(p: Product) -> str:
@@ -50,7 +50,9 @@ def _hex_hamming_distance(a: str, b: str) -> int:
         return 64
 
 
-def _find_perceptual_duplicate(existing: list[Asset], candidate_hash: str, threshold: int = 6) -> tuple[Asset, int] | None:
+def _find_perceptual_duplicate(
+    existing: list[Asset], candidate_hash: str, threshold: int = 6
+) -> tuple[Asset, int] | None:
     if not candidate_hash:
         return None
     best: tuple[Asset, int] | None = None
@@ -74,7 +76,9 @@ MIN_BACKGROUND_SCORE = 0.3
 MIN_OVERALL_SCORE = 0.4
 
 
-def image_hunt_job(product_id: str, query: str | None = None, max_results: int = 12, source: str = "auto") -> dict[str, Any]:
+def image_hunt_job(
+    product_id: str, query: str | None = None, max_results: int = 12, source: str = "auto"
+) -> dict[str, Any]:
     db: Session = SessionLocal()
     try:
         p = db.query(Product).filter(Product.id == product_id).first()
@@ -106,7 +110,12 @@ def image_hunt_job(product_id: str, query: str | None = None, max_results: int =
                 continue
 
         if not candidates:
-            return {"query": q, "candidates": [], "best": [], "warning": "no_candidates (check sources/config)"}
+            return {
+                "query": q,
+                "candidates": [],
+                "best": [],
+                "warning": "no_candidates (check sources/config)",
+            }
 
         results: list[dict[str, Any]] = []
         quality_rejections = {
@@ -118,11 +127,15 @@ def image_hunt_job(product_id: str, query: str | None = None, max_results: int =
             "low_score": 0,
         }
         skipped_duplicates = 0
-        existing_assets = db.query(Asset).filter(
-            Asset.owner_type == AssetOwnerType.product,
-            Asset.owner_id == p.id,
-            Asset.kind == AssetKind.image,
-        ).all()
+        existing_assets = (
+            db.query(Asset)
+            .filter(
+                Asset.owner_type == AssetOwnerType.product,
+                Asset.owner_id == p.id,
+                Asset.kind == AssetKind.image,
+            )
+            .all()
+        )
         existing_by_hash = {a.hash: a for a in existing_assets if a.hash}
 
         seen_url: set[str] = set()
@@ -210,31 +223,35 @@ def image_hunt_job(product_id: str, query: str | None = None, max_results: int =
                 existing_by_hash[asset.hash] = asset
 
             score_dict = score.to_dict()
-            results.append({
-                "asset_id": str(asset.id),
-                "score": score_dict["score"],
-                "reason": score_dict["reason"],
-                "spec_sheet": score_dict["spec_sheet"],
-                "background_score": score_dict["background_score"],
-                "white_ratio": score_dict["white_ratio"],
-                "edge_density": score_dict["edge_density"],
-                "aspect_ratio": score_dict["aspect_ratio"],
-                "license_type": asset.license_type,
-                "attribution": asset.attribution,
-                "source_url": c.get("source_url"),
-                "image_url": c.get("image_url"),
-            })
+            results.append(
+                {
+                    "asset_id": str(asset.id),
+                    "score": score_dict["score"],
+                    "reason": score_dict["reason"],
+                    "spec_sheet": score_dict["spec_sheet"],
+                    "background_score": score_dict["background_score"],
+                    "white_ratio": score_dict["white_ratio"],
+                    "edge_density": score_dict["edge_density"],
+                    "aspect_ratio": score_dict["aspect_ratio"],
+                    "license_type": asset.license_type,
+                    "attribution": asset.attribution,
+                    "source_url": c.get("source_url"),
+                    "image_url": c.get("image_url"),
+                }
+            )
 
         results.sort(key=lambda x: x["score"], reverse=True)
         best = results[:3]
 
-        db.add(AiRun(
-            job_type="image_select",
-            model=settings.OLLAMA_VISION_MODEL or "heuristic",
-            input_summary=f"product_id={product_id} query={q} sources={','.join(sources)}",
-            output_summary=json.dumps(best, ensure_ascii=False)[:2000],
-            meta_json={"count": len(results), "quality_rejections": quality_rejections},
-        ))
+        db.add(
+            AiRun(
+                job_type="image_select",
+                model=settings.OLLAMA_VISION_MODEL or "heuristic",
+                input_summary=f"product_id={product_id} query={q} sources={','.join(sources)}",
+                output_summary=json.dumps(best, ensure_ascii=False)[:2000],
+                meta_json={"count": len(results), "quality_rejections": quality_rejections},
+            )
+        )
         db.commit()
 
         return {

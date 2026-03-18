@@ -2,13 +2,13 @@ from __future__ import annotations
 
 import hashlib
 import os
-import secrets
 import re
+import secrets
 from dataclasses import dataclass
+from io import BytesIO
 from pathlib import Path
 from typing import Tuple
 from urllib.parse import urlparse
-from io import BytesIO
 
 from PIL import Image, UnidentifiedImageError
 from sqlalchemy.orm import Session
@@ -148,7 +148,9 @@ def _average_hash(img: Image.Image, hash_size: int = 8) -> str:
 
 
 def save_upload(owner_folder: str, filename: str, data: bytes) -> StoredFile:
-    return save_upload_validated(owner_folder=owner_folder, filename=filename, data=data, expected_kind="image")
+    return save_upload_validated(
+        owner_folder=owner_folder, filename=filename, data=data, expected_kind="image"
+    )
 
 
 def save_upload_validated(
@@ -221,7 +223,9 @@ def save_upload_validated(
     )
 
 
-def cache_download(url: str, subdir: str = "web", db: Session | None = None, expected_kind: str = "image") -> StoredFile:
+def cache_download(
+    url: str, subdir: str = "web", db: Session | None = None, expected_kind: str = "image"
+) -> StoredFile:
     _ensure_dirs()
     response = request_outbound(
         url=url,

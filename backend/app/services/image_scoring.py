@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Optional
 
@@ -35,14 +35,18 @@ def _heuristic_score(image_path: Path) -> ScoreResult:
             img = img.convert("RGB")
             orig_w, orig_h = img.size
             if orig_w == 0 or orig_h == 0:
-                return ScoreResult(0.0, "invalid image size", 0.0, 0.0, 0.0, False, 0.0, orig_w, orig_h)
+                return ScoreResult(
+                    0.0, "invalid image size", 0.0, 0.0, 0.0, False, 0.0, orig_w, orig_h
+                )
 
             # Für Performance verkleinern, Seitenverhältnis bleibt erhalten.
             img.thumbnail((512, 512))
 
             w, h = img.size
             if w == 0 or h == 0:
-                return ScoreResult(0.0, "invalid image size", 0.0, 0.0, 0.0, False, 0.0, orig_w, orig_h)
+                return ScoreResult(
+                    0.0, "invalid image size", 0.0, 0.0, 0.0, False, 0.0, orig_w, orig_h
+                )
 
             px = img.load()
 

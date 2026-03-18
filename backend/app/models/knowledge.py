@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import enum
 
-from sqlalchemy import String, Text, Enum
+from sqlalchemy import Enum, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.models.base import Base, UUIDMixin, TimestampMixin
+from app.models.base import Base, TimestampMixin, UUIDMixin
 
 
 class KnowledgeDocType(str, enum.Enum):

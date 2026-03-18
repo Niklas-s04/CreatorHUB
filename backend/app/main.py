@@ -9,9 +9,25 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
+from app.api.routers import (
+    assets,
+    audit,
+    auth,
+    content,
+    deals,
+    email,
+    health,
+    images,
+    knowledge,
+    products,
+)
 from app.core.config import settings
-from app.core.web_security import SecurityHeadersMiddleware, RequestSizeLimitMiddleware, RateLimitMiddleware, CsrfProtectionMiddleware
-from app.api.routers import auth, products, assets, content, email, images, knowledge, health, deals, audit
+from app.core.web_security import (
+    CsrfProtectionMiddleware,
+    RateLimitMiddleware,
+    RequestSizeLimitMiddleware,
+    SecurityHeadersMiddleware,
+)
 from app.seed import bootstrap_if_needed
 from app.services.auto_archive import auto_archive_daemon
 
@@ -37,11 +53,17 @@ def _validate_runtime_config() -> None:
     def _require_url(name: str, value: str, allowed_schemes: set[str]) -> None:
         parsed = urlparse((value or "").strip())
         if not parsed.scheme or parsed.scheme not in allowed_schemes:
-            raise RuntimeError(f"{name} must use one of schemes: {', '.join(sorted(allowed_schemes))}")
+            raise RuntimeError(
+                f"{name} must use one of schemes: {', '.join(sorted(allowed_schemes))}"
+            )
         if not parsed.netloc:
             raise RuntimeError(f"{name} must include host information")
 
-    _require_url("DATABASE_URL", settings.DATABASE_URL, {"postgresql", "postgresql+psycopg", "postgresql+psycopg2"})
+    _require_url(
+        "DATABASE_URL",
+        settings.DATABASE_URL,
+        {"postgresql", "postgresql+psycopg", "postgresql+psycopg2"},
+    )
     _require_url("REDIS_URL", settings.REDIS_URL, {"redis", "rediss"})
     _require_url("OLLAMA_URL", settings.OLLAMA_URL, {"http", "https"})
 

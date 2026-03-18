@@ -13,7 +13,13 @@ class OllamaError(RuntimeError):
     pass
 
 
-def ollama_chat(model: str, system: str, user: str, images_b64: Optional[list[str]] = None, force_json: bool = True) -> tuple[str, dict]:
+def ollama_chat(
+    model: str,
+    system: str,
+    user: str,
+    images_b64: Optional[list[str]] = None,
+    force_json: bool = True,
+) -> tuple[str, dict]:
     """Call Ollama chat API and return (content, meta)."""
     url = f"{settings.OLLAMA_URL.rstrip('/')}/api/chat"
     messages: list[dict[str, Any]] = []
@@ -61,7 +67,7 @@ def ensure_json(text: str) -> Any:
     except Exception:
         pass
     # Erstes JSON-Objekt oder -Array aus Freitext extrahieren.
-    start = min([i for i in [text.find('{'), text.find('[')] if i != -1], default=-1)
+    start = min([i for i in [text.find("{"), text.find("[")] if i != -1], default=-1)
     if start == -1:
         raise ValueError("No JSON start found")
     # Einfache Klammerlogik zum Finden des JSON-Endes.
@@ -69,12 +75,12 @@ def ensure_json(text: str) -> Any:
     end = None
     for i in range(start, len(text)):
         ch = text[i]
-        if ch in '{[':
+        if ch in "{[":
             stack.append(ch)
-        elif ch in '}]':
+        elif ch in "}]":
             if not stack:
                 continue
-            op = stack.pop()
+            stack.pop()
             if not stack:
                 end = i + 1
                 break
@@ -83,15 +89,25 @@ def ensure_json(text: str) -> Any:
     return json.loads(text[start:end])
 
 
-def safe_ollama_json(model: str, system: str, user: str, images_b64: Optional[list[str]] = None, max_fix_attempts: int = 1) -> tuple[dict, dict]:
+def safe_ollama_json(
+    model: str,
+    system: str,
+    user: str,
+    images_b64: Optional[list[str]] = None,
+    max_fix_attempts: int = 1,
+) -> tuple[dict, dict]:
     """Call Ollama, parse JSON; if parsing fails, do one repair pass."""
-    content, meta = ollama_chat(model=model, system=system, user=user, images_b64=images_b64, force_json=True)
+    content, meta = ollama_chat(
+        model=model, system=system, user=user, images_b64=images_b64, force_json=True
+    )
     try:
         return ensure_json(content), meta
-    except Exception as e:
+    except Exception:
         if max_fix_attempts <= 0:
             raise
         fix_system = "You are a JSON repair utility. Output ONLY valid JSON."
         fix_user = f"Fix to valid JSON only. Original:\n{content}"
-        fixed, meta2 = ollama_chat(model=model, system=fix_system, user=fix_user, images_b64=None, force_json=True)
+        fixed, meta2 = ollama_chat(
+            model=model, system=fix_system, user=fix_user, images_b64=None, force_json=True
+        )
         return ensure_json(fixed), {**meta, "repair": meta2}

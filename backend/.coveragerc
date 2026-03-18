@@ -1,0 +1,11 @@
+[run]
+branch = True
+source = app
+omit =
+    */__init__.py
+    app/workers/*
+
+[report]
+show_missing = True
+skip_covered = False
+fail_under = 30

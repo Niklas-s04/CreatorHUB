@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import re
-from typing import Iterable
 
 PII_PATTERNS = {
-    "phone_number": re.compile(r"\b(\+?\d{1,3}[\s-]?)?(\(?\d{2,4}\)?[\s-]?)?\d{3,4}[\s-]?\d{3,4}\b"),
+    "phone_number": re.compile(
+        r"\b(\+?\d{1,3}[\s-]?)?(\(?\d{2,4}\)?[\s-]?)?\d{3,4}[\s-]?\d{3,4}\b"
+    ),
     "email_address": re.compile(r"[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}", re.IGNORECASE),
     "iban": re.compile(r"\b[A-Z]{2}\d{2}[A-Z0-9]{11,30}\b"),
     "credit_card": re.compile(r"\b(?:\d[ -]*?){13,19}\b"),
@@ -12,7 +13,15 @@ PII_PATTERNS = {
 
 RISK_KEYWORDS = {
     "binding_promise": ["verbindlich", "garantiere", "rechtsverbindlich", "unwiderruflich"],
-    "scam_suspected": ["bitcoin", "gift card", "steam gift", "dringend", "sofort", "konto gesperrt", "password"],
+    "scam_suspected": [
+        "bitcoin",
+        "gift card",
+        "steam gift",
+        "dringend",
+        "sofort",
+        "konto gesperrt",
+        "password",
+    ],
 }
 
 URL_PATTERN = re.compile(r"https?://\S+", re.IGNORECASE)

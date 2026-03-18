@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import uuid
 from datetime import date
+
 from pydantic import BaseModel
-from app.models.content import ContentPlatform, ContentType, ContentStatus, TaskType, TaskStatus
+
+from app.models.content import ContentPlatform, ContentStatus, ContentType, TaskStatus, TaskType
 
 
 class ContentItemCreate(BaseModel):

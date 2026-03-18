@@ -5,11 +5,11 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_db, get_current_user, require_role
+from app.api.deps import get_current_user, get_db, require_role
 from app.models.deal import DealDraft, DealDraftStatus
 from app.models.email import EmailThread
 from app.models.user import User, UserRole
-from app.schemas.deal import DealDraftOut, DealDraftIntakeRequest, DealDraftUpdate
+from app.schemas.deal import DealDraftIntakeRequest, DealDraftOut, DealDraftUpdate
 from app.services.deal_intake import extract_deal_intake
 
 router = APIRouter()

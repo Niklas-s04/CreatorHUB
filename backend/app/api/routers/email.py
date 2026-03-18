@@ -3,36 +3,47 @@ from __future__ import annotations
 import json
 import uuid
 from typing import Any
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_db, get_current_user, require_role
+from app.api.deps import get_current_user, get_db, require_role
 from app.models.email import (
-    EmailThread,
     EmailDraft,
+    EmailIntent,
+    EmailThread,
     EmailThreadMessage,
     EmailThreadMessageRole,
-    EmailIntent,
 )
 from app.models.user import User, UserRole
 from app.schemas.email import (
-    EmailDraftRequest,
     EmailDraftOut,
-    EmailThreadOut,
-    EmailThreadDetailOut,
+    EmailDraftRequest,
     EmailRefineRequest,
+    EmailThreadDetailOut,
+    EmailThreadOut,
 )
 from app.services.email_assistant import generate_email_draft, refine_email_draft
 
 router = APIRouter()
 
 
-def _log_thread_message(db: Session, thread_id: uuid.UUID, role: EmailThreadMessageRole, content: str | None, payload: dict[str, Any]) -> None:
+def _log_thread_message(
+    db: Session,
+    thread_id: uuid.UUID,
+    role: EmailThreadMessageRole,
+    content: str | None,
+    payload: dict[str, Any],
+) -> None:
     db.add(EmailThreadMessage(thread_id=thread_id, role=role, content=content, payload=payload))
 
 
 @router.post("/draft", response_model=EmailDraftOut)
-def create_draft(payload: EmailDraftRequest, db: Session = Depends(get_db), _: User = Depends(require_role(UserRole.admin, UserRole.editor))) -> EmailDraftOut:
+def create_draft(
+    payload: EmailDraftRequest,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_role(UserRole.admin, UserRole.editor)),
+) -> EmailDraftOut:
     thread = None
     if payload.thread_id:
         thread = db.query(EmailThread).filter(EmailThread.id == payload.thread_id).first()
@@ -44,7 +55,9 @@ def create_draft(payload: EmailDraftRequest, db: Session = Depends(get_db), _: U
         db.commit()
         db.refresh(thread)
 
-    result = generate_email_draft(db, subject=payload.subject or thread.subject, raw_body=payload.raw_body, tone=payload.tone)
+    result = generate_email_draft(
+        db, subject=payload.subject or thread.subject, raw_body=payload.raw_body, tone=payload.tone
+    )
 
     thread.detected_intent = EmailIntent(result["intent"])
 
@@ -89,11 +102,19 @@ def create_draft(payload: EmailDraftRequest, db: Session = Depends(get_db), _: U
 
 
 @router.post("/refine", response_model=EmailDraftOut)
-def refine_draft(payload: EmailRefineRequest, db: Session = Depends(get_db), _: User = Depends(require_role(UserRole.admin, UserRole.editor))) -> EmailDraftOut:
+def refine_draft(
+    payload: EmailRefineRequest,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_role(UserRole.admin, UserRole.editor)),
+) -> EmailDraftOut:
     thread = db.query(EmailThread).filter(EmailThread.id == payload.thread_id).first()
     if not thread:
         raise HTTPException(status_code=404, detail="Thread not found")
-    prev = db.query(EmailDraft).filter(EmailDraft.id == payload.draft_id, EmailDraft.thread_id == thread.id).first()
+    prev = (
+        db.query(EmailDraft)
+        .filter(EmailDraft.id == payload.draft_id, EmailDraft.thread_id == thread.id)
+        .first()
+    )
     if not prev:
         raise HTTPException(status_code=404, detail="Draft not found")
 
@@ -172,16 +193,34 @@ def refine_draft(payload: EmailRefineRequest, db: Session = Depends(get_db), _: 
 
 
 @router.get("/threads", response_model=list[EmailThreadOut])
-def list_threads(db: Session = Depends(get_db), _: User = Depends(get_current_user), limit: int = 50, offset: int = 0) -> list[EmailThreadOut]:
-    return db.query(EmailThread).order_by(EmailThread.updated_at.desc()).offset(offset).limit(limit).all()
+def list_threads(
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+    limit: int = 50,
+    offset: int = 0,
+) -> list[EmailThreadOut]:
+    return (
+        db.query(EmailThread)
+        .order_by(EmailThread.updated_at.desc())
+        .offset(offset)
+        .limit(limit)
+        .all()
+    )
 
 
 @router.get("/threads/{thread_id}", response_model=EmailThreadDetailOut)
-def get_thread(thread_id: uuid.UUID, db: Session = Depends(get_db), _: User = Depends(get_current_user)) -> EmailThreadDetailOut:
+def get_thread(
+    thread_id: uuid.UUID, db: Session = Depends(get_db), _: User = Depends(get_current_user)
+) -> EmailThreadDetailOut:
     t = db.query(EmailThread).filter(EmailThread.id == thread_id).first()
     if not t:
         raise HTTPException(status_code=404, detail="Thread not found")
-    drafts = db.query(EmailDraft).filter(EmailDraft.thread_id == thread_id).order_by(EmailDraft.created_at.desc()).all()
+    drafts = (
+        db.query(EmailDraft)
+        .filter(EmailDraft.thread_id == thread_id)
+        .order_by(EmailDraft.created_at.desc())
+        .all()
+    )
     messages = (
         db.query(EmailThreadMessage)
         .filter(EmailThreadMessage.thread_id == thread_id)
@@ -202,5 +241,12 @@ def get_thread(thread_id: uuid.UUID, db: Session = Depends(get_db), _: User = De
 
 
 @router.get("/threads/{thread_id}/drafts", response_model=list[EmailDraftOut])
-def list_drafts(thread_id: uuid.UUID, db: Session = Depends(get_db), _: User = Depends(get_current_user)) -> list[EmailDraftOut]:
-    return db.query(EmailDraft).filter(EmailDraft.thread_id == thread_id).order_by(EmailDraft.created_at.desc()).all()
+def list_drafts(
+    thread_id: uuid.UUID, db: Session = Depends(get_db), _: User = Depends(get_current_user)
+) -> list[EmailDraftOut]:
+    return (
+        db.query(EmailDraft)
+        .filter(EmailDraft.thread_id == thread_id)
+        .order_by(EmailDraft.created_at.desc())
+        .all()
+    )

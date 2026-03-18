@@ -9,8 +9,8 @@ from urllib.parse import urljoin, urlparse
 
 import requests
 from requests.adapters import HTTPAdapter
-from urllib3.util.retry import Retry
 from sqlalchemy.orm import Session
+from urllib3.util.retry import Retry
 
 from app.core.config import settings
 from app.models.audit import AuditLog
@@ -34,6 +34,7 @@ class OutboundResponse:
 
     def json(self) -> Any:
         import json
+
         return json.loads(self.text)
 
 
@@ -51,11 +52,17 @@ def _allowed_ports() -> set[int]:
 
 
 def _allowlist_hosts() -> set[str]:
-    return {h.strip().lower() for h in (settings.OUTBOUND_ALLOWLIST_HOSTS or "").split(",") if h.strip()}
+    return {
+        h.strip().lower() for h in (settings.OUTBOUND_ALLOWLIST_HOSTS or "").split(",") if h.strip()
+    }
 
 
 def _sensitive_allowlist_hosts() -> set[str]:
-    return {h.strip().lower() for h in (settings.OUTBOUND_SENSITIVE_ALLOWLIST_HOSTS or "").split(",") if h.strip()}
+    return {
+        h.strip().lower()
+        for h in (settings.OUTBOUND_SENSITIVE_ALLOWLIST_HOSTS or "").split(",")
+        if h.strip()
+    }
 
 
 def _is_blocked_ip(ip_str: str) -> bool:
@@ -113,7 +120,11 @@ def _validate_url(
     if allowed_hosts and host not in allowed_hosts:
         raise OutboundRequestError("Target host not in allowlist")
 
-    if sensitive_hosts and host in sensitive_hosts and (not allowed_hosts or host not in allowed_hosts):
+    if (
+        sensitive_hosts
+        and host in sensitive_hosts
+        and (not allowed_hosts or host not in allowed_hosts)
+    ):
         raise OutboundRequestError("Sensitive target requires explicit allowlist")
 
     try:
@@ -185,7 +196,9 @@ def request_outbound(
 ) -> OutboundResponse:
     request_headers = {"User-Agent": "creatorhub-outbound/1.0", **(headers or {})}
     timeout = (
-        timeout_connect if timeout_connect is not None else settings.OUTBOUND_CONNECT_TIMEOUT_SECONDS,
+        timeout_connect
+        if timeout_connect is not None
+        else settings.OUTBOUND_CONNECT_TIMEOUT_SECONDS,
         timeout_read if timeout_read is not None else settings.OUTBOUND_READ_TIMEOUT_SECONDS,
     )
     byte_limit = max_bytes if max_bytes is not None else settings.OUTBOUND_MAX_RESPONSE_BYTES
@@ -256,10 +269,26 @@ def request_outbound(
         content = b"".join(chunks)
         elapsed_ms = int((time.perf_counter() - start) * 1000)
         if resp.status_code >= 400:
-            _log_outbound(db, url=current_url, method=method, status="error", status_code=resp.status_code, duration_ms=elapsed_ms, error=f"HTTP {resp.status_code}")
+            _log_outbound(
+                db,
+                url=current_url,
+                method=method,
+                status="error",
+                status_code=resp.status_code,
+                duration_ms=elapsed_ms,
+                error=f"HTTP {resp.status_code}",
+            )
             raise OutboundRequestError(f"HTTP {resp.status_code}")
 
-        _log_outbound(db, url=current_url, method=method, status="ok", status_code=resp.status_code, duration_ms=elapsed_ms, error=None)
+        _log_outbound(
+            db,
+            url=current_url,
+            method=method,
+            status="ok",
+            status_code=resp.status_code,
+            duration_ms=elapsed_ms,
+            error=None,
+        )
         return OutboundResponse(
             status_code=resp.status_code,
             url=current_url,
@@ -270,7 +299,15 @@ def request_outbound(
     except Exception as exc:
         elapsed_ms = int((time.perf_counter() - start) * 1000)
         status_code = resp.status_code if resp is not None else None
-        _log_outbound(db, url=current_url, method=method, status="error", status_code=status_code, duration_ms=elapsed_ms, error=str(exc)[:500])
+        _log_outbound(
+            db,
+            url=current_url,
+            method=method,
+            status="error",
+            status_code=status_code,
+            duration_ms=elapsed_ms,
+            error=str(exc)[:500],
+        )
         raise
     finally:
         session.close()

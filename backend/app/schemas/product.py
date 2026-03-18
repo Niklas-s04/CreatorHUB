@@ -101,7 +101,9 @@ class InventoryCsvImportRequest(BaseModel):
     delimiter: str = Field(default=";", min_length=1, max_length=1)
     quotechar: str = Field(default='"', min_length=1, max_length=1)
     column_map: dict[str, str] = Field(description="Mapping of product field -> CSV column header")
-    defaults: dict[str, Any] | None = Field(default=None, description="Fallback values for missing columns")
+    defaults: dict[str, Any] | None = Field(
+        default=None, description="Fallback values for missing columns"
+    )
     dry_run: bool = Field(default=True, description="If true, validates without inserting records")
 
 

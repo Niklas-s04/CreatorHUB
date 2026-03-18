@@ -1,53 +1,81 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
 import re
+import secrets
 import uuid
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response, status, Form
+from datetime import datetime, timedelta, timezone
+
+from fastapi import (
+    APIRouter,
+    Depends,
+    Form,
+    Header,
+    HTTPException,
+    Query,
+    Request,
+    Response,
+    status,
+)
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 
-from app.api.deps import AuthContext, get_db, get_current_auth_context, get_current_user, require_role, get_client_ip
-from app.core.security import verify_password, hash_password, decode_token, hash_token, create_csrf_token
+from app.api.deps import (
+    AuthContext,
+    get_client_ip,
+    get_current_auth_context,
+    get_current_user,
+    get_db,
+    require_role,
+)
 from app.core.config import settings
+from app.core.security import (
+    create_csrf_token,
+    decode_token,
+    hash_password,
+    hash_token,
+    verify_password,
+)
 from app.models.auth_session import AuthSession, LoginHistory, PasswordResetToken
 from app.models.registration_request import RegistrationRequest, RegistrationRequestStatus
 from app.models.user import User, UserRole
 from app.schemas.auth import (
-    TokenOut,
     AdminBootstrapStatusOut,
     AdminPasswordSetupIn,
+    ChangePasswordIn,
+    LoginHistoryOut,
+    MfaDisableIn,
+    MfaEnableIn,
+    MfaEnableOut,
+    MfaProvisionOut,
+    MfaStatusOut,
+    PasswordResetConfirmIn,
+    PasswordResetRequestIn,
+    PasswordResetRequestOut,
     RegisterRequestIn,
     RegisterRequestOut,
     SessionOut,
-    LoginHistoryOut,
-    MfaStatusOut,
-    MfaProvisionOut,
-    MfaEnableIn,
-    MfaDisableIn,
-    MfaEnableOut,
-    ChangePasswordIn,
-    PasswordResetRequestIn,
-    PasswordResetRequestOut,
-    PasswordResetConfirmIn,
+    TokenOut,
 )
-from app.schemas.user import UserOut, UserCreate
+from app.schemas.user import UserCreate, UserOut
 from app.services.audit import record_audit_log
-from app.services.bootstrap import assert_bootstrap_active, assert_valid_bootstrap_token, finalize_bootstrap
 from app.services.auth_security import (
     create_session_and_tokens,
-    rotate_refresh_token,
-    revoke_session,
-    revoke_token,
-    is_token_revoked,
-    record_login_attempt,
-    is_suspicious_login,
     create_totp_secret,
-    totp_uri,
-    verify_totp_code,
     generate_recovery_codes,
     hash_recovery_codes,
+    is_suspicious_login,
+    is_token_revoked,
+    record_login_attempt,
+    revoke_session,
+    revoke_token,
+    rotate_refresh_token,
+    totp_uri,
     verify_recovery_code,
+    verify_totp_code,
+)
+from app.services.bootstrap import (
+    assert_valid_bootstrap_token,
+    finalize_bootstrap,
 )
 
 router = APIRouter()
@@ -57,7 +85,10 @@ USERNAME_RE = re.compile(r"^[A-Za-z0-9_.-]{3,64}$")
 def _validate_username(username: str) -> str:
     candidate = username.strip()
     if not USERNAME_RE.match(candidate):
-        raise HTTPException(status_code=400, detail="Username must be 3-64 chars and only contain letters, numbers, . _ -")
+        raise HTTPException(
+            status_code=400,
+            detail="Username must be 3-64 chars and only contain letters, numbers, . _ -",
+        )
     return candidate
 
 
@@ -72,7 +103,10 @@ def _validate_password_strength(password: str) -> str:
         any(not c.isalnum() for c in candidate),
     ]
     if not all(checks):
-        raise HTTPException(status_code=400, detail="Password must include upper/lowercase letters, a number, and a special character")
+        raise HTTPException(
+            status_code=400,
+            detail="Password must include upper/lowercase letters, a number, and a special character",
+        )
     return candidate
 
 
@@ -98,13 +132,17 @@ def _cookie_lifetime_seconds(*, session: AuthSession) -> tuple[int, int, int]:
     absolute_remaining = max(0, int((session.expires_at - now).total_seconds()))
     idle_remaining = max(0, int((session.idle_expires_at - now).total_seconds()))
 
-    access_max_age = max(1, min(settings.AUTH_ACCESS_COOKIE_MAX_AGE_SECONDS, absolute_remaining, idle_remaining))
+    access_max_age = max(
+        1, min(settings.AUTH_ACCESS_COOKIE_MAX_AGE_SECONDS, absolute_remaining, idle_remaining)
+    )
     refresh_max_age = max(1, min(settings.AUTH_REFRESH_COOKIE_MAX_AGE_SECONDS, absolute_remaining))
     csrf_max_age = access_max_age
     return access_max_age, refresh_max_age, csrf_max_age
 
 
-def _set_auth_cookies(response: Response, access_token: str, refresh_token: str, session: AuthSession) -> None:
+def _set_auth_cookies(
+    response: Response, access_token: str, refresh_token: str, session: AuthSession
+) -> None:
     access_max_age, refresh_max_age, csrf_max_age = _cookie_lifetime_seconds(session=session)
     domain = settings.AUTH_COOKIE_DOMAIN
 
@@ -187,10 +225,14 @@ def login(
     user = db.query(User).filter(User.username == username).first()
 
     if user and user.role == UserRole.admin and user.needs_password_setup:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin password setup required")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Admin password setup required"
+        )
 
     if user and not user.is_active:
-        suspicious = is_suspicious_login(db, user=user, ip_address=ip_address, user_agent=user_agent, success=False)
+        suspicious = is_suspicious_login(
+            db, user=user, ip_address=ip_address, user_agent=user_agent, success=False
+        )
         record_login_attempt(
             db,
             user=user,
@@ -202,10 +244,14 @@ def login(
             reason="inactive",
         )
         db.commit()
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Incorrect username or password")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Incorrect username or password"
+        )
 
     if user and user.locked_until and user.locked_until > _utcnow():
-        suspicious = is_suspicious_login(db, user=user, ip_address=ip_address, user_agent=user_agent, success=False)
+        suspicious = is_suspicious_login(
+            db, user=user, ip_address=ip_address, user_agent=user_agent, success=False
+        )
         record_login_attempt(
             db,
             user=user,
@@ -217,10 +263,14 @@ def login(
             reason="locked",
         )
         db.commit()
-        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Account temporarily locked")
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Account temporarily locked"
+        )
 
     if not user or not verify_password(form_data.password, user.hashed_password):
-        suspicious = is_suspicious_login(db, user=user, ip_address=ip_address, user_agent=user_agent, success=False)
+        suspicious = is_suspicious_login(
+            db, user=user, ip_address=ip_address, user_agent=user_agent, success=False
+        )
         if user:
             _apply_failed_login(user)
         record_login_attempt(
@@ -234,12 +284,16 @@ def login(
             reason="invalid_credentials",
         )
         db.commit()
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Incorrect username or password")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Incorrect username or password"
+        )
 
     if user.mfa_enabled:
         if not otp or not _verify_mfa(user, otp):
             _apply_failed_login(user)
-            suspicious = is_suspicious_login(db, user=user, ip_address=ip_address, user_agent=user_agent, success=False)
+            suspicious = is_suspicious_login(
+                db, user=user, ip_address=ip_address, user_agent=user_agent, success=False
+            )
             record_login_attempt(
                 db,
                 user=user,
@@ -251,11 +305,15 @@ def login(
                 reason="mfa_failed",
             )
             db.commit()
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="MFA required or invalid")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED, detail="MFA required or invalid"
+            )
 
     user.failed_login_attempts = 0
     user.locked_until = None
-    suspicious = is_suspicious_login(db, user=user, ip_address=ip_address, user_agent=user_agent, success=True)
+    suspicious = is_suspicious_login(
+        db, user=user, ip_address=ip_address, user_agent=user_agent, success=True
+    )
     record_login_attempt(
         db,
         user=user,
@@ -288,7 +346,9 @@ def bootstrap_status(
     assert_valid_bootstrap_token(db, bootstrap_token)
     admin = db.query(User).filter(User.username == settings.BOOTSTRAP_ADMIN_USERNAME).first()
     if not admin:
-        return AdminBootstrapStatusOut(admin_username=settings.BOOTSTRAP_ADMIN_USERNAME, needs_password_setup=True)
+        return AdminBootstrapStatusOut(
+            admin_username=settings.BOOTSTRAP_ADMIN_USERNAME, needs_password_setup=True
+        )
     return AdminBootstrapStatusOut(
         admin_username=admin.username,
         needs_password_setup=bool(admin.needs_password_setup),
@@ -328,7 +388,9 @@ def setup_admin_password(
         metadata={
             "ip": get_client_ip(request),
             "user_agent": (request.headers.get("user-agent") or "")[:512] or None,
-            "bootstrap_completed_at": bootstrap_state.setup_completed_at.isoformat() if bootstrap_state.setup_completed_at else None,
+            "bootstrap_completed_at": bootstrap_state.setup_completed_at.isoformat()
+            if bootstrap_state.setup_completed_at
+            else None,
         },
     )
 
@@ -348,7 +410,9 @@ def setup_admin_password(
 def refresh_token(request: Request, response: Response, db: Session = Depends(get_db)) -> TokenOut:
     token_value = request.cookies.get(settings.AUTH_REFRESH_COOKIE_NAME)
     if not token_value:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing refresh token")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing refresh token"
+        )
 
     try:
         payload = decode_token(token_value)
@@ -361,7 +425,9 @@ def refresh_token(request: Request, response: Response, db: Session = Depends(ge
             raise ValueError("invalid claims")
     except Exception:
         _clear_auth_cookies(response)
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token"
+        )
 
     if is_token_revoked(db, jti=jti):
         _clear_auth_cookies(response)
@@ -370,7 +436,9 @@ def refresh_token(request: Request, response: Response, db: Session = Depends(ge
     user = db.query(User).filter(User.username == username, User.is_active.is_(True)).first()
     if not user:
         _clear_auth_cookies(response)
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User inactive or not found")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="User inactive or not found"
+        )
 
     try:
         session_id = uuid.UUID(str(sid))
@@ -378,7 +446,11 @@ def refresh_token(request: Request, response: Response, db: Session = Depends(ge
         _clear_auth_cookies(response)
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid session")
 
-    session = db.query(AuthSession).filter(AuthSession.id == session_id, AuthSession.user_id == user.id).first()
+    session = (
+        db.query(AuthSession)
+        .filter(AuthSession.id == session_id, AuthSession.user_id == user.id)
+        .first()
+    )
     if not session or session.revoked_at is not None:
         _clear_auth_cookies(response)
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Session invalid")
@@ -394,7 +466,9 @@ def refresh_token(request: Request, response: Response, db: Session = Depends(ge
         revoke_session(db, session=session, reason="refresh_reuse_detected")
         db.commit()
         _clear_auth_cookies(response)
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Refresh token invalid")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Refresh token invalid"
+        )
 
     access_token, refresh_token_value, _, _ = rotate_refresh_token(db, user=user, session=session)
     db.commit()
@@ -410,13 +484,15 @@ def logout(request: Request, response: Response, db: Session = Depends(get_db)) 
         request.cookies.get(settings.AUTH_COOKIE_NAME),
     ]
     session_ids: set[uuid.UUID] = set()
+    revoked_jtis: set[str] = set()
     for token_value in [t for t in token_values if t]:
         try:
             payload = decode_token(token_value)
             jti = payload.get("jti")
             sid = payload.get("sid")
-            if jti:
+            if jti and jti not in revoked_jtis:
                 revoke_token(db, jti=jti, expires_at=_safe_exp_from_payload(payload))
+                revoked_jtis.add(jti)
             if sid:
                 session_ids.add(uuid.UUID(str(sid)))
         except Exception:
@@ -433,7 +509,9 @@ def logout(request: Request, response: Response, db: Session = Depends(get_db)) 
 
 
 @router.post("/register-request", response_model=RegisterRequestOut)
-def register_request(payload: RegisterRequestIn, db: Session = Depends(get_db)) -> RegisterRequestOut:
+def register_request(
+    payload: RegisterRequestIn, db: Session = Depends(get_db)
+) -> RegisterRequestOut:
     username = _validate_username(payload.username)
     password = _validate_password_strength(payload.password)
 
@@ -444,7 +522,9 @@ def register_request(payload: RegisterRequestIn, db: Session = Depends(get_db)) 
     if existing_user:
         raise HTTPException(status_code=400, detail="Username already exists")
 
-    existing_request = db.query(RegistrationRequest).filter(RegistrationRequest.username == username).first()
+    existing_request = (
+        db.query(RegistrationRequest).filter(RegistrationRequest.username == username).first()
+    )
     if existing_request:
         if existing_request.status == RegistrationRequestStatus.pending:
             raise HTTPException(status_code=400, detail="Registration request already pending")
@@ -470,7 +550,11 @@ def register_request(payload: RegisterRequestIn, db: Session = Depends(get_db)) 
 def me(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> UserOut:
     active_sessions = (
         db.query(AuthSession)
-        .filter(AuthSession.user_id == current_user.id, AuthSession.revoked_at.is_(None), AuthSession.expires_at > _utcnow())
+        .filter(
+            AuthSession.user_id == current_user.id,
+            AuthSession.revoked_at.is_(None),
+            AuthSession.expires_at > _utcnow(),
+        )
         .count()
     )
     current_user.active_sessions = active_sessions
@@ -478,11 +562,18 @@ def me(current_user: User = Depends(get_current_user), db: Session = Depends(get
 
 
 @router.post("/users", response_model=UserOut)
-def create_user(payload: UserCreate, db: Session = Depends(get_db), _: User = Depends(require_role(UserRole.admin))) -> UserOut:
+def create_user(
+    payload: UserCreate,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_role(UserRole.admin)),
+) -> UserOut:
     username = _validate_username(payload.username)
     password = _validate_password_strength(payload.password)
 
-    if username.lower() == settings.BOOTSTRAP_ADMIN_USERNAME.lower() or payload.role == UserRole.admin:
+    if (
+        username.lower() == settings.BOOTSTRAP_ADMIN_USERNAME.lower()
+        or payload.role == UserRole.admin
+    ):
         raise HTTPException(status_code=400, detail="Admin account is managed separately")
     exists = db.query(User).filter(User.username == username).first()
     if exists:
@@ -501,14 +592,20 @@ def create_user(payload: UserCreate, db: Session = Depends(get_db), _: User = De
 
 
 @router.get("/users", response_model=list[UserOut])
-def list_users(db: Session = Depends(get_db), _: User = Depends(require_role(UserRole.admin))) -> list[UserOut]:
+def list_users(
+    db: Session = Depends(get_db), _: User = Depends(require_role(UserRole.admin))
+) -> list[UserOut]:
     users = db.query(User).order_by(User.created_at.desc()).all()
     user_ids = [u.id for u in users]
     counts: dict[uuid.UUID, int] = {}
     if user_ids:
         rows = (
             db.query(AuthSession.user_id)
-            .filter(AuthSession.user_id.in_(user_ids), AuthSession.revoked_at.is_(None), AuthSession.expires_at > _utcnow())
+            .filter(
+                AuthSession.user_id.in_(user_ids),
+                AuthSession.revoked_at.is_(None),
+                AuthSession.expires_at > _utcnow(),
+            )
             .all()
         )
         for row in rows:
@@ -543,7 +640,9 @@ def update_user(
         raise HTTPException(status_code=400, detail="Admin account is managed separately")
     if role is not None:
         if role == UserRole.admin:
-            raise HTTPException(status_code=400, detail="Only the bootstrap admin account can be admin")
+            raise HTTPException(
+                status_code=400, detail="Only the bootstrap admin account can be admin"
+            )
         user.role = role
     if is_active is not None:
         user.is_active = is_active
@@ -619,7 +718,9 @@ def reject_registration_request(
 
 
 @router.get("/sessions", response_model=list[SessionOut])
-def list_sessions(context: AuthContext = Depends(get_current_auth_context), db: Session = Depends(get_db)) -> list[SessionOut]:
+def list_sessions(
+    context: AuthContext = Depends(get_current_auth_context), db: Session = Depends(get_db)
+) -> list[SessionOut]:
     now = _utcnow()
     sessions = (
         db.query(AuthSession)
@@ -652,7 +753,11 @@ def revoke_single_session(
     context: AuthContext = Depends(get_current_auth_context),
     db: Session = Depends(get_db),
 ) -> dict[str, str]:
-    session = db.query(AuthSession).filter(AuthSession.id == session_id, AuthSession.user_id == context.user.id).first()
+    session = (
+        db.query(AuthSession)
+        .filter(AuthSession.id == session_id, AuthSession.user_id == context.user.id)
+        .first()
+    )
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
     revoke_session(db, session=session, reason="manual_revoke")
@@ -698,7 +803,9 @@ def mfa_status(current_user: User = Depends(get_current_user)) -> MfaStatusOut:
 @router.post("/mfa/provision", response_model=MfaProvisionOut)
 def mfa_provision(context: AuthContext = Depends(get_current_auth_context)) -> MfaProvisionOut:
     secret = create_totp_secret()
-    return MfaProvisionOut(secret=secret, otpauth_uri=totp_uri(username=context.user.username, secret=secret))
+    return MfaProvisionOut(
+        secret=secret, otpauth_uri=totp_uri(username=context.user.username, secret=secret)
+    )
 
 
 @router.post("/mfa/enable", response_model=MfaEnableOut)
@@ -716,7 +823,9 @@ def mfa_enable(
     context.user.mfa_enabled = True
     context.user.mfa_recovery_codes = hash_recovery_codes(codes)
     context.session.mfa_verified = True
-    access_token, refresh_token_value, _, _ = rotate_refresh_token(db, user=context.user, session=context.session)
+    access_token, refresh_token_value, _, _ = rotate_refresh_token(
+        db, user=context.user, session=context.session
+    )
     db.commit()
     _set_auth_cookies(response, access_token, refresh_token_value, context.session)
     return MfaEnableOut(recovery_codes=codes)
@@ -738,7 +847,9 @@ def mfa_disable(
     context.user.mfa_enabled = False
     context.user.mfa_recovery_codes = None
     context.session.mfa_verified = False
-    access_token, refresh_token_value, _, _ = rotate_refresh_token(db, user=context.user, session=context.session)
+    access_token, refresh_token_value, _, _ = rotate_refresh_token(
+        db, user=context.user, session=context.session
+    )
     db.commit()
     _set_auth_cookies(response, access_token, refresh_token_value, context.session)
     return MfaStatusOut(enabled=False)
@@ -755,19 +866,27 @@ def change_password(
         raise HTTPException(status_code=400, detail="Current password is incorrect")
     new_password = _validate_password_strength(payload.new_password)
     if verify_password(new_password, context.user.hashed_password):
-        raise HTTPException(status_code=400, detail="New password must differ from current password")
+        raise HTTPException(
+            status_code=400, detail="New password must differ from current password"
+        )
 
     context.user.hashed_password = hash_password(new_password)
     context.user.password_changed_at = _utcnow()
     context.user.failed_login_attempts = 0
     context.user.locked_until = None
 
-    sessions = db.query(AuthSession).filter(AuthSession.user_id == context.user.id, AuthSession.revoked_at.is_(None)).all()
+    sessions = (
+        db.query(AuthSession)
+        .filter(AuthSession.user_id == context.user.id, AuthSession.revoked_at.is_(None))
+        .all()
+    )
     for session in sessions:
         if session.id != context.session.id:
             revoke_session(db, session=session, reason="password_changed")
 
-    access_token, refresh_token_value, _, _ = rotate_refresh_token(db, user=context.user, session=context.session)
+    access_token, refresh_token_value, _, _ = rotate_refresh_token(
+        db, user=context.user, session=context.session
+    )
     db.commit()
     _set_auth_cookies(response, access_token, refresh_token_value, context.session)
     return TokenOut(access_token=access_token)
@@ -812,7 +931,9 @@ def request_password_reset(
 
 
 @router.post("/password-reset/confirm", response_model=dict)
-def confirm_password_reset(payload: PasswordResetConfirmIn, db: Session = Depends(get_db)) -> dict[str, str]:
+def confirm_password_reset(
+    payload: PasswordResetConfirmIn, db: Session = Depends(get_db)
+) -> dict[str, str]:
     new_password = _validate_password_strength(payload.new_password)
     token_hash_value = hash_token(payload.token)
     now = _utcnow()
@@ -838,7 +959,11 @@ def confirm_password_reset(payload: PasswordResetConfirmIn, db: Session = Depend
     user.locked_until = None
     token.used_at = now
 
-    sessions = db.query(AuthSession).filter(AuthSession.user_id == user.id, AuthSession.revoked_at.is_(None)).all()
+    sessions = (
+        db.query(AuthSession)
+        .filter(AuthSession.user_id == user.id, AuthSession.revoked_at.is_(None))
+        .all()
+    )
     for session in sessions:
         revoke_session(db, session=session, reason="password_reset")
 

@@ -47,9 +47,9 @@ def _clean(value: Any) -> str | None:
 
 def extract_deal_intake(db: Session, subject: str | None, raw_body: str) -> dict[str, str | None]:
     user_prompt = f"""Analyse the following email and extract sponsorship deal details.
-Return JSON with keys exactly: {', '.join(DEAL_FIELDS)}.
+Return JSON with keys exactly: {", ".join(DEAL_FIELDS)}.
 
-Email Subject: {subject or ''}
+Email Subject: {subject or ""}
 Email Body:
 {raw_body}
 """.strip()
@@ -69,7 +69,16 @@ Email Body:
             job_type="deal_intake",
             model=settings.OLLAMA_TEXT_MODEL,
             input_summary=(subject or "")[:120] + " | " + raw_body[:400],
-            output_summary=" | ".join(filter(None, [cleaned.get("brand_name"), cleaned.get("budget") or "", cleaned.get("deadlines") or ""]))[:500],
+            output_summary=" | ".join(
+                filter(
+                    None,
+                    [
+                        cleaned.get("brand_name"),
+                        cleaned.get("budget") or "",
+                        cleaned.get("deadlines") or "",
+                    ],
+                )
+            )[:500],
             meta_json=meta,
         )
     )

@@ -4,10 +4,10 @@ import enum
 import uuid
 from datetime import date, datetime
 
-from sqlalchemy import String, Text, Enum, Date, DateTime, Numeric, ForeignKey
+from sqlalchemy import Date, DateTime, Enum, ForeignKey, Numeric, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.models.base import Base, UUIDMixin, TimestampMixin, utcnow
+from app.models.base import Base, TimestampMixin, UUIDMixin, utcnow
 
 
 class ProductCondition(str, enum.Enum):
@@ -43,7 +43,9 @@ class Product(Base, UUIDMixin, TimestampMixin):
     model: Mapped[str | None] = mapped_column(String(128), nullable=True)
     category: Mapped[str | None] = mapped_column(String(128), nullable=True)
 
-    condition: Mapped[ProductCondition] = mapped_column(Enum(ProductCondition), default=ProductCondition.good)
+    condition: Mapped[ProductCondition] = mapped_column(
+        Enum(ProductCondition), default=ProductCondition.good
+    )
 
     purchase_price: Mapped[float | None] = mapped_column(Numeric(12, 2), nullable=True)
     purchase_date: Mapped[date | None] = mapped_column(Date, nullable=True)
@@ -59,14 +61,20 @@ class Product(Base, UUIDMixin, TimestampMixin):
     status: Mapped[ProductStatus] = mapped_column(Enum(ProductStatus), default=ProductStatus.active)
     status_changed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
-    transactions: Mapped[list["ProductTransaction"]] = relationship(back_populates="product", cascade="all, delete-orphan")
-    value_history: Mapped[list["ProductValueHistory"]] = relationship(back_populates="product", cascade="all, delete-orphan")
+    transactions: Mapped[list["ProductTransaction"]] = relationship(
+        back_populates="product", cascade="all, delete-orphan"
+    )
+    value_history: Mapped[list["ProductValueHistory"]] = relationship(
+        back_populates="product", cascade="all, delete-orphan"
+    )
 
 
 class ProductTransaction(Base, UUIDMixin, TimestampMixin):
     __tablename__ = "product_transactions"
 
-    product_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("products.id", ondelete="CASCADE"), index=True)
+    product_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("products.id", ondelete="CASCADE"), index=True
+    )
     type: Mapped[TransactionType] = mapped_column(Enum(TransactionType))
     date: Mapped[date] = mapped_column(Date)
     amount: Mapped[float | None] = mapped_column(Numeric(12, 2), nullable=True)
@@ -86,7 +94,9 @@ class ValueSource(str, enum.Enum):
 class ProductValueHistory(Base, UUIDMixin, TimestampMixin):
     __tablename__ = "product_value_history"
 
-    product_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("products.id", ondelete="CASCADE"), index=True)
+    product_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("products.id", ondelete="CASCADE"), index=True
+    )
     date: Mapped[date] = mapped_column(Date)
     value: Mapped[float] = mapped_column(Numeric(12, 2))
     currency: Mapped[str] = mapped_column(String(8), default="EUR")

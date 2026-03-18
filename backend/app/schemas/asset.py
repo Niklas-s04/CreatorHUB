@@ -6,7 +6,7 @@ from typing import Optional
 
 from pydantic import BaseModel
 
-from app.models.asset import AssetOwnerType, AssetKind, AssetSource, AssetReviewState
+from app.models.asset import AssetKind, AssetOwnerType, AssetReviewState, AssetSource
 
 
 class AssetBase(BaseModel):

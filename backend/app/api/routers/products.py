@@ -3,28 +3,45 @@ from __future__ import annotations
 import uuid
 from datetime import date, datetime, timezone
 from enum import Enum
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import FileResponse
+from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session, joinedload
-from sqlalchemy import or_, and_
 
-from app.api.deps import get_db, get_current_user, require_role
-from app.models.product import Product, ProductTransaction, ProductValueHistory, ProductStatus, TransactionType
+from app.api.deps import get_current_user, get_db, require_role
+from app.models.product import (
+    Product,
+    ProductStatus,
+    ProductTransaction,
+    ProductValueHistory,
+    TransactionType,
+)
 from app.models.user import User, UserRole
 from app.schemas.product import (
-    ProductCreate, ProductUpdate, ProductOut,
-    ProductTransactionCreate, ProductTransactionOut,
-    ProductValueHistoryCreate, ProductValueHistoryOut,
-    ProductStatusChange,
     InventoryCsvImportRequest,
     InventoryCsvImportResult,
+    ProductCreate,
+    ProductOut,
+    ProductStatusChange,
+    ProductTransactionCreate,
+    ProductTransactionOut,
+    ProductUpdate,
+    ProductValueHistoryCreate,
+    ProductValueHistoryOut,
 )
-from app.services.exports import export_products_csv, export_transactions_csv, export_value_history_csv
-from app.services.auto_archive import apply_auto_archive_rules
 from app.services.audit import record_audit_log
+from app.services.auto_archive import apply_auto_archive_rules
+from app.services.exports import (
+    export_products_csv,
+    export_transactions_csv,
+    export_value_history_csv,
+)
 from app.services.inventory_import import CsvImportConfig, import_products_from_csv
 
 router = APIRouter()
+
+
 def _normalize_years(years: list[int] | None) -> list[int]:
     if not years:
         return []
@@ -77,7 +94,6 @@ def _product_in_years(product: Product, years_set: set[int]) -> bool:
     return False
 
 
-
 class CSVExportKind(str, Enum):
     products = "products"
     transactions = "transactions"
@@ -101,7 +117,14 @@ def list_products(
     qry = db.query(Product)
     if q:
         like = f"%{q}%"
-        qry = qry.filter(or_(Product.title.ilike(like), Product.brand.ilike(like), Product.model.ilike(like), Product.category.ilike(like)))
+        qry = qry.filter(
+            or_(
+                Product.title.ilike(like),
+                Product.brand.ilike(like),
+                Product.model.ilike(like),
+                Product.category.ilike(like),
+            )
+        )
     if status:
         qry = qry.filter(Product.status == status)
     if category:
@@ -119,21 +142,32 @@ def list_products(
 
 
 @router.post("", response_model=ProductOut)
-def create_product(payload: ProductCreate, db: Session = Depends(get_db), _: User = Depends(require_role(UserRole.admin, UserRole.editor))) -> ProductOut:
+def create_product(
+    payload: ProductCreate,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_role(UserRole.admin, UserRole.editor)),
+) -> ProductOut:
     p = Product(**payload.model_dump())
     db.add(p)
     db.commit()
     db.refresh(p)
     # Optionalen Startwert in die Wert-Historie übernehmen.
     if p.current_value is not None:
-        vh = ProductValueHistory(product_id=p.id, date=p.created_at.date(), value=float(p.current_value), currency=p.currency)
+        vh = ProductValueHistory(
+            product_id=p.id,
+            date=p.created_at.date(),
+            value=float(p.current_value),
+            currency=p.currency,
+        )
         db.add(vh)
         db.commit()
     return p
 
 
 @router.get("/{product_id}", response_model=ProductOut)
-def get_product(product_id: uuid.UUID, db: Session = Depends(get_db), _: User = Depends(get_current_user)) -> ProductOut:
+def get_product(
+    product_id: uuid.UUID, db: Session = Depends(get_db), _: User = Depends(get_current_user)
+) -> ProductOut:
     p = db.query(Product).filter(Product.id == product_id).first()
     if not p:
         raise HTTPException(status_code=404, detail="Product not found")
@@ -174,7 +208,11 @@ def update_product(
 
 
 @router.delete("/{product_id}")
-def delete_product(product_id: uuid.UUID, db: Session = Depends(get_db), _: User = Depends(require_role(UserRole.admin))) -> dict:
+def delete_product(
+    product_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_role(UserRole.admin)),
+) -> dict:
     p = db.query(Product).filter(Product.id == product_id).first()
     if not p:
         raise HTTPException(status_code=404, detail="Product not found")
@@ -184,12 +222,24 @@ def delete_product(product_id: uuid.UUID, db: Session = Depends(get_db), _: User
 
 
 @router.get("/{product_id}/transactions", response_model=list[ProductTransactionOut])
-def list_transactions(product_id: uuid.UUID, db: Session = Depends(get_db), _: User = Depends(get_current_user)) -> list[ProductTransactionOut]:
-    return db.query(ProductTransaction).filter(ProductTransaction.product_id == product_id).order_by(ProductTransaction.date.desc()).all()
+def list_transactions(
+    product_id: uuid.UUID, db: Session = Depends(get_db), _: User = Depends(get_current_user)
+) -> list[ProductTransactionOut]:
+    return (
+        db.query(ProductTransaction)
+        .filter(ProductTransaction.product_id == product_id)
+        .order_by(ProductTransaction.date.desc())
+        .all()
+    )
 
 
 @router.post("/{product_id}/transactions", response_model=ProductTransactionOut)
-def create_transaction(product_id: uuid.UUID, payload: ProductTransactionCreate, db: Session = Depends(get_db), _: User = Depends(require_role(UserRole.admin, UserRole.editor))) -> ProductTransactionOut:
+def create_transaction(
+    product_id: uuid.UUID,
+    payload: ProductTransactionCreate,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_role(UserRole.admin, UserRole.editor)),
+) -> ProductTransactionOut:
     p = db.query(Product).filter(Product.id == product_id).first()
     if not p:
         raise HTTPException(status_code=404, detail="Product not found")
@@ -201,12 +251,24 @@ def create_transaction(product_id: uuid.UUID, payload: ProductTransactionCreate,
 
 
 @router.get("/{product_id}/value_history", response_model=list[ProductValueHistoryOut])
-def list_value_history(product_id: uuid.UUID, db: Session = Depends(get_db), _: User = Depends(get_current_user)) -> list[ProductValueHistoryOut]:
-    return db.query(ProductValueHistory).filter(ProductValueHistory.product_id == product_id).order_by(ProductValueHistory.date.desc()).all()
+def list_value_history(
+    product_id: uuid.UUID, db: Session = Depends(get_db), _: User = Depends(get_current_user)
+) -> list[ProductValueHistoryOut]:
+    return (
+        db.query(ProductValueHistory)
+        .filter(ProductValueHistory.product_id == product_id)
+        .order_by(ProductValueHistory.date.desc())
+        .all()
+    )
 
 
 @router.post("/{product_id}/value_history", response_model=ProductValueHistoryOut)
-def create_value_history(product_id: uuid.UUID, payload: ProductValueHistoryCreate, db: Session = Depends(get_db), _: User = Depends(require_role(UserRole.admin, UserRole.editor))) -> ProductValueHistoryOut:
+def create_value_history(
+    product_id: uuid.UUID,
+    payload: ProductValueHistoryCreate,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_role(UserRole.admin, UserRole.editor)),
+) -> ProductValueHistoryOut:
     p = db.query(Product).filter(Product.id == product_id).first()
     if not p:
         raise HTTPException(status_code=404, detail="Product not found")
@@ -302,7 +364,9 @@ def import_products_csv(
 
 
 @router.post("/auto-archive/run")
-def trigger_auto_archive(db: Session = Depends(get_db), _: User = Depends(require_role(UserRole.admin))) -> dict:
+def trigger_auto_archive(
+    db: Session = Depends(get_db), _: User = Depends(require_role(UserRole.admin))
+) -> dict:
     summary = apply_auto_archive_rules(db)
     return summary
 
@@ -310,7 +374,9 @@ def trigger_auto_archive(db: Session = Depends(get_db), _: User = Depends(requir
 @router.get("/export/csv")
 def export_csv(
     dataset: CSVExportKind = Query(default=CSVExportKind.products),
-    years: list[int] | None = Query(default=None, description="Optional years filter (?years=2023&years=2024)"),
+    years: list[int] | None = Query(
+        default=None, description="Optional years filter (?years=2023&years=2024)"
+    ),
     db: Session = Depends(get_db),
     _: User = Depends(require_role(UserRole.admin, UserRole.editor)),
 ) -> FileResponse:
