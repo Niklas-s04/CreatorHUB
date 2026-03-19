@@ -89,7 +89,11 @@ def update_item(
     after: dict[str, str | None] = {}
 
     with transaction_boundary(db):
-        if target_status != previous_status and target_status == ContentStatus.published and not target_publish_date:
+        if (
+            target_status != previous_status
+            and target_status == ContentStatus.published
+            and not target_publish_date
+        ):
             updates["publish_date"] = date.today()
 
         for key, value in updates.items():
@@ -123,10 +127,14 @@ def update_item(
                     "from": previous_status.value,
                     "to": item.status.value,
                     "planned_date": (
-                        item.planned_date.isoformat() if getattr(item, "planned_date", None) else None
+                        item.planned_date.isoformat()
+                        if getattr(item, "planned_date", None)
+                        else None
                     ),
                     "publish_date": (
-                        item.publish_date.isoformat() if getattr(item, "publish_date", None) else None
+                        item.publish_date.isoformat()
+                        if getattr(item, "publish_date", None)
+                        else None
                     ),
                 },
                 description=f"Content status changed: {previous_status.value} -> {item.status.value}",

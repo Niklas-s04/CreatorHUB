@@ -202,7 +202,10 @@ def create_app() -> FastAPI:
         openapi_tags=[
             {"name": "health", "description": "Liveness, readiness, and runtime health state"},
             {"name": "auth", "description": "Authentication, sessions, MFA, and registration"},
-            {"name": "products", "description": "Inventory products, lifecycle, values, transactions"},
+            {
+                "name": "products",
+                "description": "Inventory products, lifecycle, values, transactions",
+            },
             {"name": "assets", "description": "Asset upload, review workflow, and library access"},
             {"name": "content", "description": "Content planning items and production tasks"},
             {"name": "email", "description": "Email thread assistant and draft workflow"},
@@ -264,25 +267,39 @@ def create_app() -> FastAPI:
     app.include_router(deals.router, prefix=f"{API_BASE_PREFIX}/deals", tags=["deals"])
     app.include_router(audit.router, prefix=f"{API_BASE_PREFIX}/audit", tags=["audit"])
 
-    app.include_router(auth.router, prefix=f"{LEGACY_API_PREFIX}/auth", tags=["auth"], deprecated=True)
+    app.include_router(
+        auth.router, prefix=f"{LEGACY_API_PREFIX}/auth", tags=["auth"], deprecated=True
+    )
     app.include_router(
         products.router,
         prefix=f"{LEGACY_API_PREFIX}/products",
         tags=["products"],
         deprecated=True,
     )
-    app.include_router(assets.router, prefix=f"{LEGACY_API_PREFIX}/assets", tags=["assets"], deprecated=True)
-    app.include_router(content.router, prefix=f"{LEGACY_API_PREFIX}/content", tags=["content"], deprecated=True)
-    app.include_router(email.router, prefix=f"{LEGACY_API_PREFIX}/email", tags=["email"], deprecated=True)
-    app.include_router(images.router, prefix=f"{LEGACY_API_PREFIX}/images", tags=["images"], deprecated=True)
+    app.include_router(
+        assets.router, prefix=f"{LEGACY_API_PREFIX}/assets", tags=["assets"], deprecated=True
+    )
+    app.include_router(
+        content.router, prefix=f"{LEGACY_API_PREFIX}/content", tags=["content"], deprecated=True
+    )
+    app.include_router(
+        email.router, prefix=f"{LEGACY_API_PREFIX}/email", tags=["email"], deprecated=True
+    )
+    app.include_router(
+        images.router, prefix=f"{LEGACY_API_PREFIX}/images", tags=["images"], deprecated=True
+    )
     app.include_router(
         knowledge.router,
         prefix=f"{LEGACY_API_PREFIX}/knowledge",
         tags=["knowledge"],
         deprecated=True,
     )
-    app.include_router(deals.router, prefix=f"{LEGACY_API_PREFIX}/deals", tags=["deals"], deprecated=True)
-    app.include_router(audit.router, prefix=f"{LEGACY_API_PREFIX}/audit", tags=["audit"], deprecated=True)
+    app.include_router(
+        deals.router, prefix=f"{LEGACY_API_PREFIX}/deals", tags=["deals"], deprecated=True
+    )
+    app.include_router(
+        audit.router, prefix=f"{LEGACY_API_PREFIX}/audit", tags=["audit"], deprecated=True
+    )
 
     return app
 

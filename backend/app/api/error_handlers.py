@@ -31,14 +31,18 @@ def install_error_handlers(app: FastAPI) -> None:
         detail = exc.detail
         payload = ErrorResponse(
             code=_error_code_for_status(status_code),
-            message=str(detail) if not isinstance(detail, dict) else str(detail.get("message", detail)),
+            message=str(detail)
+            if not isinstance(detail, dict)
+            else str(detail.get("message", detail)),
             status=status_code,
             details=detail if isinstance(detail, (dict, list)) else None,
         )
         return JSONResponse(status_code=status_code, content=payload.model_dump())
 
     @app.exception_handler(RequestValidationError)
-    async def _validation_exception_handler(_: Request, exc: RequestValidationError) -> JSONResponse:
+    async def _validation_exception_handler(
+        _: Request, exc: RequestValidationError
+    ) -> JSONResponse:
         payload = ErrorResponse(
             code=_error_code_for_status(422),
             message="Request validation failed",

@@ -163,7 +163,9 @@ def test_content_service_rejects_invalid_status_transition(service_db: Session) 
         )
 
 
-def test_deal_service_upsert_and_update(monkeypatch: pytest.MonkeyPatch, service_db: Session) -> None:
+def test_deal_service_upsert_and_update(
+    monkeypatch: pytest.MonkeyPatch, service_db: Session
+) -> None:
     admin = _create_admin(service_db, username="admin4")
     thread = _create_email_thread(service_db)
 
