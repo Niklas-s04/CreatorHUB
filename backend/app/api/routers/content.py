@@ -3,11 +3,11 @@ from __future__ import annotations
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException
-from app.models.content import ContentItem, ContentTask
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, get_db, require_role
 from app.api.querying import apply_sorting, pagination_params, to_page
+from app.models.content import ContentItem, ContentTask
 from app.models.user import User, UserRole
 from app.schemas.common import Page, SortOrder
 from app.schemas.content import (

@@ -2,17 +2,17 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from contextlib import suppress
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from urllib.parse import urlparse
 
 import uvicorn
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from redis import Redis
 from sqlalchemy import text
-from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
+from app.api.error_handlers import install_error_handlers
 from app.api.routers import (
     assets,
     audit,
@@ -26,17 +26,16 @@ from app.api.routers import (
     products,
 )
 from app.core.config import settings
-from app.api.error_handlers import install_error_handlers
 from app.core.web_security import (
     CsrfProtectionMiddleware,
     RateLimitMiddleware,
     RequestSizeLimitMiddleware,
     SecurityHeadersMiddleware,
 )
-from app.seed import bootstrap_if_needed
 from app.db.session import engine
-from app.services.auto_archive import auto_archive_daemon
 from app.schemas.common import ErrorResponse
+from app.seed import bootstrap_if_needed
+from app.services.auto_archive import auto_archive_daemon
 
 logger = logging.getLogger(__name__)
 

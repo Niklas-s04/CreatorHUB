@@ -16,9 +16,9 @@ from app.models.product import (
     ProductStatus,
     ProductTransaction,
     ProductValueHistory,
-    TransactionType,
 )
 from app.models.user import User, UserRole
+from app.schemas.common import Page, SortOrder
 from app.schemas.product import (
     InventoryCsvImportRequest,
     InventoryCsvImportResult,
@@ -31,7 +31,6 @@ from app.schemas.product import (
     ProductValueHistoryCreate,
     ProductValueHistoryOut,
 )
-from app.schemas.common import Page, SortOrder
 from app.services.audit import record_audit_log
 from app.services.auto_archive import apply_auto_archive_rules
 from app.services.domain_events import emit_domain_event

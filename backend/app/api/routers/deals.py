@@ -7,8 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, get_db, require_role
 from app.api.querying import apply_sorting, pagination_params, to_page
-from app.models.deal import DealDraft
-from app.models.deal import DealDraftStatus
+from app.models.deal import DealDraft, DealDraftStatus
 from app.models.user import User, UserRole
 from app.schemas.common import Page, SortOrder
 from app.schemas.deal import DealDraftIntakeRequest, DealDraftOut, DealDraftUpdate
