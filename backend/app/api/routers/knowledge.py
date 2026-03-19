@@ -6,24 +6,47 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, get_db, require_role
+from app.api.querying import apply_sorting, pagination_params, to_page
 from app.models.knowledge import KnowledgeDoc, KnowledgeDocType
 from app.models.user import User, UserRole
+from app.schemas.common import Page, SortOrder
 from app.schemas.knowledge import KnowledgeDocCreate, KnowledgeDocOut, KnowledgeDocUpdate
-from app.services.audit import record_audit_log
+from app.services import knowledge_service
+from app.services.errors import BusinessRuleViolation, NotFoundError
 
 router = APIRouter()
 
 
-@router.get("", response_model=list[KnowledgeDocOut])
+@router.get("", response_model=Page[KnowledgeDocOut])
 def list_docs(
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
     type: KnowledgeDocType | None = None,
-) -> list[KnowledgeDocOut]:
-    q = db.query(KnowledgeDoc)
+    paging: tuple[int, int, str, SortOrder] = Depends(pagination_params),
+) -> Page[KnowledgeDocOut]:
+    limit, offset, sort_by, sort_order = paging
+    qry = db.query(KnowledgeDoc)
     if type:
-        q = q.filter(KnowledgeDoc.type == type)
-    return q.order_by(KnowledgeDoc.updated_at.desc()).all()
+        qry = qry.filter(KnowledgeDoc.type == type)
+
+    total = qry.order_by(None).count()
+    qry, selected_sort, selected_order = apply_sorting(
+        qry,
+        model=KnowledgeDoc,
+        sort_by=sort_by,
+        sort_order=sort_order,
+        allowed_fields={"created_at", "updated_at", "title", "type"},
+        fallback="updated_at",
+    )
+    items = qry.offset(offset).limit(limit).all()
+    return to_page(
+        items=items,
+        total=total,
+        limit=limit,
+        offset=offset,
+        sort_by=selected_sort,
+        sort_order=selected_order,
+    )
 
 
 @router.post("", response_model=KnowledgeDocOut)
@@ -32,21 +55,10 @@ def create_doc(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_role(UserRole.admin)),
 ) -> KnowledgeDocOut:
-    doc = KnowledgeDoc(**payload.model_dump())
-    db.add(doc)
-    db.flush()
-    record_audit_log(
-        db,
-        actor=current_user,
-        action="settings.knowledge.create",
-        entity_type="knowledge_doc",
-        entity_id=str(doc.id),
-        description=f"Created knowledge doc '{doc.title}'",
-        after={"title": doc.title, "type": doc.type.value},
-    )
-    db.commit()
-    db.refresh(doc)
-    return doc
+    try:
+        return knowledge_service.create_doc(db, payload=payload, actor=current_user)
+    except BusinessRuleViolation as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.patch("/{doc_id}", response_model=KnowledgeDocOut)
@@ -56,33 +68,12 @@ def update_doc(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_role(UserRole.admin)),
 ) -> KnowledgeDocOut:
-    doc = db.query(KnowledgeDoc).filter(KnowledgeDoc.id == doc_id).first()
-    if not doc:
-        raise HTTPException(status_code=404, detail="Doc not found")
-    updates = payload.model_dump(exclude_unset=True)
-    before: dict[str, str] = {}
-    after: dict[str, str] = {}
-    for k, v in updates.items():
-        current = getattr(doc, k)
-        if v == current:
-            continue
-        before[k] = getattr(current, "value", current)
-        setattr(doc, k, v)
-        after[k] = getattr(v, "value", v)
-    if before:
-        record_audit_log(
-            db,
-            actor=current_user,
-            action="settings.knowledge.update",
-            entity_type="knowledge_doc",
-            entity_id=str(doc.id),
-            description=f"Updated knowledge doc '{doc.title}'",
-            before=before,
-            after=after,
-        )
-    db.commit()
-    db.refresh(doc)
-    return doc
+    try:
+        return knowledge_service.update_doc(db, doc_id=doc_id, payload=payload, actor=current_user)
+    except NotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except BusinessRuleViolation as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.delete("/{doc_id}")
@@ -91,19 +82,8 @@ def delete_doc(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_role(UserRole.admin)),
 ) -> dict:
-    doc = db.query(KnowledgeDoc).filter(KnowledgeDoc.id == doc_id).first()
-    if not doc:
-        raise HTTPException(status_code=404, detail="Doc not found")
-    snapshot = {"title": doc.title, "type": doc.type.value}
-    record_audit_log(
-        db,
-        actor=current_user,
-        action="settings.knowledge.delete",
-        entity_type="knowledge_doc",
-        entity_id=str(doc_id),
-        description=f"Deleted knowledge doc '{snapshot['title']}'",
-        before=snapshot,
-    )
-    db.delete(doc)
-    db.commit()
+    try:
+        knowledge_service.delete_doc(db, doc_id=doc_id, actor=current_user)
+    except NotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
     return {"deleted": True}

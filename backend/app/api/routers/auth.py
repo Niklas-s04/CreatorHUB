@@ -77,6 +77,9 @@ from app.services.bootstrap import (
     assert_valid_bootstrap_token,
     finalize_bootstrap,
 )
+from app.services.domain_events import emit_domain_event
+from app.services.domain_rules import validate_registration_status_change
+from app.services.errors import BusinessRuleViolation
 
 router = APIRouter()
 USERNAME_RE = re.compile(r"^[A-Za-z0-9_.-]{3,64}$")
@@ -528,9 +531,30 @@ def register_request(
     if existing_request:
         if existing_request.status == RegistrationRequestStatus.pending:
             raise HTTPException(status_code=400, detail="Registration request already pending")
+        try:
+            validate_registration_status_change(
+                current_status=existing_request.status,
+                target_status=RegistrationRequestStatus.pending,
+            )
+        except BusinessRuleViolation as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
         existing_request.hashed_password = hash_password(password)
+        before_status = existing_request.status
         existing_request.status = RegistrationRequestStatus.pending
         existing_request.reviewed_by_user_id = None
+        emit_domain_event(
+            db,
+            actor=None,
+            event_name="registration.request.reopened",
+            entity_type="registration_request",
+            entity_id=str(existing_request.id),
+            payload={
+                "from": before_status.value,
+                "to": existing_request.status.value,
+                "username": existing_request.username,
+            },
+            description="Registration request reopened by a new submission",
+        )
         db.commit()
         db.refresh(existing_request)
         return existing_request
@@ -672,13 +696,41 @@ def approve_registration_request(
     req = db.query(RegistrationRequest).filter(RegistrationRequest.id == request_id).first()
     if not req:
         raise HTTPException(status_code=404, detail="Registration request not found")
-    if req.status != RegistrationRequestStatus.pending:
-        raise HTTPException(status_code=409, detail="Registration request already processed")
+    try:
+        validate_registration_status_change(
+            current_status=req.status,
+            target_status=RegistrationRequestStatus.approved,
+        )
+    except BusinessRuleViolation as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
     exists = db.query(User).filter(User.username == req.username).first()
     if exists:
+        try:
+            validate_registration_status_change(
+                current_status=req.status,
+                target_status=RegistrationRequestStatus.rejected,
+            )
+        except BusinessRuleViolation as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+        before_status = req.status
         req.status = RegistrationRequestStatus.rejected
         req.reviewed_by_user_id = admin.id
+        emit_domain_event(
+            db,
+            actor=admin,
+            event_name="registration.request.rejected",
+            entity_type="registration_request",
+            entity_id=str(req.id),
+            payload={
+                "from": before_status.value,
+                "to": req.status.value,
+                "reason": "username_exists",
+                "username": req.username,
+            },
+            description="Registration request auto-rejected because username already exists",
+        )
         db.commit()
         db.refresh(req)
         raise HTTPException(status_code=409, detail="Username already exists")
@@ -691,8 +743,23 @@ def approve_registration_request(
         needs_password_setup=False,
     )
     db.add(user)
+    before_status = req.status
     req.status = RegistrationRequestStatus.approved
     req.reviewed_by_user_id = admin.id
+    emit_domain_event(
+        db,
+        actor=admin,
+        event_name="registration.request.approved",
+        entity_type="registration_request",
+        entity_id=str(req.id),
+        payload={
+            "from": before_status.value,
+            "to": req.status.value,
+            "username": req.username,
+            "provisioned_role": UserRole.editor.value,
+        },
+        description="Registration request approved and user provisioned",
+    )
     db.commit()
     db.refresh(req)
     return req
@@ -707,11 +774,30 @@ def reject_registration_request(
     req = db.query(RegistrationRequest).filter(RegistrationRequest.id == request_id).first()
     if not req:
         raise HTTPException(status_code=404, detail="Registration request not found")
-    if req.status != RegistrationRequestStatus.pending:
-        raise HTTPException(status_code=409, detail="Registration request already processed")
+    try:
+        validate_registration_status_change(
+            current_status=req.status,
+            target_status=RegistrationRequestStatus.rejected,
+        )
+    except BusinessRuleViolation as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
+    before_status = req.status
     req.status = RegistrationRequestStatus.rejected
     req.reviewed_by_user_id = admin.id
+    emit_domain_event(
+        db,
+        actor=admin,
+        event_name="registration.request.rejected",
+        entity_type="registration_request",
+        entity_id=str(req.id),
+        payload={
+            "from": before_status.value,
+            "to": req.status.value,
+            "username": req.username,
+        },
+        description="Registration request rejected",
+    )
     db.commit()
     db.refresh(req)
     return req

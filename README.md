@@ -319,19 +319,39 @@ python -m app.workers.run_worker
 
 Main route groups:
 
-- `/api/auth`
-- `/api/products`
-- `/api/assets`
-- `/api/content`
-- `/api/email`
-- `/api/images`
-- `/api/knowledge`
-- `/api/deals`
-- `/api/audit`
+- `/api/v1/auth`
+- `/api/v1/products`
+- `/api/v1/assets`
+- `/api/v1/content`
+- `/api/v1/email`
+- `/api/v1/images`
+- `/api/v1/knowledge`
+- `/api/v1/deals`
+- `/api/v1/audit`
+- Legacy aliases `/api/*` are still available and marked as deprecated in OpenAPI.
 
 Health route:
 
 - `/health`
+- `/health/live`
+- `/health/ready`
+
+Status & domain rules:
+
+- `docs/domain-status-rules.md`
+
+API design rules:
+
+- `docs/api-design.md`
+
+Standard list/query contract:
+
+- Query: `limit`, `offset`, `sort_by`, `sort_order`
+- Response envelope: `{ meta: { limit, offset, total, sort_by, sort_order }, items: [...] }`
+
+Standard error response contract:
+
+- `{ code, message, status, details }`
 
 ## Troubleshooting
 

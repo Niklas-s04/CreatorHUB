@@ -3,11 +3,13 @@ from __future__ import annotations
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException
+from app.models.content import ContentItem, ContentTask
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, get_db, require_role
-from app.models.content import ContentItem, ContentTask
+from app.api.querying import apply_sorting, pagination_params, to_page
 from app.models.user import User, UserRole
+from app.schemas.common import Page, SortOrder
 from app.schemas.content import (
     ContentItemCreate,
     ContentItemOut,
@@ -16,35 +18,51 @@ from app.schemas.content import (
     ContentTaskOut,
     ContentTaskUpdate,
 )
-from app.services.content_task_defaults import ensure_default_tasks_for_item
+from app.services import content_service
+from app.services.errors import NotFoundError
 
 router = APIRouter()
 
 
-@router.get("/items", response_model=list[ContentItemOut])
+@router.get("/items", response_model=Page[ContentItemOut])
 def list_items(
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
     product_id: uuid.UUID | None = None,
-) -> list[ContentItemOut]:
-    q = db.query(ContentItem)
+    paging: tuple[int, int, str, SortOrder] = Depends(pagination_params),
+) -> Page[ContentItemOut]:
+    limit, offset, sort_by, sort_order = paging
+    qry = db.query(ContentItem)
     if product_id:
-        q = q.filter(ContentItem.product_id == product_id)
-    return q.order_by(ContentItem.updated_at.desc()).all()
+        qry = qry.filter(ContentItem.product_id == product_id)
+
+    total = qry.order_by(None).count()
+    qry, selected_sort, selected_order = apply_sorting(
+        qry,
+        model=ContentItem,
+        sort_by=sort_by,
+        sort_order=sort_order,
+        allowed_fields={"created_at", "updated_at", "status", "platform", "type"},
+        fallback="updated_at",
+    )
+    items = qry.offset(offset).limit(limit).all()
+    return to_page(
+        items=items,
+        total=total,
+        limit=limit,
+        offset=offset,
+        sort_by=selected_sort,
+        sort_order=selected_order,
+    )
 
 
 @router.post("/items", response_model=ContentItemOut)
 def create_item(
     payload: ContentItemCreate,
     db: Session = Depends(get_db),
-    _: User = Depends(require_role(UserRole.admin, UserRole.editor)),
+    current_user: User = Depends(require_role(UserRole.admin, UserRole.editor)),
 ) -> ContentItemOut:
-    item = ContentItem(**payload.model_dump())
-    db.add(item)
-    db.commit()
-    db.refresh(item)
-    ensure_default_tasks_for_item(db, item)
-    return item
+    return content_service.create_item(db, payload=payload, actor=current_user)
 
 
 @router.patch("/items/{item_id}", response_model=ContentItemOut)
@@ -52,55 +70,71 @@ def update_item(
     item_id: uuid.UUID,
     payload: ContentItemUpdate,
     db: Session = Depends(get_db),
-    _: User = Depends(require_role(UserRole.admin, UserRole.editor)),
+    current_user: User = Depends(require_role(UserRole.admin, UserRole.editor)),
 ) -> ContentItemOut:
-    item = db.query(ContentItem).filter(ContentItem.id == item_id).first()
-    if not item:
-        raise HTTPException(status_code=404, detail="Content item not found")
-    for k, v in payload.model_dump(exclude_unset=True).items():
-        setattr(item, k, v)
-    db.commit()
-    db.refresh(item)
-    return item
+    try:
+        return content_service.update_item(
+            db,
+            item_id=item_id,
+            payload=payload,
+            actor=current_user,
+        )
+    except NotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 @router.delete("/items/{item_id}")
 def delete_item(
     item_id: uuid.UUID,
     db: Session = Depends(get_db),
-    _: User = Depends(require_role(UserRole.admin, UserRole.editor)),
+    current_user: User = Depends(require_role(UserRole.admin, UserRole.editor)),
 ) -> dict:
-    item = db.query(ContentItem).filter(ContentItem.id == item_id).first()
-    if not item:
-        raise HTTPException(status_code=404, detail="Content item not found")
-    db.delete(item)
-    db.commit()
+    try:
+        content_service.delete_item(db, item_id=item_id, actor=current_user)
+    except NotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
     return {"deleted": True}
 
 
-@router.get("/tasks", response_model=list[ContentTaskOut])
+@router.get("/tasks", response_model=Page[ContentTaskOut])
 def list_tasks(
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
     content_item_id: uuid.UUID | None = None,
-) -> list[ContentTaskOut]:
-    q = db.query(ContentTask)
+    paging: tuple[int, int, str, SortOrder] = Depends(pagination_params),
+) -> Page[ContentTaskOut]:
+    limit, offset, sort_by, sort_order = paging
+    qry = db.query(ContentTask)
     if content_item_id:
-        q = q.filter(ContentTask.content_item_id == content_item_id)
-    return q.order_by(ContentTask.updated_at.desc()).all()
+        qry = qry.filter(ContentTask.content_item_id == content_item_id)
+
+    total = qry.order_by(None).count()
+    qry, selected_sort, selected_order = apply_sorting(
+        qry,
+        model=ContentTask,
+        sort_by=sort_by,
+        sort_order=sort_order,
+        allowed_fields={"created_at", "updated_at", "status", "type", "due_date"},
+        fallback="updated_at",
+    )
+    items = qry.offset(offset).limit(limit).all()
+    return to_page(
+        items=items,
+        total=total,
+        limit=limit,
+        offset=offset,
+        sort_by=selected_sort,
+        sort_order=selected_order,
+    )
 
 
 @router.post("/tasks", response_model=ContentTaskOut)
 def create_task(
     payload: ContentTaskCreate,
     db: Session = Depends(get_db),
-    _: User = Depends(require_role(UserRole.admin, UserRole.editor)),
+    current_user: User = Depends(require_role(UserRole.admin, UserRole.editor)),
 ) -> ContentTaskOut:
-    task = ContentTask(**payload.model_dump())
-    db.add(task)
-    db.commit()
-    db.refresh(task)
-    return task
+    return content_service.create_task(db, payload=payload, actor=current_user)
 
 
 @router.patch("/tasks/{task_id}", response_model=ContentTaskOut)
@@ -108,27 +142,27 @@ def update_task(
     task_id: uuid.UUID,
     payload: ContentTaskUpdate,
     db: Session = Depends(get_db),
-    _: User = Depends(require_role(UserRole.admin, UserRole.editor)),
+    current_user: User = Depends(require_role(UserRole.admin, UserRole.editor)),
 ) -> ContentTaskOut:
-    task = db.query(ContentTask).filter(ContentTask.id == task_id).first()
-    if not task:
-        raise HTTPException(status_code=404, detail="Content task not found")
-    for k, v in payload.model_dump(exclude_unset=True).items():
-        setattr(task, k, v)
-    db.commit()
-    db.refresh(task)
-    return task
+    try:
+        return content_service.update_task(
+            db,
+            task_id=task_id,
+            payload=payload,
+            actor=current_user,
+        )
+    except NotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 @router.delete("/tasks/{task_id}")
 def delete_task(
     task_id: uuid.UUID,
     db: Session = Depends(get_db),
-    _: User = Depends(require_role(UserRole.admin, UserRole.editor)),
+    current_user: User = Depends(require_role(UserRole.admin, UserRole.editor)),
 ) -> dict:
-    task = db.query(ContentTask).filter(ContentTask.id == task_id).first()
-    if not task:
-        raise HTTPException(status_code=404, detail="Content task not found")
-    db.delete(task)
-    db.commit()
+    try:
+        content_service.delete_task(db, task_id=task_id, actor=current_user)
+    except NotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
     return {"deleted": True}

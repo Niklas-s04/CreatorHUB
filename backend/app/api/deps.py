@@ -16,7 +16,7 @@ from app.models.auth_session import AuthSession
 from app.models.user import User, UserRole
 from app.services.auth_security import is_token_revoked, revoke_session
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/token", auto_error=False)
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/token", auto_error=False)
 
 
 @dataclass

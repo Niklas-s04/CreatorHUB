@@ -1,11 +1,15 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from contextlib import suppress
+from contextlib import asynccontextmanager
 from urllib.parse import urlparse
 
 import uvicorn
 from fastapi import FastAPI
+from redis import Redis
+from sqlalchemy import text
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
@@ -22,6 +26,7 @@ from app.api.routers import (
     products,
 )
 from app.core.config import settings
+from app.api.error_handlers import install_error_handlers
 from app.core.web_security import (
     CsrfProtectionMiddleware,
     RateLimitMiddleware,
@@ -29,7 +34,94 @@ from app.core.web_security import (
     SecurityHeadersMiddleware,
 )
 from app.seed import bootstrap_if_needed
+from app.db.session import engine
 from app.services.auto_archive import auto_archive_daemon
+from app.schemas.common import ErrorResponse
+
+logger = logging.getLogger(__name__)
+
+API_VERSION = "v1"
+API_BASE_PREFIX = f"/api/{API_VERSION}"
+LEGACY_API_PREFIX = "/api"
+
+
+def _close_redis_client(redis_client: Redis | None) -> None:
+    if redis_client is None:
+        return
+    with suppress(Exception):
+        redis_client.close()
+    with suppress(Exception):
+        redis_client.connection_pool.disconnect()
+
+
+def _close_worker_redis_connection() -> None:
+    with suppress(Exception):
+        from app.workers.queue import redis_conn
+
+        redis_conn.close()
+        redis_conn.connection_pool.disconnect()
+
+
+def _initialize_runtime_resources(app: FastAPI) -> None:
+    app.state.startup_complete = False
+    app.state.bootstrap_complete = False
+    app.state.auto_archive_task = None
+    app.state.redis_client = None
+
+    with engine.connect() as conn:
+        conn.execute(text("SELECT 1"))
+
+    redis_client = Redis.from_url(
+        settings.REDIS_URL,
+        decode_responses=True,
+        socket_connect_timeout=1,
+        socket_timeout=1,
+    )
+    redis_client.ping()
+    app.state.redis_client = redis_client
+
+    bootstrap_if_needed()
+    app.state.bootstrap_complete = True
+
+    if settings.AUTO_ARCHIVE_ENABLED:
+        loop = asyncio.get_running_loop()
+        app.state.auto_archive_task = loop.create_task(auto_archive_daemon())
+
+    app.state.startup_complete = True
+
+
+async def _shutdown_runtime_resources(app: FastAPI) -> None:
+    task = getattr(app.state, "auto_archive_task", None)
+    if task:
+        task.cancel()
+        with suppress(asyncio.CancelledError):
+            await task
+
+    _close_worker_redis_connection()
+
+    redis_client = getattr(app.state, "redis_client", None)
+    _close_redis_client(redis_client)
+    app.state.redis_client = None
+
+    with suppress(Exception):
+        engine.dispose()
+
+    app.state.startup_complete = False
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    try:
+        _initialize_runtime_resources(app)
+    except Exception:
+        logger.exception("Application initialization failed. Aborting startup.")
+        await _shutdown_runtime_resources(app)
+        raise
+
+    try:
+        yield
+    finally:
+        await _shutdown_runtime_resources(app)
 
 
 def _validate_security_settings() -> None:
@@ -82,9 +174,47 @@ def _validate_runtime_config() -> None:
 
 
 def create_app() -> FastAPI:
-    _validate_runtime_config()
-    _validate_security_settings()
-    app = FastAPI(title=settings.PROJECT_NAME, version="1.0.0")
+    try:
+        _validate_runtime_config()
+        _validate_security_settings()
+    except Exception:
+        logger.exception("Invalid runtime/security configuration detected")
+        raise
+
+    app = FastAPI(
+        title=settings.PROJECT_NAME,
+        version="1.0.0",
+        lifespan=lifespan,
+        description=(
+            "CreatorHUB Backend API. Stable versioned endpoints are available under "
+            f"{API_BASE_PREFIX}. Legacy {LEGACY_API_PREFIX} endpoints remain temporarily available"
+            " and are marked as deprecated in OpenAPI."
+        ),
+        responses={
+            400: {"model": ErrorResponse, "description": "Bad request"},
+            401: {"model": ErrorResponse, "description": "Unauthorized"},
+            403: {"model": ErrorResponse, "description": "Forbidden"},
+            404: {"model": ErrorResponse, "description": "Not found"},
+            409: {"model": ErrorResponse, "description": "Conflict"},
+            422: {"model": ErrorResponse, "description": "Validation error"},
+            500: {"model": ErrorResponse, "description": "Internal server error"},
+            503: {"model": ErrorResponse, "description": "Service unavailable"},
+        },
+        openapi_tags=[
+            {"name": "health", "description": "Liveness, readiness, and runtime health state"},
+            {"name": "auth", "description": "Authentication, sessions, MFA, and registration"},
+            {"name": "products", "description": "Inventory products, lifecycle, values, transactions"},
+            {"name": "assets", "description": "Asset upload, review workflow, and library access"},
+            {"name": "content", "description": "Content planning items and production tasks"},
+            {"name": "email", "description": "Email thread assistant and draft workflow"},
+            {"name": "images", "description": "Async image search jobs"},
+            {"name": "knowledge", "description": "Knowledge documents for AI and policy context"},
+            {"name": "deals", "description": "Sponsoring/deal intake and draft tracking"},
+            {"name": "audit", "description": "System and domain event audit trail"},
+        ],
+    )
+
+    install_error_handlers(app)
 
     trusted_hosts = [h.strip() for h in settings.TRUSTED_HOSTS.split(",") if h.strip()]
     if trusted_hosts:
@@ -123,32 +253,37 @@ def create_app() -> FastAPI:
             allow_headers=["*"],
         )
 
-    app.include_router(health.router)
-    app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
-    app.include_router(products.router, prefix="/api/products", tags=["products"])
-    app.include_router(assets.router, prefix="/api/assets", tags=["assets"])
-    app.include_router(content.router, prefix="/api/content", tags=["content"])
-    app.include_router(email.router, prefix="/api/email", tags=["email"])
-    app.include_router(images.router, prefix="/api/images", tags=["images"])
-    app.include_router(knowledge.router, prefix="/api/knowledge", tags=["knowledge"])
-    app.include_router(deals.router, prefix="/api/deals", tags=["deals"])
-    app.include_router(audit.router, prefix="/api/audit", tags=["audit"])
+    app.include_router(health.router, tags=["health"])
 
-    @app.on_event("startup")
-    def _startup() -> None:
-        bootstrap_if_needed()
-        app.state.auto_archive_task = None
-        if settings.AUTO_ARCHIVE_ENABLED:
-            loop = asyncio.get_event_loop()
-            app.state.auto_archive_task = loop.create_task(auto_archive_daemon())
+    app.include_router(auth.router, prefix=f"{API_BASE_PREFIX}/auth", tags=["auth"])
+    app.include_router(products.router, prefix=f"{API_BASE_PREFIX}/products", tags=["products"])
+    app.include_router(assets.router, prefix=f"{API_BASE_PREFIX}/assets", tags=["assets"])
+    app.include_router(content.router, prefix=f"{API_BASE_PREFIX}/content", tags=["content"])
+    app.include_router(email.router, prefix=f"{API_BASE_PREFIX}/email", tags=["email"])
+    app.include_router(images.router, prefix=f"{API_BASE_PREFIX}/images", tags=["images"])
+    app.include_router(knowledge.router, prefix=f"{API_BASE_PREFIX}/knowledge", tags=["knowledge"])
+    app.include_router(deals.router, prefix=f"{API_BASE_PREFIX}/deals", tags=["deals"])
+    app.include_router(audit.router, prefix=f"{API_BASE_PREFIX}/audit", tags=["audit"])
 
-    @app.on_event("shutdown")
-    async def _shutdown() -> None:
-        task = getattr(app.state, "auto_archive_task", None)
-        if task:
-            task.cancel()
-            with suppress(asyncio.CancelledError):
-                await task
+    app.include_router(auth.router, prefix=f"{LEGACY_API_PREFIX}/auth", tags=["auth"], deprecated=True)
+    app.include_router(
+        products.router,
+        prefix=f"{LEGACY_API_PREFIX}/products",
+        tags=["products"],
+        deprecated=True,
+    )
+    app.include_router(assets.router, prefix=f"{LEGACY_API_PREFIX}/assets", tags=["assets"], deprecated=True)
+    app.include_router(content.router, prefix=f"{LEGACY_API_PREFIX}/content", tags=["content"], deprecated=True)
+    app.include_router(email.router, prefix=f"{LEGACY_API_PREFIX}/email", tags=["email"], deprecated=True)
+    app.include_router(images.router, prefix=f"{LEGACY_API_PREFIX}/images", tags=["images"], deprecated=True)
+    app.include_router(
+        knowledge.router,
+        prefix=f"{LEGACY_API_PREFIX}/knowledge",
+        tags=["knowledge"],
+        deprecated=True,
+    )
+    app.include_router(deals.router, prefix=f"{LEGACY_API_PREFIX}/deals", tags=["deals"], deprecated=True)
+    app.include_router(audit.router, prefix=f"{LEGACY_API_PREFIX}/audit", tags=["audit"], deprecated=True)
 
     return app
 

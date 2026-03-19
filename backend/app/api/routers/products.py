@@ -10,6 +10,7 @@ from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session, joinedload
 
 from app.api.deps import get_current_user, get_db, require_role
+from app.api.querying import apply_sorting, pagination_params, to_page
 from app.models.product import (
     Product,
     ProductStatus,
@@ -30,8 +31,12 @@ from app.schemas.product import (
     ProductValueHistoryCreate,
     ProductValueHistoryOut,
 )
+from app.schemas.common import Page, SortOrder
 from app.services.audit import record_audit_log
 from app.services.auto_archive import apply_auto_archive_rules
+from app.services.domain_events import emit_domain_event
+from app.services.domain_rules import product_status_side_effect, validate_product_status_change
+from app.services.errors import BusinessRuleViolation
 from app.services.exports import (
     export_products_csv,
     export_transactions_csv,
@@ -100,7 +105,7 @@ class CSVExportKind(str, Enum):
     value_history = "value_history"
 
 
-@router.get("", response_model=list[ProductOut])
+@router.get("", response_model=Page[ProductOut])
 def list_products(
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
@@ -111,9 +116,9 @@ def list_products(
     storage_location: str | None = None,
     min_value: float | None = None,
     max_value: float | None = None,
-    limit: int = Query(default=50, ge=1, le=200),
-    offset: int = Query(default=0, ge=0),
-) -> list[ProductOut]:
+    paging: tuple[int, int, str, SortOrder] = Depends(pagination_params),
+) -> Page[ProductOut]:
+    limit, offset, sort_by, sort_order = paging
     qry = db.query(Product)
     if q:
         like = f"%{q}%"
@@ -138,7 +143,32 @@ def list_products(
     if max_value is not None:
         qry = qry.filter(Product.current_value <= max_value)
 
-    return qry.order_by(Product.updated_at.desc()).offset(offset).limit(limit).all()
+    total = qry.order_by(None).count()
+    qry, selected_sort, selected_order = apply_sorting(
+        qry,
+        model=Product,
+        sort_by=sort_by,
+        sort_order=sort_order,
+        allowed_fields={
+            "created_at",
+            "updated_at",
+            "title",
+            "status",
+            "current_value",
+            "purchase_date",
+            "status_changed_at",
+        },
+        fallback="updated_at",
+    )
+    items = qry.offset(offset).limit(limit).all()
+    return to_page(
+        items=items,
+        total=total,
+        limit=limit,
+        offset=offset,
+        sort_by=selected_sort,
+        sort_order=selected_order,
+    )
 
 
 @router.post("", response_model=ProductOut)
@@ -187,6 +217,14 @@ def update_product(
     updates = payload.model_dump(exclude_unset=True)
     maybe_status = updates.pop("status", None)
     if maybe_status and maybe_status != p.status:
+        try:
+            validate_product_status_change(
+                current_status=p.status,
+                target_status=maybe_status,
+                amount=None,
+            )
+        except BusinessRuleViolation as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
         before_status = p.status
         p.status = maybe_status
         p.status_changed_at = datetime.now(timezone.utc)
@@ -199,6 +237,19 @@ def update_product(
             description=f"Status {before_status.value} -> {maybe_status.value}",
             before={"status": before_status.value},
             after={"status": maybe_status.value},
+        )
+        emit_domain_event(
+            db,
+            actor=current_user,
+            event_name="product.status.changed",
+            entity_type="product",
+            entity_id=str(p.id),
+            payload={
+                "from": before_status.value,
+                "to": maybe_status.value,
+                "source": "products.patch",
+            },
+            description=f"Product status changed: {before_status.value} -> {maybe_status.value}",
         )
     for k, v in updates.items():
         setattr(p, k, v)
@@ -293,18 +344,16 @@ def change_status(
     if not p:
         raise HTTPException(status_code=404, detail="Product not found")
 
-    # Bei geschäftsrelevantem Status automatisch Transaktion anlegen.
-    tx_type = None
-    if payload.status == ProductStatus.sold:
-        tx_type = TransactionType.sale
-        if payload.amount is None:
-            raise HTTPException(status_code=400, detail="amount required for sold")
-    elif payload.status == ProductStatus.gifted:
-        tx_type = TransactionType.gift
-    elif payload.status == ProductStatus.returned:
-        tx_type = TransactionType.return_
-    elif payload.status == ProductStatus.broken:
-        tx_type = TransactionType.repair
+    try:
+        validate_product_status_change(
+            current_status=p.status,
+            target_status=payload.status,
+            amount=payload.amount,
+        )
+    except BusinessRuleViolation as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    tx_type, _ = product_status_side_effect(payload.status)
 
     if tx_type:
         tx = ProductTransaction(
@@ -317,6 +366,20 @@ def change_status(
             notes=payload.notes,
         )
         db.add(tx)
+        emit_domain_event(
+            db,
+            actor=current_user,
+            event_name="product.transaction.created",
+            entity_type="product",
+            entity_id=str(p.id),
+            payload={
+                "transaction_type": tx_type.value,
+                "date": payload.date.isoformat(),
+                "amount": payload.amount,
+                "currency": payload.currency,
+            },
+            description=f"Transaction side effect for status change: {tx_type.value}",
+        )
 
     if p.status != payload.status:
         before_status = p.status
@@ -336,6 +399,19 @@ def change_status(
                 "amount": payload.amount,
                 "currency": payload.currency,
             },
+        )
+        emit_domain_event(
+            db,
+            actor=current_user,
+            event_name="product.status.changed",
+            entity_type="product",
+            entity_id=str(p.id),
+            payload={
+                "from": before_status.value,
+                "to": payload.status.value,
+                "date": payload.date.isoformat(),
+            },
+            description=f"Product status changed: {before_status.value} -> {payload.status.value}",
         )
     db.commit()
     db.refresh(p)

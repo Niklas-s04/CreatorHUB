@@ -82,6 +82,6 @@ Email Body:
             meta_json=meta,
         )
     )
-    db.commit()
+    db.flush()
 
     return cleaned

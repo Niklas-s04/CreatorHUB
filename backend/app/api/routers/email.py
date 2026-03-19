@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, get_db, require_role
+from app.api.querying import apply_sorting, pagination_params, to_page
 from app.models.email import (
     EmailDraft,
     EmailIntent,
@@ -16,6 +17,7 @@ from app.models.email import (
     EmailThreadMessageRole,
 )
 from app.models.user import User, UserRole
+from app.schemas.common import Page, SortOrder
 from app.schemas.email import (
     EmailDraftOut,
     EmailDraftRequest,
@@ -192,19 +194,31 @@ def refine_draft(
     return draft
 
 
-@router.get("/threads", response_model=list[EmailThreadOut])
+@router.get("/threads", response_model=Page[EmailThreadOut])
 def list_threads(
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
-    limit: int = 50,
-    offset: int = 0,
-) -> list[EmailThreadOut]:
-    return (
-        db.query(EmailThread)
-        .order_by(EmailThread.updated_at.desc())
-        .offset(offset)
-        .limit(limit)
-        .all()
+    paging: tuple[int, int, str, SortOrder] = Depends(pagination_params),
+) -> Page[EmailThreadOut]:
+    limit, offset, sort_by, sort_order = paging
+    qry = db.query(EmailThread)
+    total = qry.order_by(None).count()
+    qry, selected_sort, selected_order = apply_sorting(
+        qry,
+        model=EmailThread,
+        sort_by=sort_by,
+        sort_order=sort_order,
+        allowed_fields={"created_at", "updated_at", "subject", "detected_intent"},
+        fallback="updated_at",
+    )
+    items = qry.offset(offset).limit(limit).all()
+    return to_page(
+        items=items,
+        total=total,
+        limit=limit,
+        offset=offset,
+        sort_by=selected_sort,
+        sort_order=selected_order,
     )
 
 
@@ -240,13 +254,30 @@ def get_thread(
     }
 
 
-@router.get("/threads/{thread_id}/drafts", response_model=list[EmailDraftOut])
+@router.get("/threads/{thread_id}/drafts", response_model=Page[EmailDraftOut])
 def list_drafts(
-    thread_id: uuid.UUID, db: Session = Depends(get_db), _: User = Depends(get_current_user)
-) -> list[EmailDraftOut]:
-    return (
-        db.query(EmailDraft)
-        .filter(EmailDraft.thread_id == thread_id)
-        .order_by(EmailDraft.created_at.desc())
-        .all()
+    thread_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+    paging: tuple[int, int, str, SortOrder] = Depends(pagination_params),
+) -> Page[EmailDraftOut]:
+    limit, offset, sort_by, sort_order = paging
+    qry = db.query(EmailDraft).filter(EmailDraft.thread_id == thread_id)
+    total = qry.order_by(None).count()
+    qry, selected_sort, selected_order = apply_sorting(
+        qry,
+        model=EmailDraft,
+        sort_by=sort_by,
+        sort_order=sort_order,
+        allowed_fields={"created_at", "updated_at", "tone", "approved"},
+        fallback="created_at",
+    )
+    items = qry.offset(offset).limit(limit).all()
+    return to_page(
+        items=items,
+        total=total,
+        limit=limit,
+        offset=offset,
+        sort_by=selected_sort,
+        sort_order=selected_order,
     )

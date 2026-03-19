@@ -11,11 +11,16 @@ from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, get_db, require_role
+from app.api.querying import apply_sorting, pagination_params, to_page
 from app.core.config import settings
 from app.models.asset import Asset, AssetKind, AssetOwnerType, AssetReviewState, AssetSource
 from app.models.user import User, UserRole
 from app.schemas.asset import AssetCreateWeb, AssetOut, AssetUpdate
+from app.schemas.common import Page, SortOrder
 from app.services.audit import record_audit_log
+from app.services.domain_events import emit_domain_event
+from app.services.domain_rules import validate_asset_consistency, validate_asset_review_state_change
+from app.services.errors import BusinessRuleViolation
 from app.services.storage import cache_download, ensure_thumbnail, save_upload_validated
 
 router = APIRouter()
@@ -77,23 +82,42 @@ def _delivery_headers(asset: Asset, path: str) -> tuple[str | None, str, dict[st
     return media_type, filename, headers
 
 
-@router.get("", response_model=list[AssetOut])
+@router.get("", response_model=Page[AssetOut])
 def list_assets(
     owner_type: AssetOwnerType,
     owner_id: uuid.UUID,
     include_pending: bool = True,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-) -> list[AssetOut]:
+    paging: tuple[int, int, str, SortOrder] = Depends(pagination_params),
+) -> Page[AssetOut]:
+    limit, offset, sort_by, sort_order = paging
     q = db.query(Asset).filter(Asset.owner_type == owner_type, Asset.owner_id == owner_id)
     if current_user.role == UserRole.viewer:
         q = q.filter(Asset.review_state == AssetReviewState.approved)
     elif not include_pending:
         q = q.filter(Asset.review_state == AssetReviewState.approved)
-    return q.order_by(Asset.created_at.desc()).all()
+    total = q.order_by(None).count()
+    q, selected_sort, selected_order = apply_sorting(
+        q,
+        model=Asset,
+        sort_by=sort_by,
+        sort_order=sort_order,
+        allowed_fields={"created_at", "updated_at", "title", "review_state", "kind"},
+        fallback="created_at",
+    )
+    items = q.offset(offset).limit(limit).all()
+    return to_page(
+        items=items,
+        total=total,
+        limit=limit,
+        offset=offset,
+        sort_by=selected_sort,
+        sort_order=selected_order,
+    )
 
 
-@router.get("/library", response_model=list[AssetOut])
+@router.get("/library", response_model=Page[AssetOut])
 def list_library_assets(
     search: str | None = None,
     owner_type: AssetOwnerType | None = None,
@@ -101,10 +125,11 @@ def list_library_assets(
     primary_only: bool = False,
     approved_only: bool = True,
     license_filter: LicenseFilter = LicenseFilter.any,
-    limit: int = 100,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-) -> list[AssetOut]:
+    paging: tuple[int, int, str, SortOrder] = Depends(pagination_params),
+) -> Page[AssetOut]:
+    limit, offset, sort_by, sort_order = paging
     q = db.query(Asset)
     if owner_type:
         q = q.filter(Asset.owner_type == owner_type)
@@ -130,8 +155,24 @@ def list_library_assets(
     elif license_filter == LicenseFilter.missing:
         q = q.filter(Asset.license_type.is_(None), Asset.license_url.is_(None))
 
-    safe_limit = max(1, min(limit, 200))
-    return q.order_by(Asset.created_at.desc()).limit(safe_limit).all()
+    total = q.order_by(None).count()
+    q, selected_sort, selected_order = apply_sorting(
+        q,
+        model=Asset,
+        sort_by=sort_by,
+        sort_order=sort_order,
+        allowed_fields={"created_at", "updated_at", "title", "review_state", "kind"},
+        fallback="created_at",
+    )
+    items = q.offset(offset).limit(limit).all()
+    return to_page(
+        items=items,
+        total=total,
+        limit=limit,
+        offset=offset,
+        sort_by=selected_sort,
+        sort_order=selected_order,
+    )
 
 
 @router.post("/upload", response_model=AssetOut)
@@ -179,6 +220,18 @@ async def upload_asset(
         review_state=AssetReviewState.pending_review,
         is_primary=False,
     )
+    try:
+        validate_asset_consistency(
+            owner_type=asset.owner_type,
+            kind=asset.kind,
+            is_primary=asset.is_primary,
+            review_state=asset.review_state,
+            local_path=asset.local_path,
+            url=asset.url,
+        )
+    except BusinessRuleViolation as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
     # Duplikate per Hash vermeiden und vorhandenes Asset wiederverwenden.
     existing = db.query(Asset).filter(Asset.hash == stored.sha256).first()
     if existing:
@@ -204,6 +257,18 @@ def create_web_asset(
         return existing
     data = payload.model_dump()
     data["review_state"] = AssetReviewState.needs_review
+    try:
+        validate_asset_consistency(
+            owner_type=data["owner_type"],
+            kind=data["kind"],
+            is_primary=bool(data.get("is_primary", False)),
+            review_state=data["review_state"],
+            local_path=data.get("local_path"),
+            url=data.get("url"),
+        )
+    except BusinessRuleViolation as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
     asset = Asset(**data)
     db.add(asset)
     db.commit()
@@ -224,6 +289,32 @@ def update_asset(
 
     data = payload.model_dump(exclude_unset=True)
     original_review_state = asset.review_state
+    target_review_state = data.get("review_state", asset.review_state)
+
+    try:
+        validate_asset_review_state_change(
+            current_state=asset.review_state,
+            target_state=target_review_state,
+        )
+    except BusinessRuleViolation as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    target_is_primary = data.get("is_primary", asset.is_primary)
+    if target_review_state == AssetReviewState.rejected:
+        target_is_primary = False
+        data["is_primary"] = False
+
+    try:
+        validate_asset_consistency(
+            owner_type=asset.owner_type,
+            kind=asset.kind,
+            is_primary=bool(target_is_primary),
+            review_state=target_review_state,
+            local_path=asset.local_path,
+            url=asset.url,
+        )
+    except BusinessRuleViolation as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     # Primär-Flag nur bei Produktbildern exklusiv setzen.
     if (
@@ -260,6 +351,22 @@ def update_asset(
                 "owner_type": asset.owner_type.value,
                 "owner_id": str(asset.owner_id),
             },
+        )
+        emit_domain_event(
+            db,
+            actor=current_user,
+            event_name="asset.review_state.changed",
+            entity_type="asset",
+            entity_id=str(asset.id),
+            payload={
+                "from": original_review_state.value,
+                "to": asset.review_state.value,
+                "owner_type": asset.owner_type.value,
+                "owner_id": str(asset.owner_id),
+            },
+            description=(
+                f"Asset review state changed: {original_review_state.value} -> {asset.review_state.value}"
+            ),
         )
     db.commit()
     db.refresh(asset)
@@ -360,13 +467,14 @@ def get_asset_thumb(
     )
 
 
-@router.get("/review-queue", response_model=list[AssetOut])
+@router.get("/review-queue", response_model=Page[AssetOut])
 def review_queue(
     owner_type: AssetOwnerType | None = None,
-    limit: int = 200,
     db: Session = Depends(get_db),
     _: User = Depends(require_role(UserRole.admin, UserRole.editor)),
-) -> list[AssetOut]:
+    paging: tuple[int, int, str, SortOrder] = Depends(pagination_params),
+) -> Page[AssetOut]:
+    limit, offset, sort_by, sort_order = paging
     q = db.query(Asset).filter(
         Asset.review_state.in_(
             [
@@ -379,4 +487,21 @@ def review_queue(
     )
     if owner_type:
         q = q.filter(Asset.owner_type == owner_type)
-    return q.order_by(Asset.created_at.asc()).limit(max(1, min(limit, 500))).all()
+    total = q.order_by(None).count()
+    q, selected_sort, selected_order = apply_sorting(
+        q,
+        model=Asset,
+        sort_by=sort_by,
+        sort_order=sort_order,
+        allowed_fields={"created_at", "updated_at", "review_state", "kind", "owner_type"},
+        fallback="created_at",
+    )
+    items = q.offset(offset).limit(limit).all()
+    return to_page(
+        items=items,
+        total=total,
+        limit=limit,
+        offset=offset,
+        sort_by=selected_sort,
+        sort_order=selected_order,
+    )

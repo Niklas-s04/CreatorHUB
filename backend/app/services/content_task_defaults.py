@@ -58,5 +58,5 @@ def ensure_default_tasks_for_item(db: Session, content_item: ContentItem) -> int
             )
         )
 
-    db.commit()
+    db.flush()
     return len(templates)
