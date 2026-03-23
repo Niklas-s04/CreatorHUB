@@ -12,6 +12,7 @@ import AssetsPage from "./pages/AssetsPage";
 import LoginPage from "./pages/LoginPage";
 import { checkSession } from "./api";
 import AdminPage from "./pages/AdminPage";
+import { GlobalLoading } from "./shared/ui/states/GlobalLoading";
 
 function RequireAuth() {
   const [state, setState] = useState<"loading" | "ok" | "no">("loading");
@@ -26,7 +27,7 @@ function RequireAuth() {
     };
   }, []);
 
-  if (state === "loading") return null;
+  if (state === "loading") return <GlobalLoading label="Session wird geprüft…" />;
   if (state === "no") return <Navigate to="/login" replace />;
   return <Outlet />;
 }
@@ -44,7 +45,7 @@ function PublicOnly() {
     };
   }, []);
 
-  if (state === "loading") return null;
+  if (state === "loading") return <GlobalLoading label="Session wird geprüft…" />;
   if (state === "authed") return <Navigate to="/dashboard" replace />;
   return <Outlet />;
 }

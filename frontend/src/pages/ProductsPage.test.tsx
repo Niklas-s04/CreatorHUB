@@ -50,7 +50,9 @@ describe('ProductsPage', () => {
     expect(saveButton).toBeDisabled()
 
     fireEvent.change(screen.getByPlaceholderText('Titel*'), { target: { value: 'Neue Kamera' } })
-    expect(saveButton).toBeEnabled()
+    await waitFor(() => {
+      expect(saveButton).toBeEnabled()
+    })
   })
 
   it('triggert Filter-Ladevorgang über Aktion', async () => {
@@ -60,6 +62,7 @@ describe('ProductsPage', () => {
 
     renderWithRouter(<ProductsPage />)
 
+    fireEvent.change(await screen.findByPlaceholderText('Suche…'), { target: { value: 'sony' } })
     fireEvent.click(await screen.findByRole('button', { name: 'Filter' }))
 
     await waitFor(() => {

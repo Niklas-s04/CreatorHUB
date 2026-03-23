@@ -1,6 +1,7 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, screen, waitFor } from '@testing-library/react'
 
 import AdminPage from './AdminPage'
+import { renderWithRouter } from '../test/render'
 
 vi.mock('../api', () => ({
   apiFetch: vi.fn(),
@@ -25,7 +26,7 @@ describe('AdminPage', () => {
       permissions: [],
     })
 
-    render(<AdminPage />)
+    renderWithRouter(<AdminPage />)
 
     expect(await screen.findByText('Nur Admin kann Registrierungsanfragen bearbeiten.')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Freigeben' })).not.toBeInTheDocument()
@@ -45,10 +46,10 @@ describe('AdminPage', () => {
       .mockResolvedValueOnce([])
     ;(getUsers as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce([])
 
-    render(<AdminPage />)
+    renderWithRouter(<AdminPage />)
 
-    expect(await screen.findByText('Keine Benutzer.')).toBeInTheDocument()
-    expect(screen.getByText('Keine offenen Anfragen.')).toBeInTheDocument()
+    expect(await screen.findByText('Keine Benutzer')).toBeInTheDocument()
+    expect(screen.getByText('Keine offenen Anfragen')).toBeInTheDocument()
   })
 
   it('zeigt Ladezustand beim Initial-Load', async () => {
@@ -58,7 +59,7 @@ describe('AdminPage', () => {
     })
     ;(getMe as unknown as ReturnType<typeof vi.fn>).mockImplementationOnce(() => mePromise)
 
-    render(<AdminPage />)
+    renderWithRouter(<AdminPage />)
 
     const refreshBusy = await screen.findByRole('button', { name: '...' })
     expect(refreshBusy).toBeDisabled()
@@ -79,7 +80,7 @@ describe('AdminPage', () => {
   it('zeigt Fehlerzustand', async () => {
     ;(getMe as unknown as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error('Backend nicht erreichbar'))
 
-    render(<AdminPage />)
+    renderWithRouter(<AdminPage />)
 
     expect(await screen.findByText('Backend nicht erreichbar')).toBeInTheDocument()
   })
@@ -102,7 +103,7 @@ describe('AdminPage', () => {
       .mockResolvedValueOnce([{ id: 'u2', username: 'editor', role: 'editor', is_active: true, needs_password_setup: false, mfa_enabled: false, active_sessions: 1 }])
       .mockResolvedValueOnce([])
 
-    render(<AdminPage />)
+    renderWithRouter(<AdminPage />)
 
     fireEvent.click(await screen.findByRole('button', { name: 'Freigeben' }))
 

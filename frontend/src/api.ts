@@ -1,3 +1,5 @@
+import { createHttpClient } from './shared/api/httpClient'
+
 declare const __API_BASE__: string
 
 const API_BASE = __API_BASE__ || '/api'
@@ -92,6 +94,13 @@ export function setToken(t: string | null) {
   else localStorage.removeItem(AUTH_HINT_KEY)
 }
 
+export type ApiRequestOptions = RequestInit & {
+  timeoutMs?: number
+  retries?: number
+  retryDelayMs?: number
+  shouldRetry?: (status: number) => boolean
+}
+
 function getCookie(name: string): string | null {
   const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
   const match = document.cookie.match(new RegExp(`(?:^|; )${escaped}=([^;]*)`))
@@ -102,6 +111,22 @@ function isUnsafeMethod(method?: string): boolean {
   const m = (method || 'GET').toUpperCase()
   return m === 'POST' || m === 'PUT' || m === 'PATCH' || m === 'DELETE'
 }
+
+const httpClient = createHttpClient({
+  baseUrl: API_BASE,
+  refreshPath: '/auth/refresh',
+  tokenPath: '/auth/token',
+  onUnauthorized: () => setToken(null),
+  onUnauthorizedRetry: async () => {
+    await refreshSession()
+  },
+  beforeRequest: (headers, options) => {
+    if (isUnsafeMethod(options.method)) {
+      const csrf = getCookie(CSRF_COOKIE_NAME)
+      if (csrf) headers.set('X-CSRF-Token', csrf)
+    }
+  },
+})
 
 export async function login(username: string, password: string, otp?: string): Promise<void> {
   const body = new URLSearchParams()
@@ -182,51 +207,13 @@ export async function getMe(): Promise<Me> {
   return apiFetch('/auth/me')
 }
 
-export async function apiFetch(path: string, options: RequestInit = {}) {
-  return apiFetchInternal(path, options, true)
-}
-
-async function apiFetchInternal(path: string, options: RequestInit = {}, allowRefresh = true) {
-  const headers = new Headers(options.headers || {})
-  if (isUnsafeMethod(options.method)) {
-    const csrf = getCookie(CSRF_COOKIE_NAME)
-    if (csrf) headers.set('X-CSRF-Token', csrf)
-  }
-  if (!(options.body instanceof FormData) && !headers.has('Content-Type')) {
-    headers.set('Content-Type', 'application/json')
-  }
-  const res = await fetch(`${API_BASE}${path}`, { ...options, headers, credentials: 'include' })
-  if (!res.ok) {
-    if (res.status === 401 && allowRefresh && path !== '/auth/refresh' && path !== '/auth/token') {
-      try {
-        await refreshSession()
-        return apiFetchInternal(path, options, false)
-      } catch {
-        setToken(null)
-      }
-    }
-    if (res.status === 401) {
-      setToken(null)
-    }
-    const txt = await res.text()
-    throw new Error(txt || res.statusText)
-  }
-  const ct = res.headers.get('content-type') || ''
-  if (ct.includes('application/json')) return res.json()
-  return res.text()
+export async function apiFetch<T = unknown>(path: string, options: ApiRequestOptions = {}): Promise<T> {
+  return httpClient.request<T>(path, options)
 }
 
 
-export async function apiFetchBlob(path: string): Promise<Blob> {
-  const headers = new Headers()
-  const res = await fetch(`${API_BASE}${path}`, { headers, credentials: 'include' })
-  if (!res.ok) {
-    if (res.status === 401) {
-      setToken(null)
-    }
-    throw new Error(await res.text())
-  }
-  return res.blob()
+export async function apiFetchBlob(path: string, options: ApiRequestOptions = {}): Promise<Blob> {
+  return httpClient.requestBlob(path, options)
 }
 
 export async function getMySessions(): Promise<AuthSession[]> {

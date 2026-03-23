@@ -1,6 +1,7 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, screen, waitFor } from '@testing-library/react'
 
 import LoginPage from './LoginPage'
+import { renderWithRouter } from '../test/render'
 
 const navigateMock = vi.fn()
 
@@ -24,7 +25,7 @@ vi.mock('../api', () => ({
 import { login, requestRegistration } from '../api'
 
 function renderPage() {
-  return render(<LoginPage />)
+  return renderWithRouter(<LoginPage />)
 }
 
 function getSubmitButton() {
@@ -81,7 +82,7 @@ describe('LoginPage', () => {
     fireEvent.click(getSubmitButton())
 
     await waitFor(() => {
-      expect(screen.getByText('Ungültige Zugangsdaten')).toBeInTheDocument()
+      expect(screen.getAllByText('Ungültige Zugangsdaten').length).toBeGreaterThan(0)
     })
   })
 })
