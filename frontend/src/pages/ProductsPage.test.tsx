@@ -5,13 +5,22 @@ import { renderWithRouter } from '../test/render'
 
 vi.mock('../api', () => ({
   apiFetch: vi.fn(),
+  getMe: vi.fn(),
 }))
 
-import { apiFetch } from '../api'
+import { apiFetch, getMe } from '../api'
 
 describe('ProductsPage', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    ;(getMe as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
+      id: 'u1',
+      username: 'editor',
+      role: 'editor',
+      is_active: true,
+      needs_password_setup: false,
+      permissions: ['product.read', 'product.write', 'product.export'],
+    })
   })
 
   it('zeigt leeren Zustand ohne Treffer', async () => {
