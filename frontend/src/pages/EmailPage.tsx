@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { apiFetch } from '../api'
+import { useAuthz } from '../hooks/useAuthz'
 import { useRateCardDoc } from '../hooks/useRateCardDoc'
 
 type EmailTone = 'short' | 'neutral' | 'friendly' | 'firm'
@@ -136,6 +137,7 @@ function safeParseList(value: string | null): string[] {
 }
 
 export default function EmailPage() {
+  const { hasPermission } = useAuthz()
   const [subject, setSubject] = useState('')
   const [raw, setRaw] = useState('')
   const [tone, setTone] = useState<EmailTone>('neutral')
@@ -232,6 +234,7 @@ export default function EmailPage() {
   }, [threadDetail, activeDraftId, compareDraftId])
 
   async function generate() {
+    if (!hasPermission('email.generate')) return
     if (!raw.trim()) return
     setBusy(true)
     setErr(null)
@@ -257,6 +260,7 @@ export default function EmailPage() {
   }
 
   async function refine() {
+    if (!hasPermission('email.generate')) return
     if (!threadDetail || !activeDraftId) return
     const draft = threadDetail.drafts.find(d => d.id === activeDraftId)
     if (!draft) return
@@ -311,7 +315,9 @@ export default function EmailPage() {
   const rateCardText = rateCardDoc?.content?.trim() || ''
   const hasRateCard = Boolean(rateCardText)
 
-  const canRefine = !!currentDraft && !!threadDetail && (questions.length === 0 || Object.values(answers).some(v => v.trim()) || note.trim().length > 0)
+  const canGenerate = hasPermission('email.generate')
+  const canManageDeals = hasPermission('deal.manage')
+  const canRefine = canGenerate && !!currentDraft && !!threadDetail && (questions.length === 0 || Object.values(answers).some(v => v.trim()) || note.trim().length > 0)
   const hasDealDraft = Boolean(threadDetail?.deal_draft)
   const isSponsoringIntent = threadDetail?.detected_intent === 'sponsoring'
 
@@ -351,6 +357,7 @@ export default function EmailPage() {
   }
 
   async function autoFillDealDraft() {
+    if (!hasPermission('deal.manage')) return
     if (!threadDetail) return
     setDealAutoLoading(true)
     setDealErr(null)
@@ -369,6 +376,7 @@ export default function EmailPage() {
   }
 
   async function saveDealDraft() {
+    if (!hasPermission('deal.manage')) return
     if (!threadDetail) return
     setDealSaving(true)
     setDealErr(null)
@@ -451,7 +459,7 @@ export default function EmailPage() {
                   <option value={opt.value} key={opt.value}>{opt.label}</option>
                 ))}
               </select>
-              <button className="btn primary" onClick={generate} disabled={!raw.trim() || busy}>
+              <button className="btn primary" onClick={generate} disabled={!canGenerate || !raw.trim() || busy}>
                 {busy ? '...' : 'Neuer Draft'}
               </button>
             </div>
@@ -591,14 +599,16 @@ export default function EmailPage() {
                       )}
                     </div>
                     <div className="control-row">
-                      <button className="btn" onClick={autoFillDealDraft} disabled={dealAutoLoading || !threadDetail}>
+                      <button className="btn" onClick={autoFillDealDraft} disabled={!canManageDeals || dealAutoLoading || !threadDetail}>
                         {dealAutoLoading ? 'Analysiere…' : 'Auto aus Mail'}
                       </button>
-                      <button className="btn primary" onClick={saveDealDraft} disabled={dealSaving || !threadDetail}>
+                      <button className="btn primary" onClick={saveDealDraft} disabled={!canManageDeals || dealSaving || !threadDetail}>
                         {dealSaving ? 'Speichere…' : hasDealDraft ? 'Update' : 'Speichern'}
                       </button>
                     </div>
                   </div>
+
+                  {!canManageDeals && <div className="muted small">Keine Berechtigung für Deal-Intake-Bearbeitung.</div>}
 
                   {dealErr && <div className="error small mt8">{dealErr}</div>}
 

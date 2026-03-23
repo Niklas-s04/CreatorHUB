@@ -15,6 +15,7 @@ class UserOut(BaseModel):
     needs_password_setup: bool
     mfa_enabled: bool
     active_sessions: int = 0
+    permissions: list[str] = Field(default_factory=list)
 
     class Config:
         from_attributes = True

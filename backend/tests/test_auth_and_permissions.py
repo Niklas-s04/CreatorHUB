@@ -6,7 +6,11 @@ from sqlalchemy.orm import Session
 
 from app.api import deps
 from app.core.config import settings
+from app.models.audit import AuditLog
+from app.models.auth_session import AuthSession
 from app.models.auth_session import RevokedToken
+from app.models.product import Product
+from app.models.registration_request import RegistrationRequest, RegistrationRequestStatus
 from app.models.user import UserRole
 from tests.factories import DEFAULT_PASSWORD, create_tokens_for_user, create_user
 
@@ -103,3 +107,139 @@ def test_create_user_requires_admin_role(client, db_session: Session) -> None:
 
     assert response.status_code == 403
     assert response.json()["detail"] == "Insufficient permissions"
+
+
+def test_me_includes_effective_permissions(client, db_session: Session) -> None:
+    editor = create_user(db_session, username="perm_editor", role=UserRole.editor)
+    access_token, _ = create_tokens_for_user(db_session, user=editor)
+
+    response = client.get("/api/auth/me", headers=_auth_header(access_token))
+
+    assert response.status_code == 200
+    body = response.json()
+    assert "permissions" in body
+    assert "email.generate" in body["permissions"]
+    assert "product.delete" not in body["permissions"]
+
+
+def test_product_delete_requires_dedicated_permission(client, db_session: Session) -> None:
+    product = Product(title="Delete Me")
+    db_session.add(product)
+    db_session.commit()
+    db_session.refresh(product)
+
+    editor = create_user(db_session, username="editor_delete_perm", role=UserRole.editor)
+    editor_token, _ = create_tokens_for_user(db_session, user=editor)
+
+    denied = client.delete(f"/api/products/{product.id}", headers=_auth_header(editor_token))
+    assert denied.status_code == 403
+
+
+def test_approve_registration_requires_sensitive_confirmation_when_enabled(
+    client,
+    db_session: Session,
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(settings, "SECURITY_SENSITIVE_ACTION_CONFIRMATION_REQUIRED", True)
+    monkeypatch.setattr(settings, "SECURITY_SENSITIVE_ACTION_CONFIRMATION_VALUE", "CONFIRM")
+
+    admin = create_user(db_session, username="admin_confirm", role=UserRole.admin)
+    token, _ = create_tokens_for_user(db_session, user=admin)
+
+    req = RegistrationRequest(
+        username="pending_confirm_user",
+        hashed_password="hashed",
+        status=RegistrationRequestStatus.pending,
+    )
+    db_session.add(req)
+    db_session.commit()
+    db_session.refresh(req)
+
+    denied = client.post(
+        f"/api/auth/registration-requests/{req.id}/approve",
+        headers=_auth_header(token),
+    )
+    assert denied.status_code == 428
+
+    allowed = client.post(
+        f"/api/auth/registration-requests/{req.id}/approve",
+        headers={**_auth_header(token), "x-action-confirm": "CONFIRM"},
+    )
+    assert allowed.status_code == 200
+
+
+def test_approve_registration_requires_step_up_mfa_when_enabled(
+    client,
+    db_session: Session,
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(settings, "SECURITY_SENSITIVE_ACTION_REQUIRE_STEP_UP_MFA", True)
+
+    admin = create_user(db_session, username="admin_stepup", role=UserRole.admin)
+    token, _ = create_tokens_for_user(db_session, user=admin)
+
+    req = RegistrationRequest(
+        username="pending_stepup_user",
+        hashed_password="hashed",
+        status=RegistrationRequestStatus.pending,
+    )
+    db_session.add(req)
+    db_session.commit()
+    db_session.refresh(req)
+
+    denied = client.post(
+        f"/api/auth/registration-requests/{req.id}/approve",
+        headers=_auth_header(token),
+    )
+    assert denied.status_code == 403
+    assert denied.json()["detail"] == "Step-up authentication required"
+
+    session = db_session.query(AuthSession).filter(AuthSession.user_id == admin.id).first()
+    assert session is not None
+    session.mfa_verified = True
+    db_session.commit()
+
+    allowed = client.post(
+        f"/api/auth/registration-requests/{req.id}/approve",
+        headers=_auth_header(token),
+    )
+    assert allowed.status_code == 200
+
+
+def test_update_user_blocks_self_role_or_status_change(client, db_session: Session) -> None:
+    admin = create_user(db_session, username="admin_self_guard", role=UserRole.admin)
+    token, _ = create_tokens_for_user(db_session, user=admin)
+
+    response = client.patch(
+        f"/api/auth/users/{admin.id}?role=editor",
+        headers=_auth_header(token),
+    )
+
+    assert response.status_code == 400
+    assert "Self role/status changes" in response.json()["detail"]
+
+
+def test_update_user_writes_revision_safe_audit_log(client, db_session: Session) -> None:
+    admin = create_user(db_session, username="admin_audit_guard", role=UserRole.admin)
+    target = create_user(db_session, username="target_editor", role=UserRole.editor)
+    token, _ = create_tokens_for_user(db_session, user=admin)
+
+    response = client.patch(
+        f"/api/auth/users/{target.id}?role=viewer",
+        headers=_auth_header(token),
+    )
+    assert response.status_code == 200
+
+    audit = (
+        db_session.query(AuditLog)
+        .filter(
+            AuditLog.action == "user.role_or_status.update",
+            AuditLog.entity_id == str(target.id),
+        )
+        .first()
+    )
+    assert audit is not None
+    assert audit.before is not None
+    assert audit.after is not None
+    assert audit.before.get("role") == "editor"
+    assert audit.after.get("role") == "viewer"

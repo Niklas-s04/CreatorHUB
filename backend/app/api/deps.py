@@ -9,6 +9,7 @@ from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 
+from app.core.authorization import Permission, has_permission
 from app.core.config import settings
 from app.core.security import decode_token
 from app.db.session import SessionLocal
@@ -24,6 +25,16 @@ class AuthContext:
     user: User
     session: AuthSession
     payload: dict
+
+
+@dataclass
+class SensitiveActionContext:
+    action: str
+    confirmation_required: bool
+    confirmation_provided: bool
+    step_up_required: bool
+    step_up_satisfied: bool
+    request_id: str | None
 
 
 def get_db() -> Generator[Session, None, None]:
@@ -139,5 +150,64 @@ def require_role(*roles: UserRole):
                 status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions"
             )
         return current_user
+
+    return _dep
+
+
+def require_permission(permission: Permission):
+    def _dep(current_user: User = Depends(get_current_user)) -> User:
+        if not has_permission(current_user, permission):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions"
+            )
+        return current_user
+
+    return _dep
+
+
+def require_permissions_any(*permissions: Permission):
+    def _dep(current_user: User = Depends(get_current_user)) -> User:
+        if not any(has_permission(current_user, permission) for permission in permissions):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions"
+            )
+        return current_user
+
+    return _dep
+
+
+def require_sensitive_action(action: str):
+    def _dep(
+        request: Request,
+        context: AuthContext = Depends(get_current_auth_context),
+    ) -> SensitiveActionContext:
+        confirmation_required = settings.SECURITY_SENSITIVE_ACTION_CONFIRMATION_REQUIRED
+        header_name = settings.SECURITY_SENSITIVE_ACTION_CONFIRMATION_HEADER.strip().lower()
+        expected_value = settings.SECURITY_SENSITIVE_ACTION_CONFIRMATION_VALUE
+        header_value = request.headers.get(header_name)
+        confirmation_provided = bool(header_value) and header_value == expected_value
+
+        if confirmation_required and not confirmation_provided:
+            raise HTTPException(
+                status_code=status.HTTP_428_PRECONDITION_REQUIRED,
+                detail="Sensitive action confirmation required",
+            )
+
+        step_up_required = settings.SECURITY_SENSITIVE_ACTION_REQUIRE_STEP_UP_MFA
+        step_up_satisfied = bool(context.session.mfa_verified)
+        if step_up_required and not step_up_satisfied:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Step-up authentication required",
+            )
+
+        return SensitiveActionContext(
+            action=action,
+            confirmation_required=confirmation_required,
+            confirmation_provided=confirmation_provided,
+            step_up_required=step_up_required,
+            step_up_satisfied=step_up_satisfied,
+            request_id=request.headers.get("x-request-id"),
+        )
 
     return _dep

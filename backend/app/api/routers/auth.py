@@ -21,12 +21,15 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import (
     AuthContext,
+    SensitiveActionContext,
     get_client_ip,
     get_current_auth_context,
     get_current_user,
     get_db,
-    require_role,
+    require_permission,
+    require_sensitive_action,
 )
+from app.core.authorization import Permission, permission_values_for_role
 from app.core.config import settings
 from app.core.security import (
     create_csrf_token,
@@ -581,15 +584,23 @@ def me(current_user: User = Depends(get_current_user), db: Session = Depends(get
         )
         .count()
     )
-    current_user.active_sessions = active_sessions
-    return current_user
+    return UserOut(
+        id=current_user.id,
+        username=current_user.username,
+        role=current_user.role,
+        is_active=current_user.is_active,
+        needs_password_setup=current_user.needs_password_setup,
+        mfa_enabled=current_user.mfa_enabled,
+        active_sessions=active_sessions,
+        permissions=permission_values_for_role(current_user.role),
+    )
 
 
 @router.post("/users", response_model=UserOut)
 def create_user(
     payload: UserCreate,
     db: Session = Depends(get_db),
-    _: User = Depends(require_role(UserRole.admin)),
+    _: User = Depends(require_permission(Permission.user_manage)),
 ) -> UserOut:
     username = _validate_username(payload.username)
     password = _validate_password_strength(payload.password)
@@ -617,7 +628,7 @@ def create_user(
 
 @router.get("/users", response_model=list[UserOut])
 def list_users(
-    db: Session = Depends(get_db), _: User = Depends(require_role(UserRole.admin))
+    db: Session = Depends(get_db), _: User = Depends(require_permission(Permission.user_read))
 ) -> list[UserOut]:
     users = db.query(User).order_by(User.created_at.desc()).all()
     user_ids = [u.id for u in users]
@@ -644,6 +655,7 @@ def list_users(
             needs_password_setup=user.needs_password_setup,
             mfa_enabled=user.mfa_enabled,
             active_sessions=counts.get(user.id, 0),
+            permissions=permission_values_for_role(user.role),
         )
         for user in users
     ]
@@ -655,13 +667,26 @@ def update_user(
     role: UserRole | None = None,
     is_active: bool | None = None,
     db: Session = Depends(get_db),
-    _: User = Depends(require_role(UserRole.admin)),
+    admin: User = Depends(require_permission(Permission.user_manage)),
+    sensitive_action: SensitiveActionContext = Depends(
+        require_sensitive_action("user.role_or_status.update")
+    ),
 ) -> UserOut:
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     if user.username.lower() == settings.BOOTSTRAP_ADMIN_USERNAME.lower():
         raise HTTPException(status_code=400, detail="Admin account is managed separately")
+    if user.id == admin.id and (role is not None or is_active is not None):
+        raise HTTPException(
+            status_code=400,
+            detail="Self role/status changes are not allowed for security reasons",
+        )
+
+    before = {
+        "role": user.role.value,
+        "is_active": user.is_active,
+    }
     if role is not None:
         if role == UserRole.admin:
             raise HTTPException(
@@ -670,16 +695,50 @@ def update_user(
         user.role = role
     if is_active is not None:
         user.is_active = is_active
+
+    after = {
+        "role": user.role.value,
+        "is_active": user.is_active,
+    }
+    if before != after:
+        record_audit_log(
+            db,
+            actor=admin,
+            action="user.role_or_status.update",
+            entity_type="user",
+            entity_id=str(user.id),
+            description=f"Updated role/status for user '{user.username}'",
+            before=before,
+            after=after,
+            metadata={
+                "sensitive_action": sensitive_action.action,
+                "confirmation_required": sensitive_action.confirmation_required,
+                "confirmation_provided": sensitive_action.confirmation_provided,
+                "step_up_required": sensitive_action.step_up_required,
+                "step_up_satisfied": sensitive_action.step_up_satisfied,
+                "request_id": sensitive_action.request_id,
+            },
+        )
+
     db.commit()
     db.refresh(user)
-    return user
+    return UserOut(
+        id=user.id,
+        username=user.username,
+        role=user.role,
+        is_active=user.is_active,
+        needs_password_setup=user.needs_password_setup,
+        mfa_enabled=user.mfa_enabled,
+        active_sessions=0,
+        permissions=permission_values_for_role(user.role),
+    )
 
 
 @router.get("/registration-requests", response_model=list[RegisterRequestOut])
 def list_registration_requests(
     status_filter: RegistrationRequestStatus | None = RegistrationRequestStatus.pending,
     db: Session = Depends(get_db),
-    _: User = Depends(require_role(UserRole.admin)),
+    _: User = Depends(require_permission(Permission.user_approve_registration)),
 ) -> list[RegisterRequestOut]:
     query = db.query(RegistrationRequest)
     if status_filter is not None:
@@ -691,7 +750,10 @@ def list_registration_requests(
 def approve_registration_request(
     request_id: uuid.UUID,
     db: Session = Depends(get_db),
-    admin: User = Depends(require_role(UserRole.admin)),
+    admin: User = Depends(require_permission(Permission.user_approve_registration)),
+    sensitive_action: SensitiveActionContext = Depends(
+        require_sensitive_action("user.approve_registration")
+    ),
 ) -> RegisterRequestOut:
     req = db.query(RegistrationRequest).filter(RegistrationRequest.id == request_id).first()
     if not req:
@@ -717,6 +779,26 @@ def approve_registration_request(
         before_status = req.status
         req.status = RegistrationRequestStatus.rejected
         req.reviewed_by_user_id = admin.id
+        record_audit_log(
+            db,
+            actor=admin,
+            action="registration.request.review",
+            entity_type="registration_request",
+            entity_id=str(req.id),
+            description="Registration request auto-rejected due to username conflict",
+            before={"status": before_status.value},
+            after={"status": req.status.value},
+            metadata={
+                "decision": "auto_reject_conflict",
+                "username": req.username,
+                "sensitive_action": sensitive_action.action,
+                "confirmation_required": sensitive_action.confirmation_required,
+                "confirmation_provided": sensitive_action.confirmation_provided,
+                "step_up_required": sensitive_action.step_up_required,
+                "step_up_satisfied": sensitive_action.step_up_satisfied,
+                "request_id": sensitive_action.request_id,
+            },
+        )
         emit_domain_event(
             db,
             actor=admin,
@@ -746,6 +828,27 @@ def approve_registration_request(
     before_status = req.status
     req.status = RegistrationRequestStatus.approved
     req.reviewed_by_user_id = admin.id
+    record_audit_log(
+        db,
+        actor=admin,
+        action="registration.request.review",
+        entity_type="registration_request",
+        entity_id=str(req.id),
+        description="Registration request approved",
+        before={"status": before_status.value},
+        after={"status": req.status.value},
+        metadata={
+            "decision": "approved",
+            "username": req.username,
+            "provisioned_role": UserRole.editor.value,
+            "sensitive_action": sensitive_action.action,
+            "confirmation_required": sensitive_action.confirmation_required,
+            "confirmation_provided": sensitive_action.confirmation_provided,
+            "step_up_required": sensitive_action.step_up_required,
+            "step_up_satisfied": sensitive_action.step_up_satisfied,
+            "request_id": sensitive_action.request_id,
+        },
+    )
     emit_domain_event(
         db,
         actor=admin,
@@ -769,7 +872,10 @@ def approve_registration_request(
 def reject_registration_request(
     request_id: uuid.UUID,
     db: Session = Depends(get_db),
-    admin: User = Depends(require_role(UserRole.admin)),
+    admin: User = Depends(require_permission(Permission.user_approve_registration)),
+    sensitive_action: SensitiveActionContext = Depends(
+        require_sensitive_action("user.reject_registration")
+    ),
 ) -> RegisterRequestOut:
     req = db.query(RegistrationRequest).filter(RegistrationRequest.id == request_id).first()
     if not req:
@@ -785,6 +891,26 @@ def reject_registration_request(
     before_status = req.status
     req.status = RegistrationRequestStatus.rejected
     req.reviewed_by_user_id = admin.id
+    record_audit_log(
+        db,
+        actor=admin,
+        action="registration.request.review",
+        entity_type="registration_request",
+        entity_id=str(req.id),
+        description="Registration request rejected",
+        before={"status": before_status.value},
+        after={"status": req.status.value},
+        metadata={
+            "decision": "rejected",
+            "username": req.username,
+            "sensitive_action": sensitive_action.action,
+            "confirmation_required": sensitive_action.confirmation_required,
+            "confirmation_provided": sensitive_action.confirmation_provided,
+            "step_up_required": sensitive_action.step_up_required,
+            "step_up_satisfied": sensitive_action.step_up_satisfied,
+            "request_id": sensitive_action.request_id,
+        },
+    )
     emit_domain_event(
         db,
         actor=admin,

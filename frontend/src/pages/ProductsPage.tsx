@@ -1,8 +1,10 @@
 import React, { useEffect, useState } from 'react'
 import { apiFetch } from '../api'
 import { Link } from 'react-router-dom'
+import { useAuthz } from '../hooks/useAuthz'
 
 export default function ProductsPage() {
+  const { hasPermission } = useAuthz()
   const [items, setItems] = useState<any[]>([])
   const [q, setQ] = useState('')
   const [status, setStatus] = useState('')
@@ -33,6 +35,7 @@ export default function ProductsPage() {
   useEffect(() => { load() }, [])
 
   async function create() {
+    if (!hasPermission('product.write')) return
     try {
       setErr(null)
       const payload: any = { title: newTitle }
@@ -49,6 +52,7 @@ export default function ProductsPage() {
   }
 
   function handleExport() {
+    if (!hasPermission('product.export')) return
     const params = new URLSearchParams()
     params.set('dataset', exportDataset)
     const yearTokens = exportYears
@@ -74,7 +78,7 @@ export default function ProductsPage() {
           <div className="page-subtitle">Produkte verwalten, filtern und exportieren.</div>
         </div>
         <div className="page-actions">
-          <button className="btn primary" onClick={() => setShowNew(v => !v)}>
+          <button className="btn primary" onClick={() => setShowNew(v => !v)} disabled={!hasPermission('product.write')}>
             {showNew ? 'Schließen' : '+ Produkt'}
           </button>
           <div className="control-row">
@@ -89,7 +93,7 @@ export default function ProductsPage() {
               value={exportYears}
               onChange={e => setExportYears(e.target.value)}
             />
-            <button className="btn" onClick={handleExport}>
+            <button className="btn" onClick={handleExport} disabled={!hasPermission('product.export')}>
               Export CSV
             </button>
           </div>

@@ -5,9 +5,10 @@ import AdminPage from './AdminPage'
 vi.mock('../api', () => ({
   apiFetch: vi.fn(),
   getUsers: vi.fn(),
+  getMe: vi.fn(),
 }))
 
-import { apiFetch, getUsers } from '../api'
+import { apiFetch, getMe, getUsers } from '../api'
 
 describe('AdminPage', () => {
   beforeEach(() => {
@@ -15,12 +16,13 @@ describe('AdminPage', () => {
   })
 
   it('zeigt rollenabhängige Sichtbarkeit für Nicht-Admin', async () => {
-    ;(apiFetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+    ;(getMe as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
       id: 'u1',
       username: 'viewer',
       role: 'viewer',
       is_active: true,
       needs_password_setup: false,
+      permissions: [],
     })
 
     render(<AdminPage />)
@@ -30,14 +32,16 @@ describe('AdminPage', () => {
   })
 
   it('zeigt leere Zustände für Admin ohne Daten', async () => {
-    ;(apiFetch as unknown as ReturnType<typeof vi.fn>)
+    ;(getMe as unknown as ReturnType<typeof vi.fn>)
       .mockResolvedValueOnce({
         id: 'a1',
         username: 'admin',
         role: 'admin',
         is_active: true,
         needs_password_setup: false,
+        permissions: ['user.read', 'user.approve_registration'],
       })
+    ;(apiFetch as unknown as ReturnType<typeof vi.fn>)
       .mockResolvedValueOnce([])
     ;(getUsers as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce([])
 
@@ -52,7 +56,7 @@ describe('AdminPage', () => {
     const mePromise = new Promise(resolve => {
       resolveMe = resolve
     })
-    ;(apiFetch as unknown as ReturnType<typeof vi.fn>).mockImplementationOnce(() => mePromise)
+    ;(getMe as unknown as ReturnType<typeof vi.fn>).mockImplementationOnce(() => mePromise)
 
     render(<AdminPage />)
 
@@ -66,13 +70,14 @@ describe('AdminPage', () => {
         role: 'viewer',
         is_active: true,
         needs_password_setup: false,
+        permissions: [],
       })
       await Promise.resolve()
     })
   })
 
   it('zeigt Fehlerzustand', async () => {
-    ;(apiFetch as unknown as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error('Backend nicht erreichbar'))
+    ;(getMe as unknown as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error('Backend nicht erreichbar'))
 
     render(<AdminPage />)
 
@@ -80,23 +85,18 @@ describe('AdminPage', () => {
   })
 
   it('führt rollenabhängige Aktion Freigeben aus', async () => {
-    ;(apiFetch as unknown as ReturnType<typeof vi.fn>)
+    ;(getMe as unknown as ReturnType<typeof vi.fn>)
       .mockResolvedValueOnce({
         id: 'a1',
         username: 'admin',
         role: 'admin',
         is_active: true,
         needs_password_setup: false,
+        permissions: ['user.read', 'user.approve_registration'],
       })
+    ;(apiFetch as unknown as ReturnType<typeof vi.fn>)
       .mockResolvedValueOnce([{ id: 'r1', username: 'new-user', status: 'pending' }])
       .mockResolvedValueOnce({})
-      .mockResolvedValueOnce({
-        id: 'a1',
-        username: 'admin',
-        role: 'admin',
-        is_active: true,
-        needs_password_setup: false,
-      })
       .mockResolvedValueOnce([])
     ;(getUsers as unknown as ReturnType<typeof vi.fn>)
       .mockResolvedValueOnce([{ id: 'u2', username: 'editor', role: 'editor', is_active: true, needs_password_setup: false, mfa_enabled: false, active_sessions: 1 }])

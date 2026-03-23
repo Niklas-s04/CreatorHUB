@@ -1,10 +1,12 @@
 import { NavLink } from "react-router-dom";
-import { logout } from "../api";
+import { logout, type Permission } from "../api";
+import { useAuthz } from "../hooks/useAuthz";
 
 type NavItem = {
   to: string;
   label: string;
   icon: string;
+  requiredPermission?: Permission;
 };
 
 type NavSection = {
@@ -32,12 +34,14 @@ const NAV_SECTIONS: NavSection[] = [
     title: "System",
     items: [
       { to: "/settings", label: "Einstellungen", icon: "⚙" },
-      { to: "/admin", label: "Admin", icon: "⌘" },
+      { to: "/admin", label: "Admin", icon: "⌘", requiredPermission: "user.approve_registration" },
     ],
   },
 ];
 
 export default function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
+  const { hasPermission } = useAuthz();
+
   async function onLogout() {
     await logout();
     window.location.href = "/login";
@@ -50,7 +54,9 @@ export default function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
         {NAV_SECTIONS.map(section => (
           <div className="sidebar-section" key={section.title}>
             <div className="sidebar-section-title">{section.title}</div>
-            {section.items.map(item => (
+            {section.items
+              .filter(item => !item.requiredPermission || hasPermission(item.requiredPermission))
+              .map(item => (
               <NavLink
                 key={item.to}
                 to={item.to}

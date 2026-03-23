@@ -3,8 +3,9 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException
 from rq.job import Job
 
-from app.api.deps import get_current_user, require_role
-from app.models.user import User, UserRole
+from app.api.deps import get_current_user, require_permission
+from app.core.authorization import Permission
+from app.models.user import User
 from app.schemas.images import ImageSearchRequest, JobStatusOut
 from app.workers.jobs import image_hunt_job
 from app.workers.queue import default_queue, redis_conn
@@ -14,7 +15,7 @@ router = APIRouter()
 
 @router.post("/search", response_model=JobStatusOut)
 def start_search(
-    payload: ImageSearchRequest, _: User = Depends(require_role(UserRole.admin, UserRole.editor))
+    payload: ImageSearchRequest, _: User = Depends(require_permission(Permission.image_search))
 ) -> JobStatusOut:
     job = default_queue.enqueue(
         image_hunt_job,

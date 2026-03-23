@@ -10,11 +10,12 @@ from fastapi.responses import FileResponse
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_user, get_db, require_role
+from app.api.deps import get_current_user, get_db, require_permission
 from app.api.querying import apply_sorting, pagination_params, to_page
+from app.core.authorization import Permission, has_permission
 from app.core.config import settings
 from app.models.asset import Asset, AssetKind, AssetOwnerType, AssetReviewState, AssetSource
-from app.models.user import User, UserRole
+from app.models.user import User
 from app.schemas.asset import AssetCreateWeb, AssetOut, AssetUpdate
 from app.schemas.common import Page, SortOrder
 from app.services.audit import record_audit_log
@@ -53,7 +54,7 @@ def _upload_purpose_allowed(owner_type: AssetOwnerType, kind: AssetKind) -> bool
 
 
 def _enforce_asset_access(current_user: User, asset: Asset) -> None:
-    privileged = current_user.role in {UserRole.admin, UserRole.editor}
+    privileged = has_permission(current_user, Permission.asset_review)
     if asset.review_state != AssetReviewState.approved and not privileged:
         raise HTTPException(status_code=403, detail="Asset not approved")
 
@@ -93,7 +94,7 @@ def list_assets(
 ) -> Page[AssetOut]:
     limit, offset, sort_by, sort_order = paging
     q = db.query(Asset).filter(Asset.owner_type == owner_type, Asset.owner_id == owner_id)
-    if current_user.role == UserRole.viewer:
+    if not has_permission(current_user, Permission.asset_review):
         q = q.filter(Asset.review_state == AssetReviewState.approved)
     elif not include_pending:
         q = q.filter(Asset.review_state == AssetReviewState.approved)
@@ -137,7 +138,7 @@ def list_library_assets(
         q = q.filter(Asset.kind == kind)
     if primary_only:
         q = q.filter(Asset.is_primary.is_(True))
-    if current_user.role == UserRole.viewer:
+    if not has_permission(current_user, Permission.asset_review):
         q = q.filter(Asset.review_state == AssetReviewState.approved)
     elif approved_only:
         q = q.filter(Asset.review_state == AssetReviewState.approved)
@@ -183,7 +184,7 @@ async def upload_asset(
     title: str | None = Form(None),
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
-    _: User = Depends(require_role(UserRole.admin, UserRole.editor)),
+    _: User = Depends(require_permission(Permission.asset_upload)),
 ) -> AssetOut:
     if not _upload_purpose_allowed(owner_type, kind):
         raise HTTPException(
@@ -248,7 +249,7 @@ async def upload_asset(
 def create_web_asset(
     payload: AssetCreateWeb,
     db: Session = Depends(get_db),
-    _: User = Depends(require_role(UserRole.admin, UserRole.editor)),
+    _: User = Depends(require_permission(Permission.asset_upload)),
 ) -> AssetOut:
     existing = None
     if payload.hash:
@@ -281,7 +282,7 @@ def update_asset(
     asset_id: uuid.UUID,
     payload: AssetUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_role(UserRole.admin, UserRole.editor)),
+    current_user: User = Depends(require_permission(Permission.asset_review)),
 ) -> AssetOut:
     asset = db.query(Asset).filter(Asset.id == asset_id).first()
     if not asset:
@@ -471,7 +472,7 @@ def get_asset_thumb(
 def review_queue(
     owner_type: AssetOwnerType | None = None,
     db: Session = Depends(get_db),
-    _: User = Depends(require_role(UserRole.admin, UserRole.editor)),
+    _: User = Depends(require_permission(Permission.asset_review)),
     paging: tuple[int, int, str, SortOrder] = Depends(pagination_params),
 ) -> Page[AssetOut]:
     limit, offset, sort_by, sort_order = paging

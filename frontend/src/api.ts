@@ -41,6 +41,40 @@ export type UserSummary = {
   needs_password_setup: boolean
   mfa_enabled: boolean
   active_sessions: number
+  permissions: Permission[]
+}
+
+export type Permission =
+  | 'product.read'
+  | 'product.write'
+  | 'product.delete'
+  | 'product.import'
+  | 'product.export'
+  | 'product.auto_archive'
+  | 'asset.read'
+  | 'asset.upload'
+  | 'asset.review'
+  | 'content.read'
+  | 'content.manage'
+  | 'deal.read'
+  | 'deal.manage'
+  | 'email.read'
+  | 'email.generate'
+  | 'image.search'
+  | 'knowledge.read'
+  | 'knowledge.manage'
+  | 'user.read'
+  | 'user.manage'
+  | 'user.approve_registration'
+  | 'audit.view'
+
+export type Me = {
+  id: string
+  username: string
+  role: 'admin' | 'editor' | 'viewer'
+  is_active: boolean
+  needs_password_setup: boolean
+  permissions: Permission[]
 }
 
 export type RegistrationRequest = {
@@ -142,6 +176,10 @@ export async function checkSession(): Promise<boolean> {
     setToken(null)
     return false
   }
+}
+
+export async function getMe(): Promise<Me> {
+  return apiFetch('/auth/me')
 }
 
 export async function apiFetch(path: string, options: RequestInit = {}) {

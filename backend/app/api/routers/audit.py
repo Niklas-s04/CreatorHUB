@@ -4,10 +4,11 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_db, require_role
+from app.api.deps import get_db, require_permission
 from app.api.querying import apply_sorting, pagination_params, to_page
+from app.core.authorization import Permission
 from app.models.audit import AuditLog
-from app.models.user import User, UserRole
+from app.models.user import User
 from app.schemas.audit import AuditLogOut
 from app.schemas.common import Page, SortOrder
 
@@ -17,7 +18,7 @@ router = APIRouter()
 @router.get("", response_model=Page[AuditLogOut])
 def list_audit_logs(
     db: Session = Depends(get_db),
-    _: User = Depends(require_role(UserRole.admin)),
+    _: User = Depends(require_permission(Permission.audit_view)),
     action: str | None = None,
     entity_type: str | None = None,
     entity_id: str | None = None,

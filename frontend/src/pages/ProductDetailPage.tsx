@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { apiFetch, apiFetchBlob } from '../api'
+import { useAuthz } from '../hooks/useAuthz'
 
 function useThumb(assetId: string | null) {
   const [url, setUrl] = useState<string | null>(null)
@@ -30,6 +31,7 @@ function stripHtml(s: string) {
 }
 
 export default function ProductDetailPage() {
+  const { hasPermission } = useAuthz()
   const { id } = useParams()
   const [product, setProduct] = useState<any>(null)
   const [assets, setAssets] = useState<any[]>([])
@@ -78,8 +80,13 @@ export default function ProductDetailPage() {
   }, [assets])
 
   const primaryThumb = useThumb(primary?.id || null)
+  const canWriteProduct = hasPermission('product.write')
+  const canUploadAsset = hasPermission('asset.upload')
+  const canReviewAsset = hasPermission('asset.review')
+  const canSearchImages = hasPermission('image.search')
 
   async function saveNotes() {
+    if (!hasPermission('product.write')) return
     if (!id) return
     setSaving(true)
     try {
@@ -93,6 +100,7 @@ export default function ProductDetailPage() {
   }
 
   async function changeStatus() {
+    if (!hasPermission('product.write')) return
     if (!id) return
     try {
       setErr(null)
@@ -112,6 +120,7 @@ export default function ProductDetailPage() {
   }
 
   async function upload(file: File) {
+    if (!hasPermission('asset.upload')) return
     if (!id) return
     try {
       setErr(null)
@@ -127,6 +136,7 @@ export default function ProductDetailPage() {
   }
 
   async function startImageHunt() {
+    if (!hasPermission('image.search')) return
     if (!id) return
     try {
       setErr(null)
@@ -171,11 +181,13 @@ export default function ProductDetailPage() {
   }, [jobId])
 
   async function review(assetId: number, state: 'approved' | 'rejected') {
+    if (!hasPermission('asset.review')) return
     await apiFetch(`/assets/${assetId}`, { method: 'PATCH', body: JSON.stringify({ review_state: state }) })
     await load()
   }
 
   async function setPrimary(assetId: number) {
+    if (!hasPermission('asset.review')) return
     await apiFetch(`/assets/${assetId}/primary`, { method: 'POST' })
     await load()
   }
@@ -239,7 +251,7 @@ export default function ProductDetailPage() {
               <div className="field-label">Betrag</div>
               <input placeholder="z.B. 120" value={amount} onChange={e => setAmount(e.target.value)} />
             </div>
-            <button className="btn primary" onClick={changeStatus}>Apply</button>
+            <button className="btn primary" onClick={changeStatus} disabled={!canWriteProduct}>Apply</button>
           </div>
 
           <hr />
@@ -247,7 +259,7 @@ export default function ProductDetailPage() {
           <div className="field-label">Notes</div>
           <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={8} />
           <div className="row mt12">
-            <button className="btn primary" onClick={saveNotes} disabled={saving}>
+            <button className="btn primary" onClick={saveNotes} disabled={!canWriteProduct || saving}>
               {saving ? '...' : 'Speichern'}
             </button>
           </div>
@@ -268,7 +280,7 @@ export default function ProductDetailPage() {
           <hr />
 
           <div className="field-label">Upload</div>
-          <input type="file" onChange={e => {
+          <input type="file" disabled={!canUploadAsset} onChange={e => {
             const f = e.target.files?.[0]
             if (f) upload(f)
           }} />
@@ -285,7 +297,7 @@ export default function ProductDetailPage() {
               <option value="manufacturer">manufacturer</option>
               <option value="wikimedia,bing">wikimedia,bing</option>
             </select>
-            <button className="btn" onClick={startImageHunt}>Search</button>
+            <button className="btn" onClick={startImageHunt} disabled={!canSearchImages}>Search</button>
           </div>
           {jobStatus && <div className="muted small mt12">Job: {jobStatus}</div>}
         </div>
@@ -304,6 +316,7 @@ export default function ProductDetailPage() {
               asset={a}
               onReview={review}
               onPrimary={setPrimary}
+              canReview={canReviewAsset}
             />
           ))}
           {!assets.length && <div className="muted">Keine Assets.</div>}
@@ -356,11 +369,13 @@ export default function ProductDetailPage() {
 function AssetCard({
   asset,
   onReview,
-  onPrimary
+  onPrimary,
+  canReview
 }: {
   asset: any
   onReview: (id: number, state: 'approved' | 'rejected') => void
   onPrimary: (id: number) => void
+  canReview: boolean
 }) {
   const thumb = useThumb(String(asset.id))
   return (
@@ -392,11 +407,11 @@ function AssetCard({
       )}
 
       <div className="row mt10">
-        <button className="btn" onClick={() => onPrimary(asset.id)}>Primary</button>
-        {asset.review_state !== 'approved' && (
+        <button className="btn" onClick={() => onPrimary(asset.id)} disabled={!canReview}>Primary</button>
+        {canReview && asset.review_state !== 'approved' && (
           <button className="btn primary" onClick={() => onReview(asset.id, 'approved')}>Approve</button>
         )}
-        {asset.review_state !== 'rejected' && (
+        {canReview && asset.review_state !== 'rejected' && (
           <button className="btn danger" onClick={() => onReview(asset.id, 'rejected')}>Reject</button>
         )}
       </div>

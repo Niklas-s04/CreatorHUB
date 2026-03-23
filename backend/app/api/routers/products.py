@@ -9,15 +9,22 @@ from fastapi.responses import FileResponse
 from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session, joinedload
 
-from app.api.deps import get_current_user, get_db, require_role
+from app.api.deps import (
+    SensitiveActionContext,
+    get_current_user,
+    get_db,
+    require_permission,
+    require_sensitive_action,
+)
 from app.api.querying import apply_sorting, pagination_params, to_page
+from app.core.authorization import Permission
 from app.models.product import (
     Product,
     ProductStatus,
     ProductTransaction,
     ProductValueHistory,
 )
-from app.models.user import User, UserRole
+from app.models.user import User
 from app.schemas.common import Page, SortOrder
 from app.schemas.product import (
     InventoryCsvImportRequest,
@@ -174,7 +181,7 @@ def list_products(
 def create_product(
     payload: ProductCreate,
     db: Session = Depends(get_db),
-    _: User = Depends(require_role(UserRole.admin, UserRole.editor)),
+    _: User = Depends(require_permission(Permission.product_write)),
 ) -> ProductOut:
     p = Product(**payload.model_dump())
     db.add(p)
@@ -208,7 +215,7 @@ def update_product(
     product_id: uuid.UUID,
     payload: ProductUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_role(UserRole.admin, UserRole.editor)),
+    current_user: User = Depends(require_permission(Permission.product_write)),
 ) -> ProductOut:
     p = db.query(Product).filter(Product.id == product_id).first()
     if not p:
@@ -261,11 +268,35 @@ def update_product(
 def delete_product(
     product_id: uuid.UUID,
     db: Session = Depends(get_db),
-    _: User = Depends(require_role(UserRole.admin)),
+    current_user: User = Depends(require_permission(Permission.product_delete)),
+    sensitive_action: SensitiveActionContext = Depends(require_sensitive_action("product.delete")),
 ) -> dict:
     p = db.query(Product).filter(Product.id == product_id).first()
     if not p:
         raise HTTPException(status_code=404, detail="Product not found")
+
+    record_audit_log(
+        db,
+        actor=current_user,
+        action="product.delete",
+        entity_type="product",
+        entity_id=str(p.id),
+        description=f"Deleted product '{p.title}'",
+        before={
+            "title": p.title,
+            "status": p.status.value,
+            "current_value": p.current_value,
+            "currency": p.currency,
+        },
+        metadata={
+            "sensitive_action": sensitive_action.action,
+            "confirmation_required": sensitive_action.confirmation_required,
+            "confirmation_provided": sensitive_action.confirmation_provided,
+            "step_up_required": sensitive_action.step_up_required,
+            "step_up_satisfied": sensitive_action.step_up_satisfied,
+            "request_id": sensitive_action.request_id,
+        },
+    )
     db.delete(p)
     db.commit()
     return {"deleted": True}
@@ -288,7 +319,7 @@ def create_transaction(
     product_id: uuid.UUID,
     payload: ProductTransactionCreate,
     db: Session = Depends(get_db),
-    _: User = Depends(require_role(UserRole.admin, UserRole.editor)),
+    _: User = Depends(require_permission(Permission.product_write)),
 ) -> ProductTransactionOut:
     p = db.query(Product).filter(Product.id == product_id).first()
     if not p:
@@ -317,7 +348,7 @@ def create_value_history(
     product_id: uuid.UUID,
     payload: ProductValueHistoryCreate,
     db: Session = Depends(get_db),
-    _: User = Depends(require_role(UserRole.admin, UserRole.editor)),
+    _: User = Depends(require_permission(Permission.product_write)),
 ) -> ProductValueHistoryOut:
     p = db.query(Product).filter(Product.id == product_id).first()
     if not p:
@@ -337,7 +368,7 @@ def change_status(
     product_id: uuid.UUID,
     payload: ProductStatusChange,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_role(UserRole.admin, UserRole.editor)),
+    current_user: User = Depends(require_permission(Permission.product_write)),
 ) -> ProductOut:
     p = db.query(Product).filter(Product.id == product_id).first()
     if not p:
@@ -421,7 +452,7 @@ def change_status(
 def import_products_csv(
     payload: InventoryCsvImportRequest,
     db: Session = Depends(get_db),
-    _: User = Depends(require_role(UserRole.admin, UserRole.editor)),
+    _: User = Depends(require_permission(Permission.product_import)),
 ) -> InventoryCsvImportResult:
     config = CsvImportConfig(
         csv_text=payload.csv_text,
@@ -440,7 +471,7 @@ def import_products_csv(
 
 @router.post("/auto-archive/run")
 def trigger_auto_archive(
-    db: Session = Depends(get_db), _: User = Depends(require_role(UserRole.admin))
+    db: Session = Depends(get_db), _: User = Depends(require_permission(Permission.product_auto_archive))
 ) -> dict:
     summary = apply_auto_archive_rules(db)
     return summary
@@ -453,7 +484,7 @@ def export_csv(
         default=None, description="Optional years filter (?years=2023&years=2024)"
     ),
     db: Session = Depends(get_db),
-    _: User = Depends(require_role(UserRole.admin, UserRole.editor)),
+    _: User = Depends(require_permission(Permission.product_export)),
 ) -> FileResponse:
     year_list = _normalize_years(years)
     year_set = set(year_list)

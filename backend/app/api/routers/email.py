@@ -7,8 +7,9 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_user, get_db, require_role
+from app.api.deps import get_current_user, get_db, require_permission
 from app.api.querying import apply_sorting, pagination_params, to_page
+from app.core.authorization import Permission
 from app.models.email import (
     EmailDraft,
     EmailIntent,
@@ -16,7 +17,7 @@ from app.models.email import (
     EmailThreadMessage,
     EmailThreadMessageRole,
 )
-from app.models.user import User, UserRole
+from app.models.user import User
 from app.schemas.common import Page, SortOrder
 from app.schemas.email import (
     EmailDraftOut,
@@ -44,7 +45,7 @@ def _log_thread_message(
 def create_draft(
     payload: EmailDraftRequest,
     db: Session = Depends(get_db),
-    _: User = Depends(require_role(UserRole.admin, UserRole.editor)),
+    _: User = Depends(require_permission(Permission.email_generate)),
 ) -> EmailDraftOut:
     thread = None
     if payload.thread_id:
@@ -107,7 +108,7 @@ def create_draft(
 def refine_draft(
     payload: EmailRefineRequest,
     db: Session = Depends(get_db),
-    _: User = Depends(require_role(UserRole.admin, UserRole.editor)),
+    _: User = Depends(require_permission(Permission.email_generate)),
 ) -> EmailDraftOut:
     thread = db.query(EmailThread).filter(EmailThread.id == payload.thread_id).first()
     if not thread:

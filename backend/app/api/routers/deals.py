@@ -5,10 +5,11 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_user, get_db, require_role
+from app.api.deps import get_current_user, get_db, require_permission
 from app.api.querying import apply_sorting, pagination_params, to_page
+from app.core.authorization import Permission
 from app.models.deal import DealDraft, DealDraftStatus
-from app.models.user import User, UserRole
+from app.models.user import User
 from app.schemas.common import Page, SortOrder
 from app.schemas.deal import DealDraftIntakeRequest, DealDraftOut, DealDraftUpdate
 from app.services import deal_service
@@ -68,7 +69,7 @@ def get_deal_by_thread(
 def create_or_update_deal_from_email(
     payload: DealDraftIntakeRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_role(UserRole.admin, UserRole.editor)),
+    current_user: User = Depends(require_permission(Permission.deal_manage)),
 ) -> DealDraftOut:
     try:
         return deal_service.create_or_update_from_email(
@@ -85,7 +86,7 @@ def update_deal_draft(
     deal_id: uuid.UUID,
     payload: DealDraftUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_role(UserRole.admin, UserRole.editor)),
+    current_user: User = Depends(require_permission(Permission.deal_manage)),
 ) -> DealDraftOut:
     try:
         return deal_service.update_deal_draft(

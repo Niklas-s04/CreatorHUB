@@ -5,10 +5,17 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_user, get_db, require_role
+from app.api.deps import (
+    SensitiveActionContext,
+    get_current_user,
+    get_db,
+    require_permission,
+    require_sensitive_action,
+)
 from app.api.querying import apply_sorting, pagination_params, to_page
+from app.core.authorization import Permission
 from app.models.content import ContentItem, ContentTask
-from app.models.user import User, UserRole
+from app.models.user import User
 from app.schemas.common import Page, SortOrder
 from app.schemas.content import (
     ContentItemCreate,
@@ -60,7 +67,7 @@ def list_items(
 def create_item(
     payload: ContentItemCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_role(UserRole.admin, UserRole.editor)),
+    current_user: User = Depends(require_permission(Permission.content_manage)),
 ) -> ContentItemOut:
     return content_service.create_item(db, payload=payload, actor=current_user)
 
@@ -70,7 +77,7 @@ def update_item(
     item_id: uuid.UUID,
     payload: ContentItemUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_role(UserRole.admin, UserRole.editor)),
+    current_user: User = Depends(require_permission(Permission.content_manage)),
 ) -> ContentItemOut:
     try:
         return content_service.update_item(
@@ -87,7 +94,8 @@ def update_item(
 def delete_item(
     item_id: uuid.UUID,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_role(UserRole.admin, UserRole.editor)),
+    current_user: User = Depends(require_permission(Permission.content_manage)),
+    _: SensitiveActionContext = Depends(require_sensitive_action("content.item.delete")),
 ) -> dict:
     try:
         content_service.delete_item(db, item_id=item_id, actor=current_user)
@@ -132,7 +140,7 @@ def list_tasks(
 def create_task(
     payload: ContentTaskCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_role(UserRole.admin, UserRole.editor)),
+    current_user: User = Depends(require_permission(Permission.content_manage)),
 ) -> ContentTaskOut:
     return content_service.create_task(db, payload=payload, actor=current_user)
 
@@ -142,7 +150,7 @@ def update_task(
     task_id: uuid.UUID,
     payload: ContentTaskUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_role(UserRole.admin, UserRole.editor)),
+    current_user: User = Depends(require_permission(Permission.content_manage)),
 ) -> ContentTaskOut:
     try:
         return content_service.update_task(
@@ -159,7 +167,8 @@ def update_task(
 def delete_task(
     task_id: uuid.UUID,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_role(UserRole.admin, UserRole.editor)),
+    current_user: User = Depends(require_permission(Permission.content_manage)),
+    _: SensitiveActionContext = Depends(require_sensitive_action("content.task.delete")),
 ) -> dict:
     try:
         content_service.delete_task(db, task_id=task_id, actor=current_user)

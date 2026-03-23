@@ -5,10 +5,17 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_user, get_db, require_role
+from app.api.deps import (
+    SensitiveActionContext,
+    get_current_user,
+    get_db,
+    require_permission,
+    require_sensitive_action,
+)
 from app.api.querying import apply_sorting, pagination_params, to_page
+from app.core.authorization import Permission
 from app.models.knowledge import KnowledgeDoc, KnowledgeDocType
-from app.models.user import User, UserRole
+from app.models.user import User
 from app.schemas.common import Page, SortOrder
 from app.schemas.knowledge import KnowledgeDocCreate, KnowledgeDocOut, KnowledgeDocUpdate
 from app.services import knowledge_service
@@ -53,7 +60,7 @@ def list_docs(
 def create_doc(
     payload: KnowledgeDocCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_role(UserRole.admin)),
+    current_user: User = Depends(require_permission(Permission.knowledge_manage)),
 ) -> KnowledgeDocOut:
     try:
         return knowledge_service.create_doc(db, payload=payload, actor=current_user)
@@ -66,7 +73,7 @@ def update_doc(
     doc_id: uuid.UUID,
     payload: KnowledgeDocUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_role(UserRole.admin)),
+    current_user: User = Depends(require_permission(Permission.knowledge_manage)),
 ) -> KnowledgeDocOut:
     try:
         return knowledge_service.update_doc(db, doc_id=doc_id, payload=payload, actor=current_user)
@@ -80,7 +87,8 @@ def update_doc(
 def delete_doc(
     doc_id: uuid.UUID,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_role(UserRole.admin)),
+    current_user: User = Depends(require_permission(Permission.knowledge_manage)),
+    _: SensitiveActionContext = Depends(require_sensitive_action("knowledge.doc.delete")),
 ) -> dict:
     try:
         knowledge_service.delete_doc(db, doc_id=doc_id, actor=current_user)
