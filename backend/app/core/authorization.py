@@ -55,34 +55,68 @@ class PermissionDefinition:
 
 
 PERMISSION_DEFINITIONS: dict[Permission, PermissionDefinition] = {
-    Permission.product_read: PermissionDefinition(Permission.product_read, PermissionScope.global_scope),
-    Permission.product_write: PermissionDefinition(Permission.product_write, PermissionScope.object_scope),
-    Permission.product_delete: PermissionDefinition(Permission.product_delete, PermissionScope.object_scope),
-    Permission.product_import: PermissionDefinition(Permission.product_import, PermissionScope.global_scope),
-    Permission.product_export: PermissionDefinition(Permission.product_export, PermissionScope.global_scope),
+    Permission.product_read: PermissionDefinition(
+        Permission.product_read, PermissionScope.global_scope
+    ),
+    Permission.product_write: PermissionDefinition(
+        Permission.product_write, PermissionScope.object_scope
+    ),
+    Permission.product_delete: PermissionDefinition(
+        Permission.product_delete, PermissionScope.object_scope
+    ),
+    Permission.product_import: PermissionDefinition(
+        Permission.product_import, PermissionScope.global_scope
+    ),
+    Permission.product_export: PermissionDefinition(
+        Permission.product_export, PermissionScope.global_scope
+    ),
     Permission.product_auto_archive: PermissionDefinition(
         Permission.product_auto_archive, PermissionScope.global_scope
     ),
-    Permission.asset_read: PermissionDefinition(Permission.asset_read, PermissionScope.object_scope),
-    Permission.asset_upload: PermissionDefinition(Permission.asset_upload, PermissionScope.object_scope),
-    Permission.asset_review: PermissionDefinition(Permission.asset_review, PermissionScope.object_scope),
-    Permission.content_read: PermissionDefinition(Permission.content_read, PermissionScope.global_scope),
-    Permission.content_manage: PermissionDefinition(Permission.content_manage, PermissionScope.object_scope),
+    Permission.asset_read: PermissionDefinition(
+        Permission.asset_read, PermissionScope.object_scope
+    ),
+    Permission.asset_upload: PermissionDefinition(
+        Permission.asset_upload, PermissionScope.object_scope
+    ),
+    Permission.asset_review: PermissionDefinition(
+        Permission.asset_review, PermissionScope.object_scope
+    ),
+    Permission.content_read: PermissionDefinition(
+        Permission.content_read, PermissionScope.global_scope
+    ),
+    Permission.content_manage: PermissionDefinition(
+        Permission.content_manage, PermissionScope.object_scope
+    ),
     Permission.deal_read: PermissionDefinition(Permission.deal_read, PermissionScope.global_scope),
-    Permission.deal_manage: PermissionDefinition(Permission.deal_manage, PermissionScope.object_scope),
-    Permission.email_read: PermissionDefinition(Permission.email_read, PermissionScope.global_scope),
-    Permission.email_generate: PermissionDefinition(Permission.email_generate, PermissionScope.global_scope),
-    Permission.image_search: PermissionDefinition(Permission.image_search, PermissionScope.global_scope),
-    Permission.knowledge_read: PermissionDefinition(Permission.knowledge_read, PermissionScope.global_scope),
+    Permission.deal_manage: PermissionDefinition(
+        Permission.deal_manage, PermissionScope.object_scope
+    ),
+    Permission.email_read: PermissionDefinition(
+        Permission.email_read, PermissionScope.global_scope
+    ),
+    Permission.email_generate: PermissionDefinition(
+        Permission.email_generate, PermissionScope.global_scope
+    ),
+    Permission.image_search: PermissionDefinition(
+        Permission.image_search, PermissionScope.global_scope
+    ),
+    Permission.knowledge_read: PermissionDefinition(
+        Permission.knowledge_read, PermissionScope.global_scope
+    ),
     Permission.knowledge_manage: PermissionDefinition(
         Permission.knowledge_manage, PermissionScope.object_scope
     ),
     Permission.user_read: PermissionDefinition(Permission.user_read, PermissionScope.global_scope),
-    Permission.user_manage: PermissionDefinition(Permission.user_manage, PermissionScope.global_scope),
+    Permission.user_manage: PermissionDefinition(
+        Permission.user_manage, PermissionScope.global_scope
+    ),
     Permission.user_approve_registration: PermissionDefinition(
         Permission.user_approve_registration, PermissionScope.global_scope
     ),
-    Permission.audit_view: PermissionDefinition(Permission.audit_view, PermissionScope.global_scope),
+    Permission.audit_view: PermissionDefinition(
+        Permission.audit_view, PermissionScope.global_scope
+    ),
 }
 
 

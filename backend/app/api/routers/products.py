@@ -471,7 +471,8 @@ def import_products_csv(
 
 @router.post("/auto-archive/run")
 def trigger_auto_archive(
-    db: Session = Depends(get_db), _: User = Depends(require_permission(Permission.product_auto_archive))
+    db: Session = Depends(get_db),
+    _: User = Depends(require_permission(Permission.product_auto_archive)),
 ) -> dict:
     summary = apply_auto_archive_rules(db)
     return summary
