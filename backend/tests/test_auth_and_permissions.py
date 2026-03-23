@@ -7,8 +7,7 @@ from sqlalchemy.orm import Session
 from app.api import deps
 from app.core.config import settings
 from app.models.audit import AuditLog
-from app.models.auth_session import AuthSession
-from app.models.auth_session import RevokedToken
+from app.models.auth_session import AuthSession, RevokedToken
 from app.models.product import Product
 from app.models.registration_request import RegistrationRequest, RegistrationRequestStatus
 from app.models.user import UserRole
