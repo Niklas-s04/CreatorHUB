@@ -216,7 +216,10 @@ def create_app() -> FastAPI:
             {"name": "deals", "description": "Sponsoring/deal intake and draft tracking"},
             {"name": "audit", "description": "System and domain event audit trail"},
             {"name": "dashboard", "description": "Role-aware operational dashboard metrics"},
-            {"name": "operations", "description": "Central operations inbox for open approvals and todos"},
+            {
+                "name": "operations",
+                "description": "Central operations inbox for open approvals and todos",
+            },
         ],
     )
 

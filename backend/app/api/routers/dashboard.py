@@ -170,7 +170,9 @@ def get_dashboard_summary(
         registration_query = db.query(RegistrationRequest).filter(
             RegistrationRequest.status == RegistrationRequestStatus.pending
         )
-        registration_items = registration_query.order_by(RegistrationRequest.created_at.desc()).limit(5).all()
+        registration_items = (
+            registration_query.order_by(RegistrationRequest.created_at.desc()).limit(5).all()
+        )
         metrics.append(
             DashboardMetric(
                 key="pending_registration_requests",

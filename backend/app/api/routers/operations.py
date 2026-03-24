@@ -14,7 +14,12 @@ from app.models.content import ContentTask, TaskStatus
 from app.models.email import EmailDraft
 from app.models.registration_request import RegistrationRequest, RegistrationRequestStatus
 from app.models.user import User, UserRole
-from app.schemas.operations import OperationDueFilter, OperationInboxItem, OperationInboxOut, OperationPriority
+from app.schemas.operations import (
+    OperationDueFilter,
+    OperationInboxItem,
+    OperationInboxOut,
+    OperationPriority,
+)
 
 router = APIRouter()
 
@@ -122,8 +127,14 @@ def operations_inbox(
         )
         for asset in assets:
             due_at = asset.created_at + timedelta(days=2) if asset.created_at else None
-            is_old = bool(asset.created_at and (now - _to_aware_datetime(asset.created_at)).days >= 3)
-            priority_value: OperationPriority = "critical" if asset.review_state == AssetReviewState.quarantine else ("high" if is_old else "medium")
+            is_old = bool(
+                asset.created_at and (now - _to_aware_datetime(asset.created_at)).days >= 3
+            )
+            priority_value: OperationPriority = (
+                "critical"
+                if asset.review_state == AssetReviewState.quarantine
+                else ("high" if is_old else "medium")
+            )
             items.append(
                 OperationInboxItem(
                     id=f"asset:{asset.id}",
@@ -152,8 +163,10 @@ def operations_inbox(
         )
         for req in requests:
             due_at = req.created_at + timedelta(days=1) if req.created_at else None
-            escalated = bool(req.created_at and (now - _to_aware_datetime(req.created_at)) >= timedelta(hours=48))
-            priority_value: OperationPriority = "high" if escalated else "medium"
+            escalated = bool(
+                req.created_at and (now - _to_aware_datetime(req.created_at)) >= timedelta(hours=48)
+            )
+            registration_priority: OperationPriority = "high" if escalated else "medium"
             items.append(
                 OperationInboxItem(
                     id=f"registration:{req.id}",
@@ -162,7 +175,7 @@ def operations_inbox(
                     description="Freigabe ausstehend",
                     source_route="/admin",
                     source_id=str(req.id),
-                    priority=priority_value,
+                    priority=registration_priority,
                     escalation=escalated,
                     due_at=due_at,
                     created_at=req.created_at,
@@ -191,7 +204,7 @@ def operations_inbox(
         )
         for draft in drafts:
             risk_count = _risk_flag_count(draft.risk_flags)
-            priority_value: OperationPriority = "critical" if risk_count >= 3 else "high"
+            email_priority: OperationPriority = "critical" if risk_count >= 3 else "high"
             items.append(
                 OperationInboxItem(
                     id=f"email:{draft.id}",
@@ -200,7 +213,7 @@ def operations_inbox(
                     description=f"{risk_count} Risk-Flags",
                     source_route="/email",
                     source_id=str(draft.id),
-                    priority=priority_value,
+                    priority=email_priority,
                     escalation=True,
                     due_at=draft.updated_at + timedelta(days=1) if draft.updated_at else None,
                     created_at=draft.created_at,
@@ -229,7 +242,7 @@ def operations_inbox(
         )
         for task in overdue_tasks:
             overdue_days = (today - task.due_date).days if task.due_date else 0
-            priority_value: OperationPriority = (
+            content_priority: OperationPriority = (
                 "critical" if overdue_days >= 7 else "high" if overdue_days >= 3 else "medium"
             )
             items.append(
@@ -240,8 +253,8 @@ def operations_inbox(
                     description=f"Status {task.status.value} · {overdue_days} Tage überfällig",
                     source_route="/content",
                     source_id=str(task.id),
-                    priority=priority_value,
-                    escalation=priority_value in {"high", "critical"},
+                    priority=content_priority,
+                    escalation=content_priority in {"high", "critical"},
                     due_at=task.due_date,
                     created_at=task.created_at,
                     updated_at=task.updated_at,
