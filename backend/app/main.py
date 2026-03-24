@@ -18,11 +18,13 @@ from app.api.routers import (
     audit,
     auth,
     content,
+    dashboard,
     deals,
     email,
     health,
     images,
     knowledge,
+    operations,
     products,
 )
 from app.core.config import settings
@@ -213,6 +215,8 @@ def create_app() -> FastAPI:
             {"name": "knowledge", "description": "Knowledge documents for AI and policy context"},
             {"name": "deals", "description": "Sponsoring/deal intake and draft tracking"},
             {"name": "audit", "description": "System and domain event audit trail"},
+            {"name": "dashboard", "description": "Role-aware operational dashboard metrics"},
+            {"name": "operations", "description": "Central operations inbox for open approvals and todos"},
         ],
     )
 
@@ -266,6 +270,16 @@ def create_app() -> FastAPI:
     app.include_router(knowledge.router, prefix=f"{API_BASE_PREFIX}/knowledge", tags=["knowledge"])
     app.include_router(deals.router, prefix=f"{API_BASE_PREFIX}/deals", tags=["deals"])
     app.include_router(audit.router, prefix=f"{API_BASE_PREFIX}/audit", tags=["audit"])
+    app.include_router(
+        dashboard.router,
+        prefix=f"{API_BASE_PREFIX}/dashboard",
+        tags=["dashboard"],
+    )
+    app.include_router(
+        operations.router,
+        prefix=f"{API_BASE_PREFIX}/operations",
+        tags=["operations"],
+    )
 
     app.include_router(
         auth.router, prefix=f"{LEGACY_API_PREFIX}/auth", tags=["auth"], deprecated=True
@@ -299,6 +313,18 @@ def create_app() -> FastAPI:
     )
     app.include_router(
         audit.router, prefix=f"{LEGACY_API_PREFIX}/audit", tags=["audit"], deprecated=True
+    )
+    app.include_router(
+        dashboard.router,
+        prefix=f"{LEGACY_API_PREFIX}/dashboard",
+        tags=["dashboard"],
+        deprecated=True,
+    )
+    app.include_router(
+        operations.router,
+        prefix=f"{LEGACY_API_PREFIX}/operations",
+        tags=["operations"],
+        deprecated=True,
     )
 
     return app

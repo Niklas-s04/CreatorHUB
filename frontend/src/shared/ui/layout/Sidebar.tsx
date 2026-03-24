@@ -1,43 +1,7 @@
 import { NavLink } from "react-router-dom";
-import { logout, type Permission } from "../../../api";
+import { logout } from "../../../api";
 import { useAuthz } from "../../hooks/useAuthz";
-
-type NavItem = {
-  to: string;
-  label: string;
-  icon: string;
-  requiredPermission?: Permission;
-};
-
-type NavSection = {
-  title: string;
-  items: NavItem[];
-};
-
-const NAV_SECTIONS: NavSection[] = [
-  {
-    title: "Hauptmenü",
-    items: [
-      { to: "/dashboard", label: "Dashboard", icon: "◧" },
-      { to: "/products", label: "Produkte", icon: "◫" },
-      { to: "/assets", label: "Assets", icon: "◩" },
-    ],
-  },
-  {
-    title: "Inhalte",
-    items: [
-      { to: "/content", label: "Content", icon: "✎" },
-      { to: "/email", label: "E-Mail", icon: "✉" },
-    ],
-  },
-  {
-    title: "System",
-    items: [
-      { to: "/settings", label: "Einstellungen", icon: "⚙" },
-      { to: "/admin", label: "Admin", icon: "⌘", requiredPermission: "user.approve_registration" },
-    ],
-  },
-];
+import { NAV_SECTIONS_TASK_BASED } from "../../navigation/navConfig";
 
 export default function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   const { hasPermission } = useAuthz();
@@ -51,7 +15,7 @@ export default function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
     <aside className="sidebar">
       <div className="sidebar-brand">CreatorHUB</div>
       <div className="sidebar-nav">
-        {NAV_SECTIONS.map(section => (
+        {NAV_SECTIONS_TASK_BASED.map(section => (
           <div className="sidebar-section" key={section.title}>
             <div className="sidebar-section-title">{section.title}</div>
             {section.items

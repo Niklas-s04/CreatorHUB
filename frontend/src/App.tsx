@@ -12,7 +12,10 @@ import AssetsPage from "./pages/AssetsPage";
 import LoginPage from "./pages/LoginPage";
 import { checkSession } from "./api";
 import AdminPage from "./pages/AdminPage";
+import AuditPage from "./pages/AuditPage";
+import OperationsPage from "./pages/OperationsPage";
 import { GlobalLoading } from "./shared/ui/states/GlobalLoading";
+import { Breadcrumbs } from "./shared/ui/navigation/Breadcrumbs";
 
 function RequireAuth() {
   const [state, setState] = useState<"loading" | "ok" | "no">("loading");
@@ -63,6 +66,7 @@ function AppLayout() {
       <div className="app-main">
         <TopBar onToggleMenu={() => setMenuOpen(v => !v)} />
         <main className="main-content">
+          <Breadcrumbs />
           <Outlet />
         </main>
       </div>
@@ -80,6 +84,7 @@ export default function App() {
         <Route element={<AppLayout />}>
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
           <Route path="/dashboard" element={<DashboardPage />} />
+          <Route path="/operations" element={<OperationsPage />} />
           <Route path="/products" element={<ProductsPage />} />
           <Route path="/products/:id" element={<ProductDetailPage />} />
           <Route path="/assets" element={<AssetsPage />} />
@@ -87,6 +92,7 @@ export default function App() {
           <Route path="/email" element={<EmailPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/admin" element={<AdminPage />} />
+          <Route path="/audit" element={<AuditPage />} />
         </Route>
       </Route>
       <Route path="*" element={<Navigate to="/dashboard" replace />} />

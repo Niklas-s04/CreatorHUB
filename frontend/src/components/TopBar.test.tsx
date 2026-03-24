@@ -1,4 +1,5 @@
 import { fireEvent, render, screen } from '@testing-library/react'
+import { MemoryRouter } from 'react-router-dom'
 
 import TopBar from './TopBar'
 
@@ -6,7 +7,11 @@ describe('TopBar', () => {
   it('rendert Suchfeld und triggert Menü-Callback', () => {
     const onToggleMenu = vi.fn()
 
-    render(<TopBar onToggleMenu={onToggleMenu} />)
+    render(
+      <MemoryRouter>
+        <TopBar onToggleMenu={onToggleMenu} />
+      </MemoryRouter>
+    )
 
     expect(screen.getByLabelText('Suchen')).toBeInTheDocument()
     expect(screen.getByLabelText('Benachrichtigungen')).toBeInTheDocument()

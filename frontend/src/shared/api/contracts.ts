@@ -73,6 +73,8 @@ export type ProductDetailVm = {
   model: string
   status: ProductStatusDto
   condition: string
+  currentValue: number | null
+  currency: string
   notes: string
 }
 

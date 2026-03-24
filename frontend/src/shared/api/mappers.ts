@@ -33,6 +33,8 @@ export function toProductDetailVm(dto: ProductDto): ProductDetailVm {
     model: dto.model ?? '',
     status: dto.status,
     condition: dto.condition ?? '',
+    currentValue: dto.current_value,
+    currency: dto.currency ?? '',
     notes: dto.notes_md ?? '',
   }
 }

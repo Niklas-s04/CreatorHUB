@@ -110,17 +110,17 @@ export function useUpdateProductNotesMutation() {
 type ChangeStatusInput = {
   id: string
   status: string
-  tx_date: string
+  date: string
   amount: number | null
 }
 
 export function useChangeProductStatusMutation() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: async ({ id, status, tx_date, amount }: ChangeStatusInput) => {
+    mutationFn: async ({ id, status, date, amount }: ChangeStatusInput) => {
       await apiFetch(`/products/${id}/status`, {
         method: 'POST',
-        body: JSON.stringify({ status, tx_date, amount }),
+        body: JSON.stringify({ status, date, amount }),
       })
       return { id }
     },
