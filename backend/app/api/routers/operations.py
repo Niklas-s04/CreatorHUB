@@ -239,6 +239,49 @@ def operations_inbox(
                     ContentTask.due_date < today,
                 )
             )
+            .order_by(ContentTask.due_date.asc())
+            .limit(limit)
+            .all()
+        )
+        assignee_ids = [task.assignee_user_id for task in overdue_tasks if task.assignee_user_id]
+        assignee_map: dict[str, str] = {}
+        if assignee_ids:
+            users = db.query(User).filter(User.id.in_(assignee_ids)).all()
+            assignee_map = {str(user.id): user.username for user in users}
+        for task in overdue_tasks:
+            overdue_days = (today - task.due_date).days if task.due_date else 0
+            if task.priority == TaskPriority.critical:
+                content_priority: OperationPriority = "critical"
+            elif task.priority == TaskPriority.high:
+                content_priority = "high"
+            else:
+                content_priority = "critical" if overdue_days >= 7 else "high" if overdue_days >= 3 else "medium"
+
+            assignee_username = None
+            if task.assignee_user_id:
+                assignee_username = assignee_map.get(str(task.assignee_user_id))
+            elif task.assignee_role:
+                assignee_username = f"role:{task.assignee_role.value}"
+
+            items.append(
+                OperationInboxItem(
+                    id=f"content:{task.id}",
+                    kind="content_overdue",
+                    title=f"Überfällige Task: {task.type.value}",
+                    description=(
+                        f"Status {task.status.value} · Priorität {task.priority.value} · {overdue_days} Tage überfällig"
+                    ),
+                    source_route="/content",
+                    source_id=str(task.id),
+                    priority=content_priority,
+                    escalation=content_priority in {"high", "critical"},
+                    due_at=task.due_date,
+                    created_at=task.created_at,
+                    updated_at=task.updated_at,
+                    assignee_username=assignee_username,
+                    responsible_role="editor",
+                )
+            )
 
     if has_permission(current_user, Permission.deal_manage) or has_permission(
         current_user, Permission.deal_read
@@ -271,7 +314,7 @@ def operations_inbox(
                     responsible_role="editor",
                 )
             )
-
+ 
     if has_permission(current_user, Permission.product_read):
         products = db.query(Product).order_by(Product.updated_at.desc()).limit(limit).all()
         for product in products:
@@ -343,49 +386,6 @@ def operations_inbox(
                         responsible_role="editor",
                     )
                 )
-            .order_by(ContentTask.due_date.asc())
-            .limit(limit)
-            .all()
-        )
-        assignee_ids = [task.assignee_user_id for task in overdue_tasks if task.assignee_user_id]
-        assignee_map: dict[str, str] = {}
-        if assignee_ids:
-            users = db.query(User).filter(User.id.in_(assignee_ids)).all()
-            assignee_map = {str(user.id): user.username for user in users}
-        for task in overdue_tasks:
-            overdue_days = (today - task.due_date).days if task.due_date else 0
-            if task.priority == TaskPriority.critical:
-                content_priority: OperationPriority = "critical"
-            elif task.priority == TaskPriority.high:
-                content_priority = "high"
-            else:
-                content_priority = "critical" if overdue_days >= 7 else "high" if overdue_days >= 3 else "medium"
-
-            assignee_username = None
-            if task.assignee_user_id:
-                assignee_username = assignee_map.get(str(task.assignee_user_id))
-            elif task.assignee_role:
-                assignee_username = f"role:{task.assignee_role.value}"
-
-            items.append(
-                OperationInboxItem(
-                    id=f"content:{task.id}",
-                    kind="content_overdue",
-                    title=f"Überfällige Task: {task.type.value}",
-                    description=(
-                        f"Status {task.status.value} · Priorität {task.priority.value} · {overdue_days} Tage überfällig"
-                    ),
-                    source_route="/content",
-                    source_id=str(task.id),
-                    priority=content_priority,
-                    escalation=content_priority in {"high", "critical"},
-                    due_at=task.due_date,
-                    created_at=task.created_at,
-                    updated_at=task.updated_at,
-                    assignee_username=assignee_username,
-                    responsible_role="editor",
-                )
-            )
 
     items.sort(
         key=lambda entry: (

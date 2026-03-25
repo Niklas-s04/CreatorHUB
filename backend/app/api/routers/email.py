@@ -8,9 +8,9 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, get_db, require_permission
-from app.models.base import utcnow
 from app.api.querying import apply_sorting, pagination_params, to_page
 from app.core.authorization import Permission
+from app.models.base import utcnow
 from app.models.email import (
     EmailDraft,
     EmailIntent,

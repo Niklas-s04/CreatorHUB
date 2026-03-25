@@ -15,8 +15,7 @@ from app.api.deps import (
 from app.api.querying import apply_sorting, pagination_params, to_page
 from app.core.authorization import Permission
 from app.models.content import ContentItem, ContentTask, TaskPriority, TaskStatus
-from app.models.user import UserRole
-from app.models.user import User
+from app.models.user import User, UserRole
 from app.schemas.common import Page, SortOrder
 from app.schemas.content import (
     ContentItemCreate,

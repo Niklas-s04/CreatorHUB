@@ -8,6 +8,7 @@ from app.models.asset import AssetKind, AssetOwnerType, AssetReviewState
 from app.models.content import ContentStatus
 from app.models.product import ProductStatus
 from app.models.registration_request import RegistrationRequestStatus
+from app.models.workflow import WorkflowStatus
 from app.services.domain_rules import (
     validate_asset_consistency,
     validate_asset_review_state_change,
@@ -17,7 +18,6 @@ from app.services.domain_rules import (
 )
 from app.services.errors import BusinessRuleViolation
 from app.services.workflow import validate_workflow_status_change
-from app.models.workflow import WorkflowStatus
 
 
 def test_product_status_transition_rejects_invalid_reopen_from_archived() -> None:

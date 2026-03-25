@@ -8,18 +8,32 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from app.models.audit import AuditLog
 from app.models.asset import Asset, AssetKind, AssetOwnerType, AssetReviewState, AssetSource
-from app.models.content import ContentItem, ContentStatus, ContentTask, ContentType
-from app.models.content import ContentTaskView, TaskPriority, TaskStatus, TaskType
+from app.models.audit import AuditLog
+from app.models.content import (
+    ContentItem,
+    ContentStatus,
+    ContentTask,
+    ContentTaskView,
+    ContentType,
+    TaskPriority,
+    TaskStatus,
+    TaskType,
+)
 from app.models.deal import DealDraft, DealDraftStatus
 from app.models.email import EmailThread
 from app.models.knowledge import KnowledgeDoc
 from app.models.product import Product
 from app.models.user import User, UserRole
 from app.models.workflow import WorkflowStatus
-from app.schemas.content import ContentItemCreate, ContentItemUpdate, ContentTaskUpdate
-from app.schemas.content import ContentTaskCreate, ContentTaskFilterParams, ContentTaskViewCreate
+from app.schemas.content import (
+    ContentItemCreate,
+    ContentItemUpdate,
+    ContentTaskCreate,
+    ContentTaskFilterParams,
+    ContentTaskUpdate,
+    ContentTaskViewCreate,
+)
 from app.schemas.deal import DealDraftIntakeRequest, DealDraftUpdate
 from app.schemas.knowledge import KnowledgeDocCreate, KnowledgeDocUpdate
 from app.services import content_service, deal_service, knowledge_service
