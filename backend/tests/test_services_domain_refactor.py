@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Generator
+from datetime import date
 
 import pytest
 from sqlalchemy import create_engine
@@ -8,22 +9,31 @@ from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.models.audit import AuditLog
+from app.models.asset import Asset, AssetKind, AssetOwnerType, AssetReviewState, AssetSource
 from app.models.content import ContentItem, ContentStatus, ContentTask, ContentType
-from app.models.deal import DealDraft
+from app.models.content import ContentTaskView, TaskPriority, TaskStatus, TaskType
+from app.models.deal import DealDraft, DealDraftStatus
 from app.models.email import EmailThread
 from app.models.knowledge import KnowledgeDoc
+from app.models.product import Product
 from app.models.user import User, UserRole
+from app.models.workflow import WorkflowStatus
 from app.schemas.content import ContentItemCreate, ContentItemUpdate, ContentTaskUpdate
+from app.schemas.content import ContentTaskCreate, ContentTaskFilterParams, ContentTaskViewCreate
 from app.schemas.deal import DealDraftIntakeRequest, DealDraftUpdate
 from app.schemas.knowledge import KnowledgeDocCreate, KnowledgeDocUpdate
 from app.services import content_service, deal_service, knowledge_service
 from app.services.errors import BusinessRuleViolation
+from app.services.sales_workflow import finalize_product_sale
 
 TEST_TABLES = [
     User.__table__,
+    Product.__table__,
+    Asset.__table__,
     KnowledgeDoc.__table__,
     ContentItem.__table__,
     ContentTask.__table__,
+    ContentTaskView.__table__,
     EmailThread.__table__,
     DealDraft.__table__,
     AuditLog.__table__,
@@ -163,6 +173,47 @@ def test_content_service_rejects_invalid_status_transition(service_db: Session) 
         )
 
 
+def test_content_service_enforces_re_review_after_relevant_change(service_db: Session) -> None:
+    admin = _create_admin(service_db, username="admin_review")
+    item = content_service.create_item(
+        service_db,
+        payload=ContentItemCreate(title="Video Workflow"),
+        actor=admin,
+    )
+
+    approved = content_service.update_item(
+        service_db,
+        item_id=item.id,
+        payload=ContentItemUpdate(
+            workflow_status=WorkflowStatus.in_review,
+            review_reason="Ready for editorial review",
+        ),
+        actor=admin,
+    )
+    assert approved.workflow_status == WorkflowStatus.in_review
+
+    approved = content_service.update_item(
+        service_db,
+        item_id=item.id,
+        payload=ContentItemUpdate(
+            workflow_status=WorkflowStatus.approved,
+            review_reason="Editorially approved",
+        ),
+        actor=admin,
+    )
+    assert approved.workflow_status == WorkflowStatus.approved
+
+    changed = content_service.update_item(
+        service_db,
+        item_id=item.id,
+        payload=ContentItemUpdate(title="Video Workflow v2"),
+        actor=admin,
+    )
+    assert changed.workflow_status == WorkflowStatus.in_review
+    assert changed.review_reason is not None
+    assert "changes" in changed.review_reason.lower()
+
+
 def test_deal_service_upsert_and_update(
     monkeypatch: pytest.MonkeyPatch, service_db: Session
 ) -> None:
@@ -201,3 +252,139 @@ def test_deal_service_upsert_and_update(
     assert service_db.query(DealDraft).count() == 1
     assert service_db.query(AuditLog).filter(AuditLog.action == "deals.draft.create").count() == 1
     assert service_db.query(AuditLog).filter(AuditLog.action == "deals.draft.update").count() == 1
+
+
+def test_deal_service_blocks_negotiating_when_required_checklist_open(
+    monkeypatch: pytest.MonkeyPatch, service_db: Session
+) -> None:
+    admin = _create_admin(service_db, username="admin_deal_check")
+    thread = _create_email_thread(service_db)
+
+    def _fake_extract(*_args, **_kwargs) -> dict[str, str | None]:
+        return {
+            "brand_name": "BrandY",
+            "contact_name": "Jordan",
+            "contact_email": "jordan@example.com",
+            "budget": "1200 EUR",
+            "deliverables": "1 post",
+            "usage_rights": "organic",
+            "deadlines": "soon",
+            "notes": "intake",
+        }
+
+    monkeypatch.setattr(deal_service, "extract_deal_intake", _fake_extract)
+
+    draft = deal_service.create_or_update_from_email(
+        service_db,
+        payload=DealDraftIntakeRequest(thread_id=thread.id, auto_extract=True),
+        actor=admin,
+    )
+
+    with pytest.raises(BusinessRuleViolation, match="required checklist items missing"):
+        deal_service.update_deal_draft(
+            service_db,
+            deal_id=draft.id,
+            payload=DealDraftUpdate(status=DealDraftStatus.negotiating),
+            actor=admin,
+        )
+
+
+def test_sales_finalize_archives_linked_entities(service_db: Session) -> None:
+    admin = _create_admin(service_db, username="admin_sales")
+    product = Product(title="Phone", status="active")
+    service_db.add(product)
+    service_db.commit()
+    service_db.refresh(product)
+
+    deal = DealDraft(product_id=product.id, status=DealDraftStatus.review)
+    content = ContentItem(product_id=product.id, title="Review", status=ContentStatus.draft)
+    asset = Asset(
+        owner_type=AssetOwnerType.product,
+        owner_id=product.id,
+        kind=AssetKind.image,
+        source=AssetSource.upload,
+        review_state=AssetReviewState.approved,
+        local_path="/tmp/a.png",
+        workflow_status=WorkflowStatus.approved,
+    )
+    service_db.add_all([deal, content, asset])
+    service_db.commit()
+
+    finalize_product_sale(
+        service_db,
+        product=product,
+        sold_date=content.created_at.date(),
+        actor=admin,
+        reason="Sold and closed",
+    )
+    service_db.commit()
+
+    service_db.refresh(deal)
+    service_db.refresh(content)
+    service_db.refresh(asset)
+
+    assert deal.status == DealDraftStatus.won
+    assert deal.workflow_status == WorkflowStatus.archived
+    assert content.workflow_status == WorkflowStatus.archived
+    assert asset.workflow_status == WorkflowStatus.archived
+    assert service_db.query(AuditLog).filter(AuditLog.action == "sales.workflow.finalized").count() == 1
+
+
+def test_content_task_assignment_and_personal_worklist(service_db: Session) -> None:
+    admin = _create_admin(service_db, username="owner_admin")
+    editor = _create_admin(service_db, username="worker_editor")
+    editor.role = UserRole.editor
+    service_db.add(editor)
+    service_db.commit()
+
+    item = content_service.create_item(
+        service_db,
+        payload=ContentItemCreate(type=ContentType.review, title="Personal Task Flow"),
+        actor=admin,
+    )
+
+    task = content_service.create_task(
+        service_db,
+        payload=ContentTaskCreate(
+            content_item_id=item.id,
+            type=TaskType.script,
+            status=TaskStatus.todo,
+            priority=TaskPriority.high,
+            assignee_user_id=editor.id,
+            due_date=date.today(),
+        ),
+        actor=admin,
+    )
+
+    assert task.priority == TaskPriority.high
+    assert task.assignee_user_id == editor.id
+    assert task.notified_at is not None
+
+    personal = content_service.list_personal_tasks(
+        service_db,
+        user=editor,
+        filters=ContentTaskFilterParams(priority=TaskPriority.high),
+    )
+    assert any(entry.id == task.id for entry in personal)
+
+
+def test_content_task_saved_views(service_db: Session) -> None:
+    admin = _create_admin(service_db, username="view_owner")
+
+    created_view = content_service.create_task_view(
+        service_db,
+        user=admin,
+        payload=ContentTaskViewCreate(
+            name="Meine High Priority",
+            filters={"priority": "high", "overdue_only": True},
+        ),
+    )
+    assert created_view.name == "Meine High Priority"
+    assert created_view.filters.get("priority") == "high"
+
+    listed = content_service.list_task_views(service_db, user=admin)
+    assert any(entry.id == created_view.id for entry in listed)
+
+    content_service.delete_task_view(service_db, view_id=created_view.id, user=admin)
+    listed_after = content_service.list_task_views(service_db, user=admin)
+    assert all(entry.id != created_view.id for entry in listed_after)

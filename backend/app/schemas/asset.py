@@ -7,6 +7,7 @@ from typing import Optional
 from pydantic import BaseModel
 
 from app.models.asset import AssetKind, AssetOwnerType, AssetReviewState, AssetSource
+from app.models.workflow import WorkflowStatus
 
 
 class AssetBase(BaseModel):
@@ -33,6 +34,8 @@ class AssetBase(BaseModel):
     perceptual_hash: Optional[str] = None
 
     review_state: AssetReviewState = AssetReviewState.pending_review
+    workflow_status: WorkflowStatus = WorkflowStatus.draft
+    review_reason: Optional[str] = None
     is_primary: bool = False
 
 
@@ -49,11 +52,16 @@ class AssetUpdate(BaseModel):
     license_url: Optional[str] = None
     fetched_at: Optional[datetime] = None
     review_state: Optional[AssetReviewState] = None
+    workflow_status: Optional[WorkflowStatus] = None
+    review_reason: Optional[str] = None
     is_primary: Optional[bool] = None
 
 
 class AssetOut(AssetBase):
     id: uuid.UUID
+    reviewed_by_id: uuid.UUID | None
+    reviewed_by_name: Optional[str]
+    reviewed_at: Optional[datetime]
     created_at: datetime
     updated_at: datetime
 

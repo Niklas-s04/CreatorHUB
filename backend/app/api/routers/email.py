@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, get_db, require_permission
+from app.models.base import utcnow
 from app.api.querying import apply_sorting, pagination_params, to_page
 from app.core.authorization import Permission
 from app.models.email import (
@@ -20,15 +21,30 @@ from app.models.email import (
 from app.models.user import User
 from app.schemas.common import Page, SortOrder
 from app.schemas.email import (
+    EmailDraftApprovalRequest,
     EmailDraftOut,
     EmailDraftRequest,
     EmailRefineRequest,
     EmailThreadDetailOut,
     EmailThreadOut,
 )
+from app.services.audit import record_audit_log
+from app.services.domain_events import emit_domain_event
 from app.services.email_assistant import generate_email_draft, refine_email_draft
 
 router = APIRouter()
+
+
+def _risk_score(raw_flags: str | None) -> int:
+    if not raw_flags:
+        return 0
+    try:
+        parsed = json.loads(raw_flags)
+        if isinstance(parsed, list):
+            return len(parsed)
+    except (ValueError, TypeError):
+        return 0
+    return 0
 
 
 def _log_thread_message(
@@ -71,6 +87,8 @@ def create_draft(
         draft_body=result.get("draft_body") or "",
         questions_to_ask=json.dumps(result.get("questions_to_ask") or [], ensure_ascii=False),
         risk_flags=json.dumps(result.get("risk_flags") or [], ensure_ascii=False),
+        risk_score=len(result.get("risk_flags") or []),
+        risk_checked_at=utcnow(),
         approved=False,
     )
     _log_thread_message(
@@ -101,6 +119,32 @@ def create_draft(
 
     db.commit()
     db.refresh(draft)
+    record_audit_log(
+        db,
+        actor=None,
+        action="email.draft.create",
+        entity_type="email_draft",
+        entity_id=str(draft.id),
+        description="Generated email draft with risk analysis",
+        after={
+            "risk_score": draft.risk_score,
+            "approved": draft.approved,
+            "thread_id": str(draft.thread_id),
+        },
+    )
+    emit_domain_event(
+        db,
+        actor=None,
+        event_name="email.risk.checked",
+        entity_type="email_draft",
+        entity_id=str(draft.id),
+        payload={
+            "risk_score": draft.risk_score,
+            "risk_flags": result.get("risk_flags") or [],
+        },
+        description="Email draft risk check completed",
+    )
+    db.commit()
     return draft
 
 
@@ -145,6 +189,8 @@ def refine_draft(
         draft_body=result.get("draft_body") or "",
         questions_to_ask=json.dumps(result.get("questions_to_ask") or [], ensure_ascii=False),
         risk_flags=json.dumps(result.get("risk_flags") or [], ensure_ascii=False),
+        risk_score=len(result.get("risk_flags") or []),
+        risk_checked_at=utcnow(),
         approved=False,
     )
     qa_lines = []
@@ -188,6 +234,97 @@ def refine_draft(
             "action": "draft_refine_response",
             **result,
         },
+    )
+
+    db.commit()
+    db.refresh(draft)
+    record_audit_log(
+        db,
+        actor=None,
+        action="email.draft.refine",
+        entity_type="email_draft",
+        entity_id=str(draft.id),
+        description="Refined email draft with risk analysis",
+        after={
+            "risk_score": draft.risk_score,
+            "approved": draft.approved,
+            "thread_id": str(draft.thread_id),
+        },
+    )
+    emit_domain_event(
+        db,
+        actor=None,
+        event_name="email.risk.checked",
+        entity_type="email_draft",
+        entity_id=str(draft.id),
+        payload={
+            "risk_score": draft.risk_score,
+            "risk_flags": result.get("risk_flags") or [],
+        },
+        description="Email draft risk check completed",
+    )
+    db.commit()
+    return draft
+
+
+@router.patch("/drafts/{draft_id}/approval", response_model=EmailDraftOut)
+def set_draft_approval(
+    draft_id: uuid.UUID,
+    payload: EmailDraftApprovalRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission(Permission.email_generate)),
+) -> EmailDraftOut:
+    draft = db.query(EmailDraft).filter(EmailDraft.id == draft_id).first()
+    if not draft:
+        raise HTTPException(status_code=404, detail="Draft not found")
+
+    reason = (payload.reason or "").strip() or None
+    if draft.risk_score >= 3 and payload.approved and not reason:
+        raise HTTPException(
+            status_code=400,
+            detail="Approval reason required for high-risk drafts",
+        )
+
+    before = {
+        "approved": draft.approved,
+        "approval_reason": draft.approval_reason,
+        "risk_score": draft.risk_score,
+    }
+
+    draft.approved = payload.approved
+    draft.approval_reason = reason
+    draft.approved_at = utcnow()
+    draft.approved_by_id = current_user.id
+    draft.approved_by_name = current_user.username
+
+    record_audit_log(
+        db,
+        actor=current_user,
+        action="email.draft.approval",
+        entity_type="email_draft",
+        entity_id=str(draft.id),
+        description=("Approved" if draft.approved else "Rejected") + " email draft",
+        before=before,
+        after={
+            "approved": draft.approved,
+            "approval_reason": draft.approval_reason,
+            "approved_at": draft.approved_at.isoformat() if draft.approved_at else None,
+            "approved_by_id": str(draft.approved_by_id) if draft.approved_by_id else None,
+            "approved_by_name": draft.approved_by_name,
+        },
+    )
+    emit_domain_event(
+        db,
+        actor=current_user,
+        event_name="email.draft.approval.changed",
+        entity_type="email_draft",
+        entity_id=str(draft.id),
+        payload={
+            "approved": draft.approved,
+            "risk_score": draft.risk_score,
+            "approval_reason": draft.approval_reason,
+        },
+        description="Email draft approval updated",
     )
 
     db.commit()

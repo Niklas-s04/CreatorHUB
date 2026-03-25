@@ -9,9 +9,11 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, get_db
 from app.core.authorization import Permission, has_permission
-from app.models.asset import Asset, AssetReviewState
-from app.models.content import ContentTask, TaskStatus
+from app.models.asset import Asset, AssetOwnerType, AssetReviewState
+from app.models.content import ContentItem, ContentTask, TaskPriority, TaskStatus
+from app.models.deal import DealDraft, DealDraftStatus
 from app.models.email import EmailDraft
+from app.models.product import Product
 from app.models.registration_request import RegistrationRequest, RegistrationRequestStatus
 from app.models.user import User, UserRole
 from app.schemas.operations import (
@@ -20,6 +22,7 @@ from app.schemas.operations import (
     OperationInboxOut,
     OperationPriority,
 )
+from app.services.deal_checklists import missing_required_items
 
 router = APIRouter()
 
@@ -236,21 +239,142 @@ def operations_inbox(
                     ContentTask.due_date < today,
                 )
             )
+
+    if has_permission(current_user, Permission.deal_manage) or has_permission(
+        current_user, Permission.deal_read
+    ):
+        open_deals = (
+            db.query(DealDraft)
+            .filter(DealDraft.status.in_([DealDraftStatus.review, DealDraftStatus.negotiating]))
+            .order_by(DealDraft.updated_at.desc())
+            .limit(limit)
+            .all()
+        )
+        for deal in open_deals:
+            missing_items = missing_required_items(deal.checklist)
+            if not missing_items:
+                continue
+            items.append(
+                OperationInboxItem(
+                    id=f"deal-checklist:{deal.id}",
+                    kind="deal_checklist",
+                    title=deal.brand_name or deal.contact_name or "Deal ohne Namen",
+                    description=f"Pflichtpunkte offen: {', '.join(missing_items)}",
+                    source_route="/deals",
+                    source_id=str(deal.id),
+                    priority="high",
+                    escalation=True,
+                    due_at=deal.updated_at + timedelta(days=1) if deal.updated_at else None,
+                    created_at=deal.created_at,
+                    updated_at=deal.updated_at,
+                    assignee_username=None,
+                    responsible_role="editor",
+                )
+            )
+
+    if has_permission(current_user, Permission.product_read):
+        products = db.query(Product).order_by(Product.updated_at.desc()).limit(limit).all()
+        for product in products:
+            approved_assets = (
+                db.query(Asset)
+                .filter(
+                    Asset.owner_type == AssetOwnerType.product,
+                    Asset.owner_id == product.id,
+                    Asset.review_state == AssetReviewState.approved,
+                )
+                .count()
+            )
+            linked_content = (
+                db.query(ContentItem).filter(ContentItem.product_id == product.id).count()
+            )
+            linked_deals = db.query(DealDraft).filter(DealDraft.product_id == product.id).count()
+
+            if approved_assets == 0:
+                items.append(
+                    OperationInboxItem(
+                        id=f"workflow-gap:{product.id}:asset",
+                        kind="workflow_gap",
+                        title=product.title,
+                        description="Produkt ohne freigegebenes Asset (Medienbruch Produkt → Asset)",
+                        source_route="/products",
+                        source_id=str(product.id),
+                        priority="high",
+                        escalation=True,
+                        due_at=product.updated_at + timedelta(days=2) if product.updated_at else None,
+                        created_at=product.created_at,
+                        updated_at=product.updated_at,
+                        assignee_username=None,
+                        responsible_role="editor",
+                    )
+                )
+            elif linked_content == 0:
+                items.append(
+                    OperationInboxItem(
+                        id=f"workflow-gap:{product.id}:content",
+                        kind="workflow_gap",
+                        title=product.title,
+                        description="Asset vorhanden, aber kein Content geplant (Bruch Asset → Content)",
+                        source_route="/content",
+                        source_id=str(product.id),
+                        priority="medium",
+                        escalation=False,
+                        due_at=product.updated_at + timedelta(days=3) if product.updated_at else None,
+                        created_at=product.created_at,
+                        updated_at=product.updated_at,
+                        assignee_username=None,
+                        responsible_role="editor",
+                    )
+                )
+            elif linked_deals == 0:
+                items.append(
+                    OperationInboxItem(
+                        id=f"workflow-gap:{product.id}:deal",
+                        kind="workflow_gap",
+                        title=product.title,
+                        description="Content vorhanden, aber kein Deal/Kommunikationslink (Bruch Content → Kommunikation)",
+                        source_route="/deals",
+                        source_id=str(product.id),
+                        priority="medium",
+                        escalation=False,
+                        due_at=product.updated_at + timedelta(days=4) if product.updated_at else None,
+                        created_at=product.created_at,
+                        updated_at=product.updated_at,
+                        assignee_username=None,
+                        responsible_role="editor",
+                    )
+                )
             .order_by(ContentTask.due_date.asc())
             .limit(limit)
             .all()
         )
+        assignee_ids = [task.assignee_user_id for task in overdue_tasks if task.assignee_user_id]
+        assignee_map: dict[str, str] = {}
+        if assignee_ids:
+            users = db.query(User).filter(User.id.in_(assignee_ids)).all()
+            assignee_map = {str(user.id): user.username for user in users}
         for task in overdue_tasks:
             overdue_days = (today - task.due_date).days if task.due_date else 0
-            content_priority: OperationPriority = (
-                "critical" if overdue_days >= 7 else "high" if overdue_days >= 3 else "medium"
-            )
+            if task.priority == TaskPriority.critical:
+                content_priority: OperationPriority = "critical"
+            elif task.priority == TaskPriority.high:
+                content_priority = "high"
+            else:
+                content_priority = "critical" if overdue_days >= 7 else "high" if overdue_days >= 3 else "medium"
+
+            assignee_username = None
+            if task.assignee_user_id:
+                assignee_username = assignee_map.get(str(task.assignee_user_id))
+            elif task.assignee_role:
+                assignee_username = f"role:{task.assignee_role.value}"
+
             items.append(
                 OperationInboxItem(
                     id=f"content:{task.id}",
                     kind="content_overdue",
                     title=f"Überfällige Task: {task.type.value}",
-                    description=f"Status {task.status.value} · {overdue_days} Tage überfällig",
+                    description=(
+                        f"Status {task.status.value} · Priorität {task.priority.value} · {overdue_days} Tage überfällig"
+                    ),
                     source_route="/content",
                     source_id=str(task.id),
                     priority=content_priority,
@@ -258,7 +382,7 @@ def operations_inbox(
                     due_at=task.due_date,
                     created_at=task.created_at,
                     updated_at=task.updated_at,
-                    assignee_username=None,
+                    assignee_username=assignee_username,
                     responsible_role="editor",
                 )
             )

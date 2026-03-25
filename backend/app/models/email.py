@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import enum
 import uuid
+from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import JSON, Boolean, Enum, ForeignKey, String, Text
+from sqlalchemy import JSON, Boolean, DateTime, Enum, ForeignKey, Integer, String, Text
+from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin, UUIDMixin
@@ -66,6 +68,14 @@ class EmailDraft(Base, UUIDMixin, TimestampMixin):
     risk_flags: Mapped[str | None] = mapped_column(
         Text, nullable=True
     )  # Als JSON-String gespeichert.
+    risk_score: Mapped[int] = mapped_column(Integer, default=0)
+    risk_checked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    approval_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    approved_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), nullable=True, index=True
+    )
+    approved_by_name: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     approved: Mapped[bool] = mapped_column(Boolean, default=False)
 
     thread: Mapped["EmailThread"] = relationship(back_populates="drafts")

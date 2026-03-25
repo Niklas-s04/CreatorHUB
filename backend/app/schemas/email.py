@@ -49,6 +49,12 @@ class EmailDraftOut(BaseModel):
     draft_body: str
     questions_to_ask: str | None
     risk_flags: str | None
+    risk_score: int
+    risk_checked_at: datetime | None
+    approval_reason: str | None
+    approved_by_id: uuid.UUID | None
+    approved_by_name: str | None
+    approved_at: datetime | None
     approved: bool
     created_at: datetime
     updated_at: datetime
@@ -67,6 +73,11 @@ class EmailThreadMessageOut(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class EmailDraftApprovalRequest(BaseModel):
+    approved: bool
+    reason: str | None = None
 
 
 class EmailThreadDetailOut(EmailThreadOut):

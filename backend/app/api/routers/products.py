@@ -25,6 +25,7 @@ from app.models.product import (
     ProductValueHistory,
 )
 from app.models.user import User
+from app.models.workflow import WorkflowStatus
 from app.schemas.common import Page, SortOrder
 from app.schemas.product import (
     InventoryCsvImportRequest,
@@ -49,8 +50,30 @@ from app.services.exports import (
     export_value_history_csv,
 )
 from app.services.inventory_import import CsvImportConfig, import_products_from_csv
+from app.services.sales_workflow import finalize_product_sale
+from app.services.workflow import (
+    apply_workflow_change,
+    auto_re_review_reason,
+    requires_re_review,
+    validate_workflow_status_change,
+)
 
 router = APIRouter()
+
+PRODUCT_RE_REVIEW_FIELDS: set[str] = {
+    "title",
+    "brand",
+    "model",
+    "category",
+    "condition",
+    "purchase_price",
+    "purchase_date",
+    "current_value",
+    "currency",
+    "storage_location",
+    "serial_number",
+    "notes_md",
+}
 
 
 def _normalize_years(years: list[int] | None) -> list[int]:
@@ -184,6 +207,14 @@ def create_product(
     _: User = Depends(require_permission(Permission.product_write)),
 ) -> ProductOut:
     p = Product(**payload.model_dump())
+    try:
+        validate_workflow_status_change(
+            current_status=p.workflow_status,
+            target_status=p.workflow_status,
+            review_reason=p.review_reason,
+        )
+    except BusinessRuleViolation as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     db.add(p)
     db.commit()
     db.refresh(p)
@@ -221,7 +252,10 @@ def update_product(
     if not p:
         raise HTTPException(status_code=404, detail="Product not found")
     updates = payload.model_dump(exclude_unset=True)
+    requested_workflow_status = updates.pop("workflow_status", None)
+    explicit_review_reason = updates.pop("review_reason", None)
     maybe_status = updates.pop("status", None)
+    changed_fields = {key for key, value in updates.items() if getattr(p, key) != value}
     if maybe_status and maybe_status != p.status:
         try:
             validate_product_status_change(
@@ -257,8 +291,71 @@ def update_product(
             },
             description=f"Product status changed: {before_status.value} -> {maybe_status.value}",
         )
+        changed_fields.add("status")
+
+    target_workflow_status = requested_workflow_status or p.workflow_status
+    review_reason = explicit_review_reason
+    if requested_workflow_status is None and requires_re_review(
+        current_status=p.workflow_status,
+        changed_fields=changed_fields,
+        relevant_fields=PRODUCT_RE_REVIEW_FIELDS,
+    ):
+        target_workflow_status = WorkflowStatus.in_review
+        review_reason = review_reason or auto_re_review_reason(changed_fields)
+
+    try:
+        validate_workflow_status_change(
+            current_status=p.workflow_status,
+            target_status=target_workflow_status,
+            review_reason=review_reason,
+        )
+    except BusinessRuleViolation as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    previous_workflow_status = p.workflow_status
+    previous_review_reason = p.review_reason
     for k, v in updates.items():
         setattr(p, k, v)
+    if target_workflow_status != p.workflow_status:
+        apply_workflow_change(
+            entity=p,
+            target_status=target_workflow_status,
+            review_reason=review_reason,
+            actor=current_user,
+        )
+        record_audit_log(
+            db,
+            actor=current_user,
+            action="product.workflow_update",
+            entity_type="product",
+            entity_id=str(p.id),
+            description=f"Workflow {previous_workflow_status.value} -> {p.workflow_status.value}",
+            before={
+                "workflow_status": previous_workflow_status.value,
+                "review_reason": previous_review_reason,
+            },
+            after={"workflow_status": p.workflow_status.value, "review_reason": p.review_reason},
+        )
+        emit_domain_event(
+            db,
+            actor=current_user,
+            event_name="product.workflow.changed",
+            entity_type="product",
+            entity_id=str(p.id),
+            payload={
+                "from": previous_workflow_status.value,
+                "to": p.workflow_status.value,
+                "review_reason": p.review_reason,
+                "reviewed_at": p.reviewed_at.isoformat() if p.reviewed_at else None,
+                "reviewed_by_id": str(p.reviewed_by_id) if p.reviewed_by_id else None,
+                "reviewed_by_name": p.reviewed_by_name,
+            },
+            description=(
+                f"Product workflow changed: {previous_workflow_status.value} -> {p.workflow_status.value}"
+            ),
+        )
+    elif explicit_review_reason is not None and explicit_review_reason != p.review_reason:
+        p.review_reason = explicit_review_reason.strip() or None
     db.commit()
     db.refresh(p)
     return p
@@ -413,6 +510,8 @@ def change_status(
 
     if p.status != payload.status:
         before_status = p.status
+        before_workflow_status = p.workflow_status
+        before_review_reason = p.review_reason
         p.status = payload.status
         p.status_changed_at = datetime.now(timezone.utc)
         record_audit_log(
@@ -443,6 +542,62 @@ def change_status(
             },
             description=f"Product status changed: {before_status.value} -> {payload.status.value}",
         )
+        if payload.status == ProductStatus.archived:
+            target_workflow_status = WorkflowStatus.archived
+            reason = payload.notes or "Archived via product status transition"
+            try:
+                validate_workflow_status_change(
+                    current_status=p.workflow_status,
+                    target_status=target_workflow_status,
+                    review_reason=reason,
+                )
+            except BusinessRuleViolation as exc:
+                raise HTTPException(status_code=400, detail=str(exc)) from exc
+            apply_workflow_change(
+                entity=p,
+                target_status=target_workflow_status,
+                review_reason=reason,
+                actor=current_user,
+            )
+            record_audit_log(
+                db,
+                actor=current_user,
+                action="product.workflow_update",
+                entity_type="product",
+                entity_id=str(p.id),
+                description=f"Workflow {before_workflow_status.value} -> {p.workflow_status.value}",
+                before={
+                    "workflow_status": before_workflow_status.value,
+                    "review_reason": before_review_reason,
+                },
+                after={"workflow_status": p.workflow_status.value, "review_reason": p.review_reason},
+            )
+            emit_domain_event(
+                db,
+                actor=current_user,
+                event_name="product.workflow.changed",
+                entity_type="product",
+                entity_id=str(p.id),
+                payload={
+                    "from": before_workflow_status.value,
+                    "to": p.workflow_status.value,
+                    "review_reason": p.review_reason,
+                    "reviewed_at": p.reviewed_at.isoformat() if p.reviewed_at else None,
+                    "reviewed_by_id": str(p.reviewed_by_id) if p.reviewed_by_id else None,
+                    "reviewed_by_name": p.reviewed_by_name,
+                },
+                description=(
+                    f"Product workflow changed: {before_workflow_status.value} -> {p.workflow_status.value}"
+                ),
+            )
+        if payload.status == ProductStatus.sold:
+            finalize_product_sale(
+                db,
+                product=p,
+                sold_date=payload.date,
+                actor=current_user,
+                reason=payload.notes,
+            )
     db.commit()
     db.refresh(p)
     return p

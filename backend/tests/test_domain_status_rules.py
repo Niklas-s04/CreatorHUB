@@ -16,6 +16,8 @@ from app.services.domain_rules import (
     validate_registration_status_change,
 )
 from app.services.errors import BusinessRuleViolation
+from app.services.workflow import validate_workflow_status_change
+from app.models.workflow import WorkflowStatus
 
 
 def test_product_status_transition_rejects_invalid_reopen_from_archived() -> None:
@@ -81,4 +83,21 @@ def test_content_status_published_accepts_external_url_without_publish_date() ->
         planned_date=date(2026, 3, 19),
         publish_date=None,
         external_url="https://example.com/video",
+    )
+
+
+def test_workflow_transition_requires_reason_for_approval() -> None:
+    with pytest.raises(BusinessRuleViolation, match="review_reason required"):
+        validate_workflow_status_change(
+            current_status=WorkflowStatus.in_review,
+            target_status=WorkflowStatus.approved,
+            review_reason=None,
+        )
+
+
+def test_workflow_transition_allows_reject_with_reason() -> None:
+    validate_workflow_status_change(
+        current_status=WorkflowStatus.in_review,
+        target_status=WorkflowStatus.rejected,
+        review_reason="Missing legal approval",
     )

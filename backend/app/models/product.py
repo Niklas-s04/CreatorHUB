@@ -5,9 +5,11 @@ import uuid
 from datetime import date, datetime
 
 from sqlalchemy import Date, DateTime, Enum, ForeignKey, Numeric, String, Text
+from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin, UUIDMixin, utcnow
+from app.models.workflow import WorkflowStatus
 
 
 class ProductCondition(str, enum.Enum):
@@ -60,6 +62,15 @@ class Product(Base, UUIDMixin, TimestampMixin):
 
     status: Mapped[ProductStatus] = mapped_column(Enum(ProductStatus), default=ProductStatus.active)
     status_changed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    workflow_status: Mapped[WorkflowStatus] = mapped_column(
+        Enum(WorkflowStatus), default=WorkflowStatus.draft
+    )
+    review_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    reviewed_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), nullable=True, index=True
+    )
+    reviewed_by_name: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     transactions: Mapped[list["ProductTransaction"]] = relationship(
         back_populates="product", cascade="all, delete-orphan"

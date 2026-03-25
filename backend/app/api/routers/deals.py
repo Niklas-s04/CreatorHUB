@@ -13,7 +13,7 @@ from app.models.user import User
 from app.schemas.common import Page, SortOrder
 from app.schemas.deal import DealDraftIntakeRequest, DealDraftOut, DealDraftUpdate
 from app.services import deal_service
-from app.services.errors import NotFoundError
+from app.services.errors import BusinessRuleViolation, NotFoundError
 
 router = APIRouter()
 
@@ -79,6 +79,8 @@ def create_or_update_deal_from_email(
         )
     except NotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except BusinessRuleViolation as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.patch("/{deal_id}", response_model=DealDraftOut)
@@ -97,3 +99,5 @@ def update_deal_draft(
         )
     except NotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except BusinessRuleViolation as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc

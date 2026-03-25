@@ -7,6 +7,7 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from app.models.product import ProductCondition, ProductStatus, TransactionType, ValueSource
+from app.models.workflow import WorkflowStatus
 
 
 class ProductBase(BaseModel):
@@ -23,6 +24,8 @@ class ProductBase(BaseModel):
     serial_number: str | None = None
     notes_md: str | None = None
     status: ProductStatus = ProductStatus.active
+    workflow_status: WorkflowStatus = WorkflowStatus.draft
+    review_reason: str | None = None
 
 
 class ProductCreate(ProductBase):
@@ -43,11 +46,16 @@ class ProductUpdate(BaseModel):
     serial_number: str | None = None
     notes_md: str | None = None
     status: ProductStatus | None = None
+    workflow_status: WorkflowStatus | None = None
+    review_reason: str | None = None
 
 
 class ProductOut(ProductBase):
     id: uuid.UUID
     status_changed_at: datetime
+    reviewed_by_id: uuid.UUID | None
+    reviewed_by_name: str | None
+    reviewed_at: datetime | None
     created_at: datetime
     updated_at: datetime
 

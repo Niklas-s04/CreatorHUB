@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.api.deps import (
@@ -14,7 +14,8 @@ from app.api.deps import (
 )
 from app.api.querying import apply_sorting, pagination_params, to_page
 from app.core.authorization import Permission
-from app.models.content import ContentItem, ContentTask
+from app.models.content import ContentItem, ContentTask, TaskPriority, TaskStatus
+from app.models.user import UserRole
 from app.models.user import User
 from app.schemas.common import Page, SortOrder
 from app.schemas.content import (
@@ -22,11 +23,14 @@ from app.schemas.content import (
     ContentItemOut,
     ContentItemUpdate,
     ContentTaskCreate,
+    ContentTaskFilterParams,
     ContentTaskOut,
     ContentTaskUpdate,
+    ContentTaskViewCreate,
+    ContentTaskViewOut,
 )
 from app.services import content_service
-from app.services.errors import NotFoundError
+from app.services.errors import BusinessRuleViolation, NotFoundError
 
 router = APIRouter()
 
@@ -109,12 +113,24 @@ def list_tasks(
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
     content_item_id: uuid.UUID | None = None,
+    assignee_user_id: uuid.UUID | None = None,
+    assignee_role: UserRole | None = None,
+    priority: TaskPriority | None = None,
+    status: TaskStatus | None = None,
+    overdue_only: bool = Query(default=False),
     paging: tuple[int, int, str, SortOrder] = Depends(pagination_params),
 ) -> Page[ContentTaskOut]:
     limit, offset, sort_by, sort_order = paging
     qry = db.query(ContentTask)
-    if content_item_id:
-        qry = qry.filter(ContentTask.content_item_id == content_item_id)
+    filters = ContentTaskFilterParams(
+        content_item_id=content_item_id,
+        assignee_user_id=assignee_user_id,
+        assignee_role=assignee_role,
+        priority=priority,
+        status=status,
+        overdue_only=overdue_only,
+    )
+    qry = content_service._apply_task_filters(qry, filters=filters)
 
     total = qry.order_by(None).count()
     qry, selected_sort, selected_order = apply_sorting(
@@ -136,13 +152,74 @@ def list_tasks(
     )
 
 
+@router.get("/tasks/me", response_model=Page[ContentTaskOut])
+def list_my_tasks(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    priority: TaskPriority | None = None,
+    status: TaskStatus | None = None,
+    overdue_only: bool = Query(default=False),
+    paging: tuple[int, int, str, SortOrder] = Depends(pagination_params),
+) -> Page[ContentTaskOut]:
+    limit, offset, sort_by, sort_order = paging
+    filters = ContentTaskFilterParams(
+        priority=priority,
+        status=status,
+        overdue_only=overdue_only,
+    )
+    items = content_service.list_personal_tasks(db, user=current_user, filters=filters)
+    total = len(items)
+    sliced = items[offset : offset + limit]
+    return to_page(
+        items=sliced,
+        total=total,
+        limit=limit,
+        offset=offset,
+        sort_by=sort_by,
+        sort_order=sort_order,
+    )
+
+
+@router.get("/tasks/views", response_model=list[ContentTaskViewOut])
+def list_task_views(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> list[ContentTaskViewOut]:
+    return content_service.list_task_views(db, user=current_user)
+
+
+@router.post("/tasks/views", response_model=ContentTaskViewOut)
+def create_task_view(
+    payload: ContentTaskViewCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> ContentTaskViewOut:
+    return content_service.create_task_view(db, user=current_user, payload=payload)
+
+
+@router.delete("/tasks/views/{view_id}")
+def delete_task_view(
+    view_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    try:
+        content_service.delete_task_view(db, view_id=view_id, user=current_user)
+    except NotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return {"deleted": True}
+
+
 @router.post("/tasks", response_model=ContentTaskOut)
 def create_task(
     payload: ContentTaskCreate,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_permission(Permission.content_manage)),
 ) -> ContentTaskOut:
-    return content_service.create_task(db, payload=payload, actor=current_user)
+    try:
+        return content_service.create_task(db, payload=payload, actor=current_user)
+    except BusinessRuleViolation as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.patch("/tasks/{task_id}", response_model=ContentTaskOut)
@@ -161,6 +238,8 @@ def update_task(
         )
     except NotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except BusinessRuleViolation as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.delete("/tasks/{task_id}")

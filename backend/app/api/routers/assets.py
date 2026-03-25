@@ -16,6 +16,7 @@ from app.core.authorization import Permission, has_permission
 from app.core.config import settings
 from app.models.asset import Asset, AssetKind, AssetOwnerType, AssetReviewState, AssetSource
 from app.models.user import User
+from app.models.workflow import WorkflowStatus
 from app.schemas.asset import AssetCreateWeb, AssetOut, AssetUpdate
 from app.schemas.common import Page, SortOrder
 from app.services.audit import record_audit_log
@@ -23,8 +24,26 @@ from app.services.domain_events import emit_domain_event
 from app.services.domain_rules import validate_asset_consistency, validate_asset_review_state_change
 from app.services.errors import BusinessRuleViolation
 from app.services.storage import cache_download, ensure_thumbnail, save_upload_validated
+from app.services.workflow import (
+    apply_workflow_change,
+    auto_re_review_reason,
+    requires_re_review,
+    validate_workflow_status_change,
+)
 
 router = APIRouter()
+
+ASSET_RE_REVIEW_FIELDS: set[str] = {
+    "title",
+    "license_type",
+    "attribution",
+    "source_name",
+    "source_url",
+    "license_url",
+    "fetched_at",
+    "review_state",
+    "is_primary",
+}
 
 
 class LicenseFilter(str, enum.Enum):
@@ -219,6 +238,7 @@ async def upload_asset(
         hash=stored.sha256,
         perceptual_hash=stored.perceptual_hash,
         review_state=AssetReviewState.pending_review,
+        workflow_status=WorkflowStatus.draft,
         is_primary=False,
     )
     try:
@@ -259,6 +279,14 @@ def create_web_asset(
     data = payload.model_dump()
     data["review_state"] = AssetReviewState.needs_review
     try:
+        validate_workflow_status_change(
+            current_status=data["workflow_status"],
+            target_status=data["workflow_status"],
+            review_reason=data.get("review_reason"),
+        )
+    except BusinessRuleViolation as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    try:
         validate_asset_consistency(
             owner_type=data["owner_type"],
             kind=data["kind"],
@@ -289,8 +317,11 @@ def update_asset(
         raise HTTPException(status_code=404, detail="Asset not found")
 
     data = payload.model_dump(exclude_unset=True)
+    requested_workflow_status = data.pop("workflow_status", None)
+    explicit_review_reason = data.pop("review_reason", None)
     original_review_state = asset.review_state
     target_review_state = data.get("review_state", asset.review_state)
+    changed_fields = {key for key, value in data.items() if getattr(asset, key) != value}
 
     try:
         validate_asset_review_state_change(
@@ -317,6 +348,35 @@ def update_asset(
     except BusinessRuleViolation as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
+    target_workflow_status = requested_workflow_status or asset.workflow_status
+    review_reason = explicit_review_reason
+    if requested_workflow_status is None and "review_state" in data:
+        if target_review_state == AssetReviewState.approved:
+            target_workflow_status = WorkflowStatus.approved
+        elif target_review_state == AssetReviewState.rejected:
+            target_workflow_status = WorkflowStatus.rejected
+        else:
+            target_workflow_status = WorkflowStatus.in_review
+    if requested_workflow_status is None and requires_re_review(
+        current_status=asset.workflow_status,
+        changed_fields=changed_fields,
+        relevant_fields=ASSET_RE_REVIEW_FIELDS,
+    ):
+        target_workflow_status = WorkflowStatus.in_review
+        review_reason = review_reason or auto_re_review_reason(changed_fields)
+
+    try:
+        validate_workflow_status_change(
+            current_status=asset.workflow_status,
+            target_status=target_workflow_status,
+            review_reason=review_reason,
+        )
+    except BusinessRuleViolation as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    previous_workflow_status = asset.workflow_status
+    previous_review_reason = asset.review_reason
+
     # Primär-Flag nur bei Produktbildern exklusiv setzen.
     if (
         data.get("is_primary") is True
@@ -333,6 +393,47 @@ def update_asset(
 
     for k, v in data.items():
         setattr(asset, k, v)
+
+    if previous_workflow_status != target_workflow_status:
+        apply_workflow_change(
+            entity=asset,
+            target_status=target_workflow_status,
+            review_reason=review_reason,
+            actor=current_user,
+        )
+        record_audit_log(
+            db,
+            actor=current_user,
+            action="asset.workflow_change",
+            entity_type="asset",
+            entity_id=str(asset.id),
+            description=f"Workflow {previous_workflow_status.value} -> {asset.workflow_status.value}",
+            before={
+                "workflow_status": previous_workflow_status.value,
+                "review_reason": previous_review_reason,
+            },
+            after={"workflow_status": asset.workflow_status.value, "review_reason": asset.review_reason},
+        )
+        emit_domain_event(
+            db,
+            actor=current_user,
+            event_name="asset.workflow.changed",
+            entity_type="asset",
+            entity_id=str(asset.id),
+            payload={
+                "from": previous_workflow_status.value,
+                "to": asset.workflow_status.value,
+                "review_reason": asset.review_reason,
+                "reviewed_at": asset.reviewed_at.isoformat() if asset.reviewed_at else None,
+                "reviewed_by_id": str(asset.reviewed_by_id) if asset.reviewed_by_id else None,
+                "reviewed_by_name": asset.reviewed_by_name,
+            },
+            description=(
+                f"Asset workflow changed: {previous_workflow_status.value} -> {asset.workflow_status.value}"
+            ),
+        )
+    elif explicit_review_reason is not None and explicit_review_reason != asset.review_reason:
+        asset.review_reason = explicit_review_reason.strip() or None
 
     if (
         "review_state" in data

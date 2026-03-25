@@ -10,6 +10,7 @@ from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base, TimestampMixin, UUIDMixin
+from app.models.workflow import WorkflowStatus
 
 
 class AssetOwnerType(str, enum.Enum):
@@ -70,4 +71,13 @@ class Asset(Base, UUIDMixin, TimestampMixin):
     review_state: Mapped[AssetReviewState] = mapped_column(
         Enum(AssetReviewState), default=AssetReviewState.pending_review
     )
+    workflow_status: Mapped[WorkflowStatus] = mapped_column(
+        Enum(WorkflowStatus), default=WorkflowStatus.draft
+    )
+    review_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    reviewed_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), nullable=True, index=True
+    )
+    reviewed_by_name: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    reviewed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     is_primary: Mapped[bool] = mapped_column(Boolean, default=False)

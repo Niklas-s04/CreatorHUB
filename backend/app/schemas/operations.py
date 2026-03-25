@@ -10,6 +10,8 @@ OperationKind = Literal[
     "registration_approval",
     "email_risk",
     "content_overdue",
+    "deal_checklist",
+    "workflow_gap",
 ]
 
 OperationPriority = Literal["low", "medium", "high", "critical"]

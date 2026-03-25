@@ -6,10 +6,19 @@ from sqlalchemy.orm import Session
 
 from app.models.knowledge import KnowledgeDoc, KnowledgeDocType
 from app.models.user import User
+from app.models.workflow import WorkflowStatus
 from app.schemas.knowledge import KnowledgeDocCreate, KnowledgeDocUpdate
 from app.services.audit import record_audit_log
 from app.services.errors import BusinessRuleViolation, NotFoundError
 from app.services.transactions import transaction_boundary
+from app.services.workflow import (
+    apply_workflow_change,
+    auto_re_review_reason,
+    requires_re_review,
+    validate_workflow_status_change,
+)
+
+KNOWLEDGE_RE_REVIEW_FIELDS: set[str] = {"type", "title", "content"}
 
 
 def get_knowledge_bundle(db: Session) -> dict[str, str]:
@@ -50,10 +59,24 @@ def create_doc(db: Session, *, payload: KnowledgeDocCreate, actor: User | None) 
         type=payload.type,
         title=payload.title.strip(),
         content=payload.content.strip(),
+        workflow_status=payload.workflow_status,
+        review_reason=(payload.review_reason or "").strip() or None,
+    )
+    validate_workflow_status_change(
+        current_status=doc.workflow_status,
+        target_status=doc.workflow_status,
+        review_reason=doc.review_reason,
     )
     with transaction_boundary(db):
         db.add(doc)
         db.flush()
+        if doc.workflow_status != WorkflowStatus.draft or doc.review_reason:
+            apply_workflow_change(
+                entity=doc,
+                target_status=doc.workflow_status,
+                review_reason=doc.review_reason,
+                actor=actor,
+            )
         record_audit_log(
             db,
             actor=actor,
@@ -61,7 +84,11 @@ def create_doc(db: Session, *, payload: KnowledgeDocCreate, actor: User | None) 
             entity_type="knowledge_doc",
             entity_id=str(doc.id),
             description=f"Created knowledge doc '{doc.title}'",
-            after={"title": doc.title, "type": doc.type.value},
+            after={
+                "title": doc.title,
+                "type": doc.type.value,
+                "workflow_status": doc.workflow_status.value,
+            },
         )
     db.refresh(doc)
     return doc
@@ -79,6 +106,8 @@ def update_doc(
         raise NotFoundError("Doc not found")
 
     updates = payload.model_dump(exclude_unset=True)
+    requested_workflow_status = updates.pop("workflow_status", None)
+    explicit_review_reason = updates.pop("review_reason", None)
     if "title" in updates and updates["title"] is not None:
         _validate_doc_fields(title=updates["title"])
         updates["title"] = updates["title"].strip()
@@ -88,6 +117,25 @@ def update_doc(
 
     before: dict[str, str] = {}
     after: dict[str, str] = {}
+    previous_review_reason = doc.review_reason
+
+    changed_fields = {key for key in updates.keys() if getattr(doc, key) != updates[key]}
+    target_workflow_status = requested_workflow_status or doc.workflow_status
+    review_reason = explicit_review_reason
+    if requested_workflow_status is None and requires_re_review(
+        current_status=doc.workflow_status,
+        changed_fields=changed_fields,
+        relevant_fields=KNOWLEDGE_RE_REVIEW_FIELDS,
+    ):
+        target_workflow_status = WorkflowStatus.in_review
+        review_reason = review_reason or auto_re_review_reason(changed_fields)
+
+    validate_workflow_status_change(
+        current_status=doc.workflow_status,
+        target_status=target_workflow_status,
+        review_reason=review_reason,
+    )
+
     with transaction_boundary(db):
         for key, value in updates.items():
             current = getattr(doc, key)
@@ -96,6 +144,22 @@ def update_doc(
             before[key] = getattr(current, "value", current)
             setattr(doc, key, value)
             after[key] = getattr(value, "value", value)
+
+        if target_workflow_status != doc.workflow_status:
+            before["workflow_status"] = doc.workflow_status.value
+            apply_workflow_change(
+                entity=doc,
+                target_status=target_workflow_status,
+                review_reason=review_reason,
+                actor=actor,
+            )
+            after["workflow_status"] = doc.workflow_status.value
+            before["review_reason"] = previous_review_reason
+            after["review_reason"] = doc.review_reason
+        elif explicit_review_reason is not None and explicit_review_reason != doc.review_reason:
+            before["review_reason"] = doc.review_reason
+            doc.review_reason = explicit_review_reason.strip() or None
+            after["review_reason"] = doc.review_reason
         if before:
             record_audit_log(
                 db,

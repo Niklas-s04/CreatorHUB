@@ -2,12 +2,15 @@ from __future__ import annotations
 
 import enum
 import uuid
-from datetime import date
+from datetime import date, datetime, timezone
 
-from sqlalchemy import Date, Enum, ForeignKey, String, Text
+from sqlalchemy import JSON, Boolean, Date, DateTime, Enum, ForeignKey, String, Text
+from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin, UUIDMixin
+from app.models.user import UserRole
+from app.models.workflow import WorkflowStatus
 
 
 class ContentPlatform(str, enum.Enum):
@@ -57,6 +60,15 @@ class ContentItem(Base, UUIDMixin, TimestampMixin):
     planned_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     publish_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     external_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    workflow_status: Mapped[WorkflowStatus] = mapped_column(
+        Enum(WorkflowStatus), default=WorkflowStatus.draft
+    )
+    review_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    reviewed_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), nullable=True, index=True
+    )
+    reviewed_by_name: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     tasks: Mapped[list["ContentTask"]] = relationship(
         back_populates="content_item", cascade="all, delete-orphan"
@@ -81,6 +93,13 @@ class TaskStatus(str, enum.Enum):
     done = "done"
 
 
+class TaskPriority(str, enum.Enum):
+    low = "low"
+    medium = "medium"
+    high = "high"
+    critical = "critical"
+
+
 class ContentTask(Base, UUIDMixin, TimestampMixin):
     __tablename__ = "content_tasks"
 
@@ -90,8 +109,30 @@ class ContentTask(Base, UUIDMixin, TimestampMixin):
 
     type: Mapped[TaskType] = mapped_column(Enum(TaskType), default=TaskType.record)
     status: Mapped[TaskStatus] = mapped_column(Enum(TaskStatus), default=TaskStatus.todo)
+    priority: Mapped[TaskPriority] = mapped_column(Enum(TaskPriority), default=TaskPriority.medium)
+    assignee_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), nullable=True, index=True
+    )
+    assignee_role: Mapped[UserRole | None] = mapped_column(Enum(UserRole), nullable=True)
 
     due_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    notified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    escalated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     content_item: Mapped["ContentItem"] = relationship(back_populates="tasks")
+
+    @property
+    def is_overdue(self) -> bool:
+        if self.status == TaskStatus.done or self.due_date is None:
+            return False
+        return self.due_date < datetime.now(timezone.utc).date()
+
+
+class ContentTaskView(Base, UUIDMixin, TimestampMixin):
+    __tablename__ = "content_task_views"
+
+    user_id: Mapped[uuid.UUID] = mapped_column(PGUUID(as_uuid=True), index=True)
+    name: Mapped[str] = mapped_column(String(120))
+    is_shared: Mapped[bool] = mapped_column(Boolean, default=False)
+    filters: Mapped[dict[str, str | bool | int | None]] = mapped_column(JSON, default=dict)
