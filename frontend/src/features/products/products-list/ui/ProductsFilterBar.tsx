@@ -1,24 +1,41 @@
+import type { ReactNode } from 'react'
+
 import { PRODUCT_STATUS_OPTIONS } from '../../../../entities/product/model'
 
 type ProductsFilterBarProps = {
   query: string
   status: string
+  pageSize: number
+  total: number
+  offset: number
   itemCount: number
   onQueryChange: (value: string) => void
   onStatusChange: (value: string) => void
+  onPageSizeChange: (value: number) => void
   onFilter: () => void
+  onReset: () => void
+  extraActions?: ReactNode
 }
 
 export function ProductsFilterBar({
   query,
   status,
+  pageSize,
+  total,
+  offset,
   itemCount,
   onQueryChange,
   onStatusChange,
+  onPageSizeChange,
   onFilter,
+  onReset,
+  extraActions,
 }: ProductsFilterBarProps) {
+  const from = total === 0 ? 0 : offset + 1
+  const to = total === 0 ? 0 : Math.min(offset + itemCount, total)
+
   return (
-    <div className="page-header mb10">
+    <div className="stack mb10">
       <div className="control-row flex1">
         <input className="grow" placeholder="Suche…" value={query} onChange={e => onQueryChange(e.target.value)} />
         <select value={status} onChange={e => onStatusChange(e.target.value)}>
@@ -27,9 +44,18 @@ export function ProductsFilterBar({
             <option key={option} value={option}>{option}</option>
           ))}
         </select>
+        <select value={String(pageSize)} onChange={e => onPageSizeChange(Number(e.target.value))}>
+          <option value="25">25 / Seite</option>
+          <option value="50">50 / Seite</option>
+          <option value="100">100 / Seite</option>
+        </select>
         <button className="btn" onClick={onFilter}>Filter</button>
+        <button className="btn ghost" onClick={onReset}>Reset</button>
       </div>
-      <span className="muted small">{itemCount} items</span>
+      <div className="row between">
+        <span className="muted small">{itemCount} sichtbar · {from}-{to} von {total}</span>
+        {extraActions}
+      </div>
     </div>
   )
 }

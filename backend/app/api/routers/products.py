@@ -128,27 +128,17 @@ def _product_in_years(product: Product, years_set: set[int]) -> bool:
     return False
 
 
-class CSVExportKind(str, Enum):
-    products = "products"
-    transactions = "transactions"
-    value_history = "value_history"
-
-
-@router.get("", response_model=Page[ProductOut])
-def list_products(
-    db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
-    q: str | None = None,
-    status: ProductStatus | None = None,
-    category: str | None = None,
-    condition: str | None = None,
-    storage_location: str | None = None,
-    min_value: float | None = None,
-    max_value: float | None = None,
-    paging: tuple[int, int, str, SortOrder] = Depends(pagination_params),
-) -> Page[ProductOut]:
-    limit, offset, sort_by, sort_order = paging
-    qry = db.query(Product)
+def _apply_product_filters(
+    qry,
+    *,
+    q: str | None,
+    status: ProductStatus | None,
+    category: str | None,
+    condition: str | None,
+    storage_location: str | None,
+    min_value: float | None,
+    max_value: float | None,
+):
     if q:
         like = f"%{q}%"
         qry = qry.filter(
@@ -171,6 +161,39 @@ def list_products(
         qry = qry.filter(Product.current_value >= min_value)
     if max_value is not None:
         qry = qry.filter(Product.current_value <= max_value)
+    return qry
+
+
+class CSVExportKind(str, Enum):
+    products = "products"
+    transactions = "transactions"
+    value_history = "value_history"
+
+
+@router.get("", response_model=Page[ProductOut])
+def list_products(
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+    q: str | None = None,
+    status: ProductStatus | None = None,
+    category: str | None = None,
+    condition: str | None = None,
+    storage_location: str | None = None,
+    min_value: float | None = None,
+    max_value: float | None = None,
+    paging: tuple[int, int, str, SortOrder] = Depends(pagination_params),
+) -> Page[ProductOut]:
+    limit, offset, sort_by, sort_order = paging
+    qry = _apply_product_filters(
+        db.query(Product),
+        q=q,
+        status=status,
+        category=category,
+        condition=condition,
+        storage_location=storage_location,
+        min_value=min_value,
+        max_value=max_value,
+    )
 
     total = qry.order_by(None).count()
     qry, selected_sort, selected_order = apply_sorting(
@@ -642,13 +665,47 @@ def export_csv(
     years: list[int] | None = Query(
         default=None, description="Optional years filter (?years=2023&years=2024)"
     ),
+    q: str | None = None,
+    status: ProductStatus | None = None,
+    category: str | None = None,
+    condition: str | None = None,
+    storage_location: str | None = None,
+    min_value: float | None = None,
+    max_value: float | None = None,
+    sort_by: str = Query(default="updated_at"),
+    sort_order: SortOrder = Query(default=SortOrder.desc),
     db: Session = Depends(get_db),
     _: User = Depends(require_permission(Permission.product_export)),
 ) -> FileResponse:
     year_list = _normalize_years(years)
     year_set = set(year_list)
     if dataset == CSVExportKind.products:
-        qry = db.query(Product).order_by(Product.created_at.desc())
+        qry = _apply_product_filters(
+            db.query(Product),
+            q=q,
+            status=status,
+            category=category,
+            condition=condition,
+            storage_location=storage_location,
+            min_value=min_value,
+            max_value=max_value,
+        )
+        qry, _, _ = apply_sorting(
+            qry,
+            model=Product,
+            sort_by=sort_by,
+            sort_order=sort_order,
+            allowed_fields={
+                "created_at",
+                "updated_at",
+                "title",
+                "status",
+                "current_value",
+                "purchase_date",
+                "status_changed_at",
+            },
+            fallback="updated_at",
+        )
         items = qry.all()
         if year_set:
             items = [p for p in items if _product_in_years(p, year_set)]

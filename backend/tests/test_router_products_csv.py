@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from sqlalchemy.orm import Session
 
+from app.models.product import Product, ProductCondition, ProductStatus
 from app.models.user import UserRole
 from tests.factories import create_tokens_for_user, create_user
 
@@ -50,3 +51,39 @@ def test_csv_import_route_accepts_editor(client, db_session: Session) -> None:
     assert body["rows_total"] == 1
     assert body["ready"] == 1
     assert body["inserted"] == 0
+
+
+def test_csv_export_products_respects_filters(client, db_session: Session) -> None:
+    editor = create_user(db_session, username="csv_export_editor", role=UserRole.editor)
+    token, _ = create_tokens_for_user(db_session, user=editor)
+
+    db_session.add(
+        Product(
+            title="Canon R6",
+            brand="Canon",
+            category="camera",
+            condition=ProductCondition.good,
+            status=ProductStatus.active,
+            currency="EUR",
+        )
+    )
+    db_session.add(
+        Product(
+            title="Nintendo Switch",
+            brand="Nintendo",
+            category="console",
+            condition=ProductCondition.good,
+            status=ProductStatus.archived,
+            currency="EUR",
+        )
+    )
+    db_session.commit()
+
+    response = client.get(
+        "/api/products/export/csv?dataset=products&q=canon&status=active",
+        headers=_auth_header(token),
+    )
+
+    assert response.status_code == 200
+    assert "Canon R6" in response.text
+    assert "Nintendo Switch" not in response.text

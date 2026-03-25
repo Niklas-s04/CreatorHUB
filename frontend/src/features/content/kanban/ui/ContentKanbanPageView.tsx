@@ -223,6 +223,7 @@ export default function ContentPage() {
                           {cards.map((it) => (
                             <div
                               key={it.id}
+                              id={`content-${it.id}`}
                               className={it.id === selectedId ? "kanban-card active" : "kanban-card"}
                               onClick={() => setSelectedId(it.id)}
                             >

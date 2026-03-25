@@ -235,7 +235,7 @@ export default function AssetsPage() {
           const thumbUrl = thumbs[asset.id]
           const licenseOk = hasLicense(asset)
           return (
-            <div key={asset.id} className="asset-card">
+            <div key={asset.id} id={`asset-${asset.id}`} className="asset-card">
               <div className="asset-cover">
                 {asset.kind === 'image' && thumbUrl && (
                   <img src={thumbUrl} alt={asset.title || 'Asset preview'} />

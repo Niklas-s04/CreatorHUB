@@ -1,86 +1,161 @@
-import { type FormEvent, useEffect, useMemo, useState } from 'react'
+import { type FormEvent, Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { apiFetch } from '../../../api'
-import { parseProductsDtoArray } from '../../api/validators'
-import { NAV_SECTIONS_TASK_BASED } from '../../navigation/navConfig'
 
-type SearchResult = {
-  key: string
+type SearchHit = {
+  id: string
+  type: 'product' | 'asset' | 'content' | 'knowledge' | 'user'
   label: string
-  hint: string
+  subtitle: string | null
   to: string
 }
 
-type ProductHit = {
-  id: number
-  title: string
+type SearchGroup = {
+  key: string
+  label: string
+  hits: SearchHit[]
 }
 
 function normalize(value: string): string {
   return value.trim().toLowerCase()
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null
+}
+
+function asString(value: unknown): string {
+  return typeof value === 'string' ? value : ''
+}
+
+function asNullableString(value: unknown): string | null {
+  return typeof value === 'string' && value.trim() ? value : null
+}
+
+function parseSearchGroups(input: unknown): SearchGroup[] {
+  if (!isRecord(input) || !Array.isArray(input.groups)) return []
+  return input.groups
+    .map(group => {
+      const src = isRecord(group) ? group : {}
+      const key = asString(src.type)
+      const label = asString(src.label)
+      const hits = Array.isArray(src.hits)
+        ? src.hits
+            .map(hit => {
+              const item = isRecord(hit) ? hit : {}
+              const id = asString(item.id)
+              const type = asString(item.type)
+              const title = asString(item.title)
+              const detailPath = asString(item.detail_path)
+              if (!id || !title || !detailPath) return null
+              if (!['product', 'asset', 'content', 'knowledge', 'user'].includes(type)) return null
+              return {
+                id,
+                type: type as SearchHit['type'],
+                label: title,
+                subtitle: asNullableString(item.subtitle),
+                to: detailPath,
+              } satisfies SearchHit
+            })
+            .filter((hit): hit is SearchHit => Boolean(hit))
+        : []
+      if (!key || !label || !hits.length) return null
+      return { key, label, hits } satisfies SearchGroup
+    })
+    .filter((group): group is SearchGroup => Boolean(group))
+}
+
+function highlightText(text: string, query: string): Array<{ text: string; match: boolean }> {
+  const q = normalize(query)
+  if (!q) return [{ text, match: false }]
+  const lower = text.toLowerCase()
+  const parts: Array<{ text: string; match: boolean }> = []
+  let cursor = 0
+  while (cursor < text.length) {
+    const index = lower.indexOf(q, cursor)
+    if (index === -1) {
+      parts.push({ text: text.slice(cursor), match: false })
+      break
+    }
+    if (index > cursor) {
+      parts.push({ text: text.slice(cursor, index), match: false })
+    }
+    parts.push({ text: text.slice(index, index + q.length), match: true })
+    cursor = index + q.length
+  }
+  return parts.length ? parts : [{ text, match: false }]
+}
+
+function HighlightedText({ text, query }: { text: string; query: string }) {
+  return (
+    <>
+      {highlightText(text, query).map((part, index) =>
+        part.match ? (
+          <mark key={`${part.text}-${index}`} className="topbar-search-mark">
+            {part.text}
+          </mark>
+        ) : (
+          <Fragment key={`${part.text}-${index}`}>{part.text}</Fragment>
+        )
+      )}
+    </>
+  )
+}
+
 export default function TopBar({ onToggleMenu }: { onToggleMenu: () => void }) {
   const navigate = useNavigate()
+  const inputRef = useRef<HTMLInputElement | null>(null)
   const [query, setQuery] = useState('')
   const [open, setOpen] = useState(false)
-  const [productHits, setProductHits] = useState<ProductHit[]>([])
-
-  const domainResults = useMemo(() => {
-    const q = normalize(query)
-    if (!q) return []
-
-    const results: SearchResult[] = []
-    for (const section of NAV_SECTIONS_TASK_BASED) {
-      for (const item of section.items) {
-        const haystack = `${item.label} ${item.keywords.join(' ')}`.toLowerCase()
-        if (haystack.includes(q)) {
-          results.push({
-            key: `route:${item.to}`,
-            label: item.label,
-            hint: section.title,
-            to: item.to,
-          })
-        }
-      }
-    }
-    return results
-  }, [query])
+  const [loading, setLoading] = useState(false)
+  const [groups, setGroups] = useState<SearchGroup[]>([])
+  const [activeKey, setActiveKey] = useState<string | null>(null)
 
   useEffect(() => {
     const q = normalize(query)
     if (q.length < 2) {
-      setProductHits([])
+      setGroups([])
+      setActiveKey(null)
       return
     }
 
     const timer = setTimeout(async () => {
+      setLoading(true)
       try {
-        const response = await apiFetch<unknown>(`/products?limit=8&q=${encodeURIComponent(q)}`)
-        const rows = parseProductsDtoArray(response)
-        setProductHits(
-          rows
-            .filter(row => row.id >= 0)
-            .map(row => ({ id: row.id, title: row.title }))
-            .slice(0, 8)
-        )
+        const response = await apiFetch<unknown>(`/search?q=${encodeURIComponent(q)}&per_type=4`)
+        const parsedGroups = parseSearchGroups(response)
+        setGroups(parsedGroups)
+        const firstHit = parsedGroups[0]?.hits[0]
+        setActiveKey(firstHit ? `${firstHit.type}:${firstHit.id}` : null)
       } catch {
-        setProductHits([])
+        setGroups([])
+        setActiveKey(null)
+      } finally {
+        setLoading(false)
       }
     }, 220)
 
     return () => clearTimeout(timer)
   }, [query])
 
-  const mergedResults = useMemo<SearchResult[]>(() => {
-    const productResults = productHits.map(hit => ({
-      key: `product:${hit.id}`,
-      label: hit.title,
-      hint: 'Produktdetail',
-      to: `/products/${hit.id}`,
-    }))
-    return [...domainResults, ...productResults].slice(0, 12)
-  }, [domainResults, productHits])
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent) {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
+        event.preventDefault()
+        inputRef.current?.focus()
+        setOpen(true)
+      }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [])
+
+  const flatHits = useMemo(() => groups.flatMap(group => group.hits), [groups])
+
+  const activeIndex = useMemo(() => {
+    if (!activeKey) return -1
+    return flatHits.findIndex(hit => `${hit.type}:${hit.id}` === activeKey)
+  }, [activeKey, flatHits])
 
   function goTo(path: string) {
     setOpen(false)
@@ -88,10 +163,37 @@ export default function TopBar({ onToggleMenu }: { onToggleMenu: () => void }) {
     navigate(path)
   }
 
+  function onInputKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
+    if (!open && ['ArrowDown', 'ArrowUp'].includes(event.key)) {
+      setOpen(true)
+      return
+    }
+    if (event.key === 'Escape') {
+      setOpen(false)
+      return
+    }
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      if (!flatHits.length) return
+      event.preventDefault()
+      const direction = event.key === 'ArrowDown' ? 1 : -1
+      const start = activeIndex < 0 ? (direction > 0 ? -1 : 0) : activeIndex
+      const next = (start + direction + flatHits.length) % flatHits.length
+      const hit = flatHits[next]
+      setActiveKey(`${hit.type}:${hit.id}`)
+      return
+    }
+    if (event.key === 'Enter' && flatHits.length) {
+      event.preventDefault()
+      const hit = activeIndex >= 0 ? flatHits[activeIndex] : flatHits[0]
+      goTo(hit.to)
+    }
+  }
+
   function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (mergedResults.length) {
-      goTo(mergedResults[0].to)
+    if (flatHits.length) {
+      const hit = activeIndex >= 0 ? flatHits[activeIndex] : flatHits[0]
+      goTo(hit.to)
       return
     }
     if (normalize(query)) {
@@ -106,11 +208,13 @@ export default function TopBar({ onToggleMenu }: { onToggleMenu: () => void }) {
         <div className="topbar-search-wrap">
           <form onSubmit={onSubmit}>
             <input
+              ref={inputRef}
               className="topbar-search"
-              placeholder="Suchen nach Aufgaben, Bereichen oder Produkten …"
+              placeholder="Global suchen: Produkte, Assets, Content, Knowledge, Benutzer …"
               aria-label="Suchen"
               value={query}
               onFocus={() => setOpen(true)}
+              onKeyDown={onInputKeyDown}
               onBlur={() => {
                 setTimeout(() => setOpen(false), 120)
               }}
@@ -119,20 +223,40 @@ export default function TopBar({ onToggleMenu }: { onToggleMenu: () => void }) {
           </form>
           {open && normalize(query) && (
             <div className="topbar-search-results" role="listbox" aria-label="Suchergebnisse">
-              {mergedResults.length === 0 && (
+              {loading && <div className="topbar-search-empty">Suche läuft…</div>}
+              {!loading && groups.length === 0 && (
                 <div className="topbar-search-empty">Keine Treffer. Enter öffnet Operations Inbox.</div>
               )}
-              {mergedResults.map(result => (
-                <button
-                  key={result.key}
-                  className="topbar-search-item"
-                  onMouseDown={() => goTo(result.to)}
-                  type="button"
-                >
-                  <span>{result.label}</span>
-                  <span className="muted small">{result.hint}</span>
-                </button>
-              ))}
+              {!loading &&
+                groups.map(group => (
+                  <div key={group.key} className="topbar-search-group">
+                    <div className="topbar-search-group-title">{group.label}</div>
+                    {group.hits.map(hit => {
+                      const key = `${hit.type}:${hit.id}`
+                      const active = key === activeKey
+                      return (
+                        <button
+                          key={key}
+                          className={active ? 'topbar-search-item active' : 'topbar-search-item'}
+                          onMouseDown={() => goTo(hit.to)}
+                          onMouseEnter={() => setActiveKey(key)}
+                          type="button"
+                          role="option"
+                          aria-selected={active}
+                        >
+                          <span className="topbar-search-item-main">
+                            <HighlightedText text={hit.label} query={query} />
+                          </span>
+                          {hit.subtitle && (
+                            <span className="topbar-search-item-sub muted small">
+                              <HighlightedText text={hit.subtitle} query={query} />
+                            </span>
+                          )}
+                        </button>
+                      )
+                    })}
+                  </div>
+                ))}
             </div>
           )}
         </div>

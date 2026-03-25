@@ -26,6 +26,7 @@ from app.api.routers import (
     knowledge,
     operations,
     products,
+    search,
 )
 from app.core.config import settings
 from app.core.web_security import (
@@ -220,6 +221,10 @@ def create_app() -> FastAPI:
                 "name": "operations",
                 "description": "Central operations inbox for open approvals and todos",
             },
+            {
+                "name": "search",
+                "description": "Cross-domain global search with grouped, ranked results",
+            },
         ],
     )
 
@@ -283,6 +288,7 @@ def create_app() -> FastAPI:
         prefix=f"{API_BASE_PREFIX}/operations",
         tags=["operations"],
     )
+    app.include_router(search.router, prefix=f"{API_BASE_PREFIX}/search", tags=["search"])
 
     app.include_router(
         auth.router, prefix=f"{LEGACY_API_PREFIX}/auth", tags=["auth"], deprecated=True
@@ -327,6 +333,12 @@ def create_app() -> FastAPI:
         operations.router,
         prefix=f"{LEGACY_API_PREFIX}/operations",
         tags=["operations"],
+        deprecated=True,
+    )
+    app.include_router(
+        search.router,
+        prefix=f"{LEGACY_API_PREFIX}/search",
+        tags=["search"],
         deprecated=True,
     )
 

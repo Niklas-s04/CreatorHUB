@@ -99,7 +99,7 @@ export default function AdminPage() {
                 </thead>
                 <tbody>
                   {users.map(u => (
-                    <tr key={u.id}>
+                    <tr key={u.id} id={`user-${u.id}`}>
                       <td>{u.username}</td>
                       <td><span className="pill">{u.role}</span></td>
                       <td>{u.mfa_enabled ? 'Aktiv' : 'Inaktiv'}</td>

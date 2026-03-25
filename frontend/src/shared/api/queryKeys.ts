@@ -6,7 +6,14 @@ export const queryKeys = {
     users: () => ['auth', 'users'] as const,
   },
   products: {
-    list: (params: { q?: string; status?: string; limit?: number }) => ['products', 'list', params] as const,
+    list: (params: {
+      q?: string
+      status?: string
+      limit?: number
+      offset?: number
+      sort_by?: string
+      sort_order?: 'asc' | 'desc'
+    }) => ['products', 'list', params] as const,
     detail: (id: string) => ['products', 'detail', id] as const,
     transactions: (id: string) => ['products', 'transactions', id] as const,
     assets: (id: string) => ['products', 'assets', id] as const,

@@ -222,8 +222,9 @@ th{ color: var(--muted); font-weight: 700; }
   border:0;
   background: transparent;
   display:flex;
-  justify-content:space-between;
-  align-items:center;
+  flex-direction:column;
+  align-items:flex-start;
+  gap: 4px;
   text-align:left;
   padding: 10px 12px;
   cursor:pointer;
@@ -231,6 +232,39 @@ th{ color: var(--muted); font-weight: 700; }
 
 .topbar-search-item:hover{
   background: var(--panel2);
+}
+
+.topbar-search-item.active{
+  background: var(--panel2);
+}
+
+.topbar-search-group{
+  padding: 6px 0;
+}
+
+.topbar-search-group + .topbar-search-group{
+  border-top: 1px solid var(--border);
+}
+
+.topbar-search-group-title{
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  color: var(--muted);
+  padding: 0 12px 6px;
+}
+
+.topbar-search-item-main,
+.topbar-search-item-sub{
+  width: 100%;
+  display: block;
+}
+
+.topbar-search-mark{
+  background: var(--panel2);
+  color: inherit;
+  border-radius: 4px;
+  padding: 0 2px;
 }
 
 .topbar-search-empty{

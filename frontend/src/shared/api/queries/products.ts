@@ -5,17 +5,88 @@ import type { ProductAssetVm, ProductDetailVm, ProductListItemVm, ProductTransac
 import { parseProductAssetsDtoArray, parseProductDto, parseProductsDtoArray, parseProductTransactionsDtoArray } from '../validators'
 import { queryKeys } from '../queryKeys'
 
-export function useProductsListQuery(params: { q?: string; status?: string; limit?: number }) {
-  return useQuery<ProductListItemVm[]>({
+export type ProductsListParams = {
+  q?: string
+  status?: string
+  limit?: number
+  offset?: number
+  sort_by?: string
+  sort_order?: 'asc' | 'desc'
+}
+
+export type ProductsListPageVm = {
+  items: ProductListItemVm[]
+  meta: {
+    limit: number
+    offset: number
+    total: number
+    sort_by: string
+    sort_order: 'asc' | 'desc'
+  }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null
+}
+
+function parseProductsPage(input: unknown, fallback: ProductsListParams): ProductsListPageVm {
+  if (Array.isArray(input)) {
+    return {
+      items: parseProductsDtoArray(input).map(toProductListItemVm).filter(product => product.id >= 0),
+      meta: {
+        limit: fallback.limit ?? 100,
+        offset: fallback.offset ?? 0,
+        total: input.length,
+        sort_by: fallback.sort_by ?? 'updated_at',
+        sort_order: fallback.sort_order ?? 'desc',
+      },
+    }
+  }
+  if (!isRecord(input) || !Array.isArray(input.items)) {
+    return {
+      items: [],
+      meta: {
+        limit: fallback.limit ?? 100,
+        offset: fallback.offset ?? 0,
+        total: 0,
+        sort_by: fallback.sort_by ?? 'updated_at',
+        sort_order: fallback.sort_order ?? 'desc',
+      },
+    }
+  }
+  const items = parseProductsDtoArray(input.items)
+    .map(toProductListItemVm)
+    .filter(product => product.id >= 0)
+
+  const metaRaw = isRecord(input.meta) ? input.meta : {}
+  const sortOrder = metaRaw.sort_order === 'asc' ? 'asc' : 'desc'
+
+  return {
+    items,
+    meta: {
+      limit: typeof metaRaw.limit === 'number' ? metaRaw.limit : fallback.limit ?? 100,
+      offset: typeof metaRaw.offset === 'number' ? metaRaw.offset : fallback.offset ?? 0,
+      total: typeof metaRaw.total === 'number' ? metaRaw.total : items.length,
+      sort_by: typeof metaRaw.sort_by === 'string' ? metaRaw.sort_by : fallback.sort_by ?? 'updated_at',
+      sort_order: sortOrder,
+    },
+  }
+}
+
+export function useProductsListQuery(params: ProductsListParams) {
+  return useQuery<ProductsListPageVm>({
     queryKey: queryKeys.products.list(params),
     staleTime: 20_000,
     queryFn: async () => {
       const search = new URLSearchParams()
       search.set('limit', String(params.limit ?? 100))
+      search.set('offset', String(params.offset ?? 0))
+      search.set('sort_by', params.sort_by ?? 'updated_at')
+      search.set('sort_order', params.sort_order ?? 'desc')
       if (params.q) search.set('q', params.q)
       if (params.status) search.set('status', params.status)
       const data = await apiFetch<unknown>(`/products?${search.toString()}`)
-      return parseProductsDtoArray(data).map(toProductListItemVm).filter(product => product.id >= 0)
+      return parseProductsPage(data, params)
     },
   })
 }
@@ -63,7 +134,7 @@ type CreateProductInput = {
   current_value?: number
 }
 
-export function useCreateProductMutation(listParams: { q?: string; status?: string; limit?: number }) {
+export function useCreateProductMutation(listParams: ProductsListParams) {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: async (payload: CreateProductInput) => {

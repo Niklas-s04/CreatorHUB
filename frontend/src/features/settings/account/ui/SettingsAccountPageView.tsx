@@ -375,7 +375,7 @@ function DocEditor({ doc, onSave }: DocEditorProps) {
   }
 
   return (
-    <div className="card section-gap no-margin">
+    <div id={`knowledge-${doc.id}`} className="card section-gap no-margin">
       <div className="page-header no-margin">
         <div>
           <div className="pill">{doc.type}</div>
