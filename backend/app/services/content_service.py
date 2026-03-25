@@ -287,7 +287,9 @@ def list_personal_tasks(
         (ContentTask.assignee_user_id == user.id)
         | ((ContentTask.assignee_user_id.is_(None)) & (ContentTask.assignee_role == user.role))
     )
-    return q.order_by(ContentTask.priority.desc(), ContentTask.due_date.asc(), ContentTask.updated_at.desc()).all()
+    return q.order_by(
+        ContentTask.priority.desc(), ContentTask.due_date.asc(), ContentTask.updated_at.desc()
+    ).all()
 
 
 def list_task_views(db: Session, *, user: User) -> list[ContentTaskView]:

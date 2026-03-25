@@ -5,20 +5,50 @@ from copy import deepcopy
 from app.models.deal import DealDraftStatus
 
 _BASE: list[dict[str, str | bool]] = [
-    {"key": "brand_verified", "label": "Brand/Ansprechpartner verifiziert", "required": True, "done": False},
+    {
+        "key": "brand_verified",
+        "label": "Brand/Ansprechpartner verifiziert",
+        "required": True,
+        "done": False,
+    },
     {"key": "budget_clarified", "label": "Budget geklärt", "required": True, "done": False},
-    {"key": "deliverables_defined", "label": "Deliverables definiert", "required": True, "done": False},
-    {"key": "usage_rights_defined", "label": "Nutzungsrechte geklärt", "required": True, "done": False},
+    {
+        "key": "deliverables_defined",
+        "label": "Deliverables definiert",
+        "required": True,
+        "done": False,
+    },
+    {
+        "key": "usage_rights_defined",
+        "label": "Nutzungsrechte geklärt",
+        "required": True,
+        "done": False,
+    },
 ]
 
 _NEGOTIATING: list[dict[str, str | bool]] = [
     {"key": "timeline_agreed", "label": "Timeline abgestimmt", "required": True, "done": False},
-    {"key": "approval_flow_defined", "label": "Freigabeflow vereinbart", "required": True, "done": False},
+    {
+        "key": "approval_flow_defined",
+        "label": "Freigabeflow vereinbart",
+        "required": True,
+        "done": False,
+    },
 ]
 
 _WON: list[dict[str, str | bool]] = [
-    {"key": "contract_archived", "label": "Vertrags-/Briefingstand archiviert", "required": True, "done": False},
-    {"key": "handover_to_content", "label": "Übergabe an Content geplant", "required": True, "done": False},
+    {
+        "key": "contract_archived",
+        "label": "Vertrags-/Briefingstand archiviert",
+        "required": True,
+        "done": False,
+    },
+    {
+        "key": "handover_to_content",
+        "label": "Übergabe an Content geplant",
+        "required": True,
+        "done": False,
+    },
 ]
 
 
@@ -40,13 +70,13 @@ def merge_checklist(
     base = default_checklist_for_status(status)
     by_key = {str(item.get("key")): item for item in base}
 
-    for source in (current or []):
+    for source in current or []:
         key = str(source.get("key") or "")
         if not key or key not in by_key:
             continue
         by_key[key]["done"] = bool(source.get("done"))
 
-    for source in (override or []):
+    for source in override or []:
         key = str(source.get("key") or "")
         if not key:
             continue

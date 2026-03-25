@@ -570,7 +570,10 @@ def change_status(
                     "workflow_status": before_workflow_status.value,
                     "review_reason": before_review_reason,
                 },
-                after={"workflow_status": p.workflow_status.value, "review_reason": p.review_reason},
+                after={
+                    "workflow_status": p.workflow_status.value,
+                    "review_reason": p.review_reason,
+                },
             )
             emit_domain_event(
                 db,

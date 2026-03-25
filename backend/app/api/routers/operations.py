@@ -255,7 +255,9 @@ def operations_inbox(
             elif task.priority == TaskPriority.high:
                 content_priority = "high"
             else:
-                content_priority = "critical" if overdue_days >= 7 else "high" if overdue_days >= 3 else "medium"
+                content_priority = (
+                    "critical" if overdue_days >= 7 else "high" if overdue_days >= 3 else "medium"
+                )
 
             assignee_username = None
             if task.assignee_user_id:
@@ -314,7 +316,7 @@ def operations_inbox(
                     responsible_role="editor",
                 )
             )
- 
+
     if has_permission(current_user, Permission.product_read):
         products = db.query(Product).order_by(Product.updated_at.desc()).limit(limit).all()
         for product in products:
@@ -343,7 +345,9 @@ def operations_inbox(
                         source_id=str(product.id),
                         priority="high",
                         escalation=True,
-                        due_at=product.updated_at + timedelta(days=2) if product.updated_at else None,
+                        due_at=product.updated_at + timedelta(days=2)
+                        if product.updated_at
+                        else None,
                         created_at=product.created_at,
                         updated_at=product.updated_at,
                         assignee_username=None,
@@ -361,7 +365,9 @@ def operations_inbox(
                         source_id=str(product.id),
                         priority="medium",
                         escalation=False,
-                        due_at=product.updated_at + timedelta(days=3) if product.updated_at else None,
+                        due_at=product.updated_at + timedelta(days=3)
+                        if product.updated_at
+                        else None,
                         created_at=product.created_at,
                         updated_at=product.updated_at,
                         assignee_username=None,
@@ -379,7 +385,9 @@ def operations_inbox(
                         source_id=str(product.id),
                         priority="medium",
                         escalation=False,
-                        due_at=product.updated_at + timedelta(days=4) if product.updated_at else None,
+                        due_at=product.updated_at + timedelta(days=4)
+                        if product.updated_at
+                        else None,
                         created_at=product.created_at,
                         updated_at=product.updated_at,
                         assignee_username=None,

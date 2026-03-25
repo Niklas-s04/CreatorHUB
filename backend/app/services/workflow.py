@@ -9,13 +9,21 @@ from app.services.errors import BusinessRuleViolation
 
 WORKFLOW_TRANSITIONS: dict[WorkflowStatus, set[WorkflowStatus]] = {
     WorkflowStatus.draft: {WorkflowStatus.in_review, WorkflowStatus.archived},
-    WorkflowStatus.in_review: {WorkflowStatus.approved, WorkflowStatus.rejected, WorkflowStatus.draft},
+    WorkflowStatus.in_review: {
+        WorkflowStatus.approved,
+        WorkflowStatus.rejected,
+        WorkflowStatus.draft,
+    },
     WorkflowStatus.approved: {
         WorkflowStatus.published,
         WorkflowStatus.archived,
         WorkflowStatus.in_review,
     },
-    WorkflowStatus.rejected: {WorkflowStatus.draft, WorkflowStatus.in_review, WorkflowStatus.archived},
+    WorkflowStatus.rejected: {
+        WorkflowStatus.draft,
+        WorkflowStatus.in_review,
+        WorkflowStatus.archived,
+    },
     WorkflowStatus.published: {WorkflowStatus.in_review, WorkflowStatus.archived},
     WorkflowStatus.archived: {WorkflowStatus.in_review},
 }

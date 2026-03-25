@@ -227,7 +227,9 @@ def update_deal_draft(
     requested_workflow_status = data.pop("workflow_status", None)
     explicit_review_reason = data.pop("review_reason", None)
 
-    changed_fields = {key for key in DEAL_DRAFT_FIELD_KEYS if key in data and getattr(draft, key) != data[key]}
+    changed_fields = {
+        key for key in DEAL_DRAFT_FIELD_KEYS if key in data and getattr(draft, key) != data[key]
+    }
 
     target_workflow_status = requested_workflow_status or draft.workflow_status
     review_reason = explicit_review_reason

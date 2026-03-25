@@ -341,7 +341,10 @@ def test_sales_finalize_archives_linked_entities(service_db: Session) -> None:
     assert deal.workflow_status == WorkflowStatus.archived
     assert content.workflow_status == WorkflowStatus.archived
     assert asset.workflow_status == WorkflowStatus.archived
-    assert service_db.query(AuditLog).filter(AuditLog.action == "sales.workflow.finalized").count() == 1
+    assert (
+        service_db.query(AuditLog).filter(AuditLog.action == "sales.workflow.finalized").count()
+        == 1
+    )
 
 
 def test_content_task_assignment_and_personal_worklist(service_db: Session) -> None:

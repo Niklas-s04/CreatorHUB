@@ -412,7 +412,10 @@ def update_asset(
                 "workflow_status": previous_workflow_status.value,
                 "review_reason": previous_review_reason,
             },
-            after={"workflow_status": asset.workflow_status.value, "review_reason": asset.review_reason},
+            after={
+                "workflow_status": asset.workflow_status.value,
+                "review_reason": asset.review_reason,
+            },
         )
         emit_domain_event(
             db,
