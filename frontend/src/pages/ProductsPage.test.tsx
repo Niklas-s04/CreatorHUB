@@ -44,7 +44,11 @@ describe('ProductsPage', () => {
 
     renderWithRouter(<ProductsPage />)
 
-    fireEvent.click(await screen.findByRole('button', { name: '+ Produkt' }))
+    const createButton = await screen.findByRole('button', { name: '+ Produkt' })
+    await waitFor(() => {
+      expect(createButton).toBeEnabled()
+    })
+    fireEvent.click(createButton)
 
     const saveButton = screen.getByRole('button', { name: 'Speichern' })
     expect(saveButton).toBeDisabled()
