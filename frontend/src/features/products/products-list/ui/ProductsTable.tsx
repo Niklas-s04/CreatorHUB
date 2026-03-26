@@ -57,11 +57,19 @@ export function ProductsTable({
     return <span className="muted small">{sortOrder === 'asc' ? '↑' : '↓'}</span>
   }
 
+  function getSortAria(column: ProductColumnKey): 'none' | 'ascending' | 'descending' {
+    const field = SORTABLE_COLUMNS[column]
+    if (!field) return 'none'
+    if (field !== sortBy) return 'none'
+    return sortOrder === 'asc' ? 'ascending' : 'descending'
+  }
+
   return (
     <table>
+      <caption className="sr-only">Produktliste mit Auswahl und Sortierung</caption>
       <thead>
         <tr>
-          <th>
+          <th scope="col">
             <input
               aria-label="Alle Produkte auf Seite auswählen"
               type="checkbox"
@@ -72,9 +80,14 @@ export function ProductsTable({
           {visibleColumns.map(column => {
             const sortableField = SORTABLE_COLUMNS[column]
             return (
-              <th key={column}>
+              <th key={column} scope="col" aria-sort={getSortAria(column)}>
                 {sortableField ? (
-                  <button className="btn ghost" type="button" onClick={() => onSort(sortableField)}>
+                  <button
+                    className="btn ghost"
+                    type="button"
+                    onClick={() => onSort(sortableField)}
+                    aria-label={`${COLUMN_LABELS[column]} sortieren`}
+                  >
                     {COLUMN_LABELS[column]} {sortIndicator(column)}
                   </button>
                 ) : (
@@ -99,9 +112,9 @@ export function ProductsTable({
             {visibleColumns.map(column => {
               if (column === 'title') {
                 return (
-                  <td key={`${product.id}-${column}`}>
+                  <th key={`${product.id}-${column}`} scope="row">
                     <Link to={`/products/${product.id}`}>{product.title}</Link>
-                  </td>
+                  </th>
                 )
               }
               if (column === 'category') return <td key={`${product.id}-${column}`}>{product.category}</td>

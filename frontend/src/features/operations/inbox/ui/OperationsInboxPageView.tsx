@@ -239,15 +239,16 @@ export default function OperationsInboxPageView() {
           <h3>Offene Freigaben & ToDos</h3>
         </div>
         <table className="status-table">
+          <caption className="sr-only">Operations Inbox Einträge</caption>
           <thead>
             <tr>
-              <th>Typ</th>
-              <th>Titel</th>
-              <th>Priorität</th>
-              <th>Eskalation</th>
-              <th>Zuständigkeit</th>
-              <th>Fällig</th>
-              <th>Aktion</th>
+              <th scope="col">Typ</th>
+              <th scope="col">Titel</th>
+              <th scope="col">Priorität</th>
+              <th scope="col">Eskalation</th>
+              <th scope="col">Zuständigkeit</th>
+              <th scope="col">Fällig</th>
+              <th scope="col">Aktion</th>
             </tr>
           </thead>
           <tbody>

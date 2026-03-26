@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Navigate, Outlet, Route, Routes } from "react-router-dom";
 import TopBar from "./components/TopBar";
 import Sidebar from "./components/Sidebar";
@@ -55,17 +55,80 @@ function PublicOnly() {
 
 function AppLayout() {
   const [menuOpen, setMenuOpen] = useState(false);
+  const drawerRef = useRef<HTMLDivElement | null>(null);
+  const previousFocusRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    if (!menuOpen) {
+      previousFocusRef.current?.focus();
+      return;
+    }
+
+    previousFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const drawerEl = drawerRef.current;
+    if (!drawerEl) return;
+
+    const selector = [
+      'button:not([disabled])',
+      'a[href]',
+      'input:not([disabled])',
+      'select:not([disabled])',
+      'textarea:not([disabled])',
+      '[tabindex]:not([tabindex="-1"])',
+    ].join(', ');
+
+    const focusables = Array.from(drawerEl.querySelectorAll<HTMLElement>(selector));
+    const firstFocusable = focusables[0] ?? drawerEl;
+    firstFocusable.focus();
+
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        setMenuOpen(false);
+        return;
+      }
+      if (event.key !== 'Tab') return;
+
+      const allFocusable = Array.from(drawerEl!.querySelectorAll<HTMLElement>(selector));
+      if (!allFocusable.length) {
+        event.preventDefault();
+        drawerEl!.focus();
+        return;
+      }
+      const first = allFocusable[0];
+      const last = allFocusable[allFocusable.length - 1];
+      const active = document.activeElement;
+      if (event.shiftKey && active === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && active === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    }
+
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [menuOpen]);
 
   return (
     <div className="app-shell">
       <Sidebar />
-      {menuOpen && <button className="sidebar-overlay" onClick={() => setMenuOpen(false)} aria-label="Menü schließen" />}
-      <div className={menuOpen ? "sidebar-drawer open" : "sidebar-drawer"}>
+      {menuOpen && <button type="button" className="sidebar-overlay" onClick={() => setMenuOpen(false)} aria-label="Menü schließen" />}
+      <div
+        id="mobile-navigation-drawer"
+        className={menuOpen ? "sidebar-drawer open" : "sidebar-drawer"}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Seitennavigation"
+        tabIndex={-1}
+        ref={drawerRef}
+      >
         <Sidebar onNavigate={() => setMenuOpen(false)} />
       </div>
       <div className="app-main">
-        <TopBar onToggleMenu={() => setMenuOpen(v => !v)} />
-        <main className="main-content">
+        <TopBar menuOpen={menuOpen} onToggleMenu={() => setMenuOpen(v => !v)} />
+        <main id="main-content" className="main-content" tabIndex={-1}>
           <Breadcrumbs />
           <Outlet />
         </main>

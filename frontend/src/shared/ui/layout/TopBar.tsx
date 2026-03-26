@@ -102,7 +102,7 @@ function HighlightedText({ text, query }: { text: string; query: string }) {
   )
 }
 
-export default function TopBar({ onToggleMenu }: { onToggleMenu: () => void }) {
+export default function TopBar({ menuOpen = false, onToggleMenu }: { menuOpen?: boolean; onToggleMenu: () => void }) {
   const navigate = useNavigate()
   const inputRef = useRef<HTMLInputElement | null>(null)
   const [query, setQuery] = useState('')
@@ -202,16 +202,32 @@ export default function TopBar({ onToggleMenu }: { onToggleMenu: () => void }) {
   }
 
   return (
-    <div className="topbar">
+    <header className="topbar" role="banner">
       <div className="topbar-inner">
-        <button className="topbar-menu-btn" onClick={onToggleMenu} aria-label="Navigation öffnen">☰</button>
+        <button
+          type="button"
+          className="topbar-menu-btn"
+          onClick={onToggleMenu}
+          aria-label="Navigation öffnen"
+          aria-controls="mobile-navigation-drawer"
+          aria-expanded={menuOpen}
+        >
+          ☰
+        </button>
         <div className="topbar-search-wrap">
-          <form onSubmit={onSubmit}>
+          <form onSubmit={onSubmit} role="search" aria-label="Globale Suche">
+            <label htmlFor="global-search" className="sr-only">Globale Suche</label>
             <input
+              id="global-search"
               ref={inputRef}
               className="topbar-search"
               placeholder="Global suchen: Produkte, Assets, Content, Knowledge, Benutzer …"
               aria-label="Suchen"
+              role="combobox"
+              aria-autocomplete="list"
+              aria-expanded={open && normalize(query).length > 0}
+              aria-controls="global-search-results"
+              aria-activedescendant={activeKey ? `search-option-${activeKey}` : undefined}
               value={query}
               onFocus={() => setOpen(true)}
               onKeyDown={onInputKeyDown}
@@ -221,8 +237,11 @@ export default function TopBar({ onToggleMenu }: { onToggleMenu: () => void }) {
               onChange={event => setQuery(event.target.value)}
             />
           </form>
+          <div className="sr-only" aria-live="polite" aria-atomic="true">
+            {loading ? 'Suche läuft' : groups.length ? `${flatHits.length} Suchtreffer verfügbar` : normalize(query) ? 'Keine Suchtreffer' : ''}
+          </div>
           {open && normalize(query) && (
-            <div className="topbar-search-results" role="listbox" aria-label="Suchergebnisse">
+            <div id="global-search-results" className="topbar-search-results" role="listbox" aria-label="Suchergebnisse">
               {loading && <div className="topbar-search-empty">Suche läuft…</div>}
               {!loading && groups.length === 0 && (
                 <div className="topbar-search-empty">Keine Treffer. Enter öffnet Operations Inbox.</div>
@@ -237,6 +256,7 @@ export default function TopBar({ onToggleMenu }: { onToggleMenu: () => void }) {
                       return (
                         <button
                           key={key}
+                          id={`search-option-${key}`}
                           className={active ? 'topbar-search-item active' : 'topbar-search-item'}
                           onMouseDown={() => goTo(hit.to)}
                           onMouseEnter={() => setActiveKey(key)}
@@ -261,17 +281,17 @@ export default function TopBar({ onToggleMenu }: { onToggleMenu: () => void }) {
           )}
         </div>
         <div className="topbar-right">
-          <div className="topbar-icon-btn" aria-label="Benachrichtigungen">
+          <button type="button" className="topbar-icon-btn" aria-label="Benachrichtigungen">
             🔔
             <span className="badge">3</span>
-          </div>
-          <div className="topbar-icon-btn" aria-label="Nachrichten">
+          </button>
+          <button type="button" className="topbar-icon-btn" aria-label="Nachrichten">
             ✉
             <span className="badge">7</span>
-          </div>
-          <div className="topbar-profile" aria-label="Profil">NH</div>
+          </button>
+          <button type="button" className="topbar-profile" aria-label="Profil öffnen">NH</button>
         </div>
       </div>
-    </div>
+    </header>
   );
 }

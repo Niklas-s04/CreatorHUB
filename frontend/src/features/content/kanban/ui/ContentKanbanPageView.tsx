@@ -162,20 +162,24 @@ export default function ContentPage() {
         </div>
         <div className="page-actions">
           <div className="control-row">
+            <label className="sr-only" htmlFor="content-new-title">Titel</label>
             <input
+              id="content-new-title"
               className="composer-input"
               placeholder="Titel…"
               value={newTitle}
               onChange={(e) => setNewTitle(e.target.value)}
             />
-            <select value={newPlatform} onChange={(e) => setNewPlatform(e.target.value)}>
+            <label className="sr-only" htmlFor="content-new-platform">Plattform</label>
+            <select id="content-new-platform" value={newPlatform} onChange={(e) => setNewPlatform(e.target.value)}>
               <option value="youtube">YouTube</option>
               <option value="instagram">Instagram</option>
               <option value="tiktok">TikTok</option>
               <option value="blog">Blog</option>
               <option value="podcast">Podcast</option>
             </select>
-            <select value={newType} onChange={(e) => setNewType(e.target.value)}>
+            <label className="sr-only" htmlFor="content-new-type">Content-Typ</label>
+            <select id="content-new-type" value={newType} onChange={(e) => setNewType(e.target.value)}>
               <option value="video">Video</option>
               <option value="short">Short/Reel</option>
               <option value="post">Post</option>
@@ -226,6 +230,15 @@ export default function ContentPage() {
                               id={`content-${it.id}`}
                               className={it.id === selectedId ? "kanban-card active" : "kanban-card"}
                               onClick={() => setSelectedId(it.id)}
+                              role="button"
+                              tabIndex={0}
+                              aria-pressed={it.id === selectedId}
+                              onKeyDown={(event) => {
+                                if (event.key === 'Enter' || event.key === ' ') {
+                                  event.preventDefault();
+                                  setSelectedId(it.id);
+                                }
+                              }}
                             >
                               <div>{it.title}</div>
                               <div className="small muted">
@@ -318,6 +331,7 @@ export default function ContentPage() {
                       <div className="section-head no-margin">
                         <div>{t.title}</div>
                         <button className="btn" onClick={() => deleteTask(t.id).catch(alert)}>
+                          <span className="sr-only">Task löschen</span>
                           ✕
                         </button>
                       </div>
@@ -349,7 +363,9 @@ function TaskComposer({ onAdd }: { onAdd: (title: string) => void }) {
   const [title, setTitle] = useState("");
   return (
     <div className="control-row stretch">
+      <label className="sr-only" htmlFor="content-task-new-title">Neue Task</label>
       <input
+        id="content-task-new-title"
         className="grow"
         value={title}
         onChange={(e) => setTitle(e.target.value)}

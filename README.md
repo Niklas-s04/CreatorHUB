@@ -34,6 +34,7 @@ It combines product lifecycle workflows, media sourcing/review, content task tra
 
 - `backend/` API, models, services, migrations, worker
 - `frontend/` React UI
+- `docs/design-system.md` UI-Design-System, Tokens und Komponentenstandards
 - `.env.example` environment template
 
 ## Prerequisites

@@ -89,12 +89,13 @@ export default function AdminPage() {
             {!users.length && <EmptyState title="Keine Benutzer" message="Es sind aktuell keine Benutzereinträge verfügbar." />}
             {!!users.length && (
               <table>
+                <caption className="sr-only">Benutzerübersicht</caption>
                 <thead>
                   <tr>
-                    <th>Username</th>
-                    <th>Rolle</th>
-                    <th>MFA</th>
-                    <th>Aktive Sessions</th>
+                    <th scope="col">Username</th>
+                    <th scope="col">Rolle</th>
+                    <th scope="col">MFA</th>
+                    <th scope="col">Aktive Sessions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -116,11 +117,12 @@ export default function AdminPage() {
             {!requests.length && <EmptyState title="Keine offenen Anfragen" message="Derzeit liegen keine offenen Registrierungsanfragen vor." />}
             {!!requests.length && (
               <table>
+                <caption className="sr-only">Offene Registrierungsanfragen</caption>
                 <thead>
                   <tr>
-                    <th>Username</th>
-                    <th>Status</th>
-                    <th>Aktionen</th>
+                    <th scope="col">Username</th>
+                    <th scope="col">Status</th>
+                    <th scope="col">Aktionen</th>
                   </tr>
                 </thead>
                 <tbody>

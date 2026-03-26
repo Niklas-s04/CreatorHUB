@@ -31,15 +31,33 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     error: message => push(message, 'error'),
   }), [push])
 
+  const successToasts = toasts.filter(toast => toast.variant === 'success')
+  const errorToasts = toasts.filter(toast => toast.variant === 'error')
+
+  function dismissToast(id: number) {
+    setToasts(prev => prev.filter(item => item.id !== id))
+  }
+
   return (
     <ToastContext.Provider value={value}>
       {children}
-      <div className="toast-viewport" aria-live="polite" aria-atomic="true">
-        {toasts.map(toast => (
-          <div key={toast.id} className={`toast ${toast.variant}`} role="status">
-            {toast.message}
-          </div>
-        ))}
+      <div className="toast-viewport" role="region" aria-label="Statusmeldungen">
+        <div aria-live="polite" aria-atomic="true">
+          {successToasts.map(toast => (
+            <div key={toast.id} className={`toast ${toast.variant}`} role="status">
+              <span>{toast.message}</span>
+              <button type="button" className="toast-close" onClick={() => dismissToast(toast.id)} aria-label="Meldung schließen">×</button>
+            </div>
+          ))}
+        </div>
+        <div aria-live="assertive" aria-atomic="true">
+          {errorToasts.map(toast => (
+            <div key={toast.id} className={`toast ${toast.variant}`} role="alert">
+              <span>{toast.message}</span>
+              <button type="button" className="toast-close" onClick={() => dismissToast(toast.id)} aria-label="Fehlermeldung schließen">×</button>
+            </div>
+          ))}
+        </div>
       </div>
     </ToastContext.Provider>
   )

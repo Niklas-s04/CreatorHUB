@@ -121,13 +121,14 @@ export default function AuditLogsPageView() {
           </button>
         </div>
         <table className="status-table">
+          <caption className="sr-only">Audit-Events</caption>
           <thead>
             <tr>
-              <th>Zeit</th>
-              <th>Aktion</th>
-              <th>Objekt</th>
-              <th>Beschreibung</th>
-              <th>Akteur</th>
+              <th scope="col">Zeit</th>
+              <th scope="col">Aktion</th>
+              <th scope="col">Objekt</th>
+              <th scope="col">Beschreibung</th>
+              <th scope="col">Akteur</th>
             </tr>
           </thead>
           <tbody>

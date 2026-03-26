@@ -12,7 +12,7 @@ export function ErrorState({
   retryLabel = 'Erneut versuchen',
 }: ErrorStateProps) {
   return (
-    <div className="error-state card" role="alert">
+    <div className="error-state card state-card error" role="alert">
       <div className="title-strong">{title}</div>
       <div className="error mt8">{message}</div>
       {onRetry ? (

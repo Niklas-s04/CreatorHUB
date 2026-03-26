@@ -216,15 +216,29 @@ export default function SettingsPage() {
         <div className="muted">MFA: {mfaEnabled ? 'Aktiv' : 'Inaktiv'}</div>
 
         <div className="section-gap">
-          <div className="field-label">Aktuelles Passwort</div>
-          <input className="full-width" type="password" {...changePasswordForm.register('currentPassword')} />
+          <label htmlFor="settings-current-password" className="field-label">Aktuelles Passwort</label>
+          <input
+            id="settings-current-password"
+            className="full-width"
+            type="password"
+            {...changePasswordForm.register('currentPassword')}
+            aria-invalid={Boolean(changePasswordForm.formState.errors.currentPassword?.message)}
+            aria-describedby={changePasswordForm.formState.errors.currentPassword?.message ? 'settings-current-password-error' : undefined}
+          />
           {changePasswordForm.formState.errors.currentPassword?.message && (
-            <div className="error mt8">{changePasswordForm.formState.errors.currentPassword.message}</div>
+            <div id="settings-current-password-error" className="error mt8" role="alert">{changePasswordForm.formState.errors.currentPassword.message}</div>
           )}
-          <div className="field-label mt8">Neues Passwort</div>
-          <input className="full-width" type="password" {...changePasswordForm.register('newPassword')} />
+          <label htmlFor="settings-new-password" className="field-label mt8">Neues Passwort</label>
+          <input
+            id="settings-new-password"
+            className="full-width"
+            type="password"
+            {...changePasswordForm.register('newPassword')}
+            aria-invalid={Boolean(changePasswordForm.formState.errors.newPassword?.message)}
+            aria-describedby={changePasswordForm.formState.errors.newPassword?.message ? 'settings-new-password-error' : undefined}
+          />
           {changePasswordForm.formState.errors.newPassword?.message && (
-            <div className="error mt8">{changePasswordForm.formState.errors.newPassword.message}</div>
+            <div id="settings-new-password-error" className="error mt8" role="alert">{changePasswordForm.formState.errors.newPassword.message}</div>
           )}
           <button
             className="btn mt8"
@@ -241,10 +255,16 @@ export default function SettingsPage() {
           {!!mfaSecret && <div className="muted mt8">Secret: {mfaSecret}</div>}
           {!!mfaSecret && (
             <>
-              <div className="field-label mt8">TOTP-Code</div>
-              <input className="full-width" {...mfaEnableForm.register('code')} />
+              <label htmlFor="settings-mfa-enable-code" className="field-label mt8">TOTP-Code</label>
+              <input
+                id="settings-mfa-enable-code"
+                className="full-width"
+                {...mfaEnableForm.register('code')}
+                aria-invalid={Boolean(mfaEnableForm.formState.errors.code?.message)}
+                aria-describedby={mfaEnableForm.formState.errors.code?.message ? 'settings-mfa-enable-code-error' : undefined}
+              />
               {mfaEnableForm.formState.errors.code?.message && (
-                <div className="error mt8">{mfaEnableForm.formState.errors.code.message}</div>
+                <div id="settings-mfa-enable-code-error" className="error mt8" role="alert">{mfaEnableForm.formState.errors.code.message}</div>
               )}
               <button
                 className="btn mt8"
@@ -261,13 +281,30 @@ export default function SettingsPage() {
         {mfaEnabled && (
           <div className="section-gap">
             <div className="field-label">MFA deaktivieren</div>
-            <input className="full-width" type="password" placeholder="Passwort" {...mfaDisableForm.register('password')} />
+            <label htmlFor="settings-mfa-disable-password" className="sr-only">Passwort für MFA-Deaktivierung</label>
+            <input
+              id="settings-mfa-disable-password"
+              className="full-width"
+              type="password"
+              placeholder="Passwort"
+              {...mfaDisableForm.register('password')}
+              aria-invalid={Boolean(mfaDisableForm.formState.errors.password?.message)}
+              aria-describedby={mfaDisableForm.formState.errors.password?.message ? 'settings-mfa-disable-password-error' : undefined}
+            />
             {mfaDisableForm.formState.errors.password?.message && (
-              <div className="error mt8">{mfaDisableForm.formState.errors.password.message}</div>
+              <div id="settings-mfa-disable-password-error" className="error mt8" role="alert">{mfaDisableForm.formState.errors.password.message}</div>
             )}
-            <input className="full-width mt8" placeholder="TOTP oder Recovery-Code" {...mfaDisableForm.register('code')} />
+            <label htmlFor="settings-mfa-disable-code" className="sr-only">TOTP oder Recovery-Code für MFA-Deaktivierung</label>
+            <input
+              id="settings-mfa-disable-code"
+              className="full-width mt8"
+              placeholder="TOTP oder Recovery-Code"
+              {...mfaDisableForm.register('code')}
+              aria-invalid={Boolean(mfaDisableForm.formState.errors.code?.message)}
+              aria-describedby={mfaDisableForm.formState.errors.code?.message ? 'settings-mfa-disable-code-error' : undefined}
+            />
             {mfaDisableForm.formState.errors.code?.message && (
-              <div className="error mt8">{mfaDisableForm.formState.errors.code.message}</div>
+              <div id="settings-mfa-disable-code-error" className="error mt8" role="alert">{mfaDisableForm.formState.errors.code.message}</div>
             )}
             <button
               className="btn danger mt8"
@@ -285,13 +322,14 @@ export default function SettingsPage() {
         {!sessions.length && <div className="muted">Keine Sessions.</div>}
         {!!sessions.length && (
           <table>
+            <caption className="sr-only">Liste aktiver Sitzungen</caption>
             <thead>
               <tr>
-                <th>Gerät</th>
-                <th>IP</th>
-                <th>Letzte Aktivität</th>
-                <th>Ablauf</th>
-                <th>Aktion</th>
+                <th scope="col">Gerät</th>
+                <th scope="col">IP</th>
+                <th scope="col">Letzte Aktivität</th>
+                <th scope="col">Ablauf</th>
+                <th scope="col">Aktion</th>
               </tr>
             </thead>
             <tbody>
@@ -301,7 +339,7 @@ export default function SettingsPage() {
                   <td>{s.ip_address || '-'}</td>
                   <td>{new Date(s.last_activity_at).toLocaleString()}</td>
                   <td>{new Date(s.expires_at).toLocaleString()}</td>
-                  <td>{!s.is_current && <button className="btn danger" onClick={() => onRevokeSession(s.id)}>Beenden</button>}</td>
+                  <td>{!s.is_current && <button className="btn danger" onClick={() => onRevokeSession(s.id)} aria-label={`Session auf ${s.device_label || 'Unbekannt'} beenden`}>Beenden</button>}</td>
                 </tr>
               ))}
             </tbody>
@@ -314,12 +352,13 @@ export default function SettingsPage() {
         {!history.length && <div className="muted">Keine Einträge.</div>}
         {!!history.length && (
           <table>
+            <caption className="sr-only">Anmeldehistorie</caption>
             <thead>
               <tr>
-                <th>Zeit</th>
-                <th>IP</th>
-                <th>Status</th>
-                <th>Hinweis</th>
+                <th scope="col">Zeit</th>
+                <th scope="col">IP</th>
+                <th scope="col">Status</th>
+                <th scope="col">Hinweis</th>
               </tr>
             </thead>
             <tbody>
@@ -384,14 +423,27 @@ function DocEditor({ doc, onSave }: DocEditorProps) {
         <button className="btn" onClick={handleSubmit(submit)} disabled={!isDirty || !isValid}>Speichern</button>
       </div>
       <div className="section-gap">
-        <div className="field-label">Titel</div>
-        <input className="full-width" {...register('title')} />
-        {errors.title?.message && <div className="error mt8">{errors.title.message}</div>}
+        <label htmlFor={`knowledge-title-${doc.id}`} className="field-label">Titel</label>
+        <input
+          id={`knowledge-title-${doc.id}`}
+          className="full-width"
+          {...register('title')}
+          aria-invalid={Boolean(errors.title?.message)}
+          aria-describedby={errors.title?.message ? `knowledge-title-${doc.id}-error` : undefined}
+        />
+        {errors.title?.message && <div id={`knowledge-title-${doc.id}-error`} className="error mt8" role="alert">{errors.title.message}</div>}
       </div>
       <div className="section-gap">
-        <div className="field-label">Inhalt</div>
-        <textarea className="full-width" {...register('content')} rows={10} />
-        {errors.content?.message && <div className="error mt8">{errors.content.message}</div>}
+        <label htmlFor={`knowledge-content-${doc.id}`} className="field-label">Inhalt</label>
+        <textarea
+          id={`knowledge-content-${doc.id}`}
+          className="full-width"
+          {...register('content')}
+          rows={10}
+          aria-invalid={Boolean(errors.content?.message)}
+          aria-describedby={errors.content?.message ? `knowledge-content-${doc.id}-error` : undefined}
+        />
+        {errors.content?.message && <div id={`knowledge-content-${doc.id}-error`} className="error mt8" role="alert">{errors.content.message}</div>}
       </div>
     </div>
   )

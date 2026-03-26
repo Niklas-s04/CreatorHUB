@@ -1,4 +1,4 @@
-type InlineHintType = 'domain' | 'technical'
+type InlineHintType = 'domain' | 'technical' | 'success' | 'warning' | 'error'
 
 type InlineHintProps = {
   type: InlineHintType
@@ -6,9 +6,15 @@ type InlineHintProps = {
 }
 
 export function InlineHint({ type, message }: InlineHintProps) {
+  const label = type === 'domain' || type === 'success'
+    ? 'Hinweis:'
+    : type === 'warning'
+      ? 'Warnung:'
+      : 'Technischer Hinweis:'
+
   return (
     <div className={`inline-hint ${type}`} role="status" aria-live="polite">
-      <strong>{type === 'domain' ? 'Hinweis:' : 'Technischer Hinweis:'}</strong> {message}
+      <strong>{label}</strong> {message}
     </div>
   )
 }

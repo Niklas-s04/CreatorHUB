@@ -162,10 +162,13 @@ export default function LoginPage() {
         )}
 
         <div className="section-gap">
-          <div className="field-label">Bootstrap-Token (nur Erstsetup)</div>
+          <label htmlFor="auth-bootstrap-token" className="field-label">Bootstrap-Token (nur Erstsetup)</label>
           <input
+            id="auth-bootstrap-token"
             className="w100"
             {...register('bootstrapToken')}
+            aria-invalid={Boolean(errors.bootstrapToken?.message)}
+            aria-describedby={errors.bootstrapToken?.message ? 'auth-bootstrap-token-error' : undefined}
             onChange={e => {
               const value = e.target.value
               setValue('bootstrapToken', value, { shouldValidate: true, shouldDirty: true })
@@ -173,7 +176,7 @@ export default function LoginPage() {
             }}
             placeholder="Install-Token"
           />
-          {errors.bootstrapToken?.message && <div className="error mt8">{errors.bootstrapToken.message}</div>}
+          {errors.bootstrapToken?.message && <div id="auth-bootstrap-token-error" className="error mt8" role="alert">{errors.bootstrapToken.message}</div>}
           <button className="btn mt8" type="button" onClick={checkBootstrap}>Erstsetup prüfen</button>
         </div>
 
@@ -188,45 +191,65 @@ export default function LoginPage() {
         <form onSubmit={handleSubmit(onSubmit)} className="stack">
           <input type="hidden" {...register('mode')} />
           <div>
-            <div className="field-label">Username</div>
+            <label htmlFor="auth-username" className="field-label">Username</label>
             {mode === 'setup' ? (
-              <input className="w100" value={adminUsername} disabled readOnly />
+              <input id="auth-username" className="w100" value={adminUsername} disabled readOnly />
             ) : (
-              <input className="w100" {...register('username')} />
+              <input
+                id="auth-username"
+                className="w100"
+                {...register('username')}
+                aria-invalid={Boolean(errors.username?.message)}
+                aria-describedby={errors.username?.message ? 'auth-username-error' : undefined}
+              />
             )}
-            {errors.username?.message && <div className="error mt8">{errors.username.message}</div>}
+            {errors.username?.message && <div id="auth-username-error" className="error mt8" role="alert">{errors.username.message}</div>}
           </div>
 
           <div>
-            <div className="field-label">Password</div>
-            <input className="w100" type="password" {...register('password')} />
-            {errors.password?.message && <div className="error mt8">{errors.password.message}</div>}
+            <label htmlFor="auth-password" className="field-label">Password</label>
+            <input
+              id="auth-password"
+              className="w100"
+              type="password"
+              {...register('password')}
+              aria-invalid={Boolean(errors.password?.message)}
+              aria-describedby={errors.password?.message ? 'auth-password-error' : undefined}
+            />
+            {errors.password?.message && <div id="auth-password-error" className="error mt8" role="alert">{errors.password.message}</div>}
           </div>
 
           {mode === 'login' && (
             <div>
-              <div className="field-label">MFA-Code (optional)</div>
-              <input className="w100" {...register('otp')} placeholder="TOTP oder Recovery-Code" />
+              <label htmlFor="auth-otp" className="field-label">MFA-Code (optional)</label>
+              <input id="auth-otp" className="w100" {...register('otp')} placeholder="TOTP oder Recovery-Code" />
             </div>
           )}
 
           {(mode === 'setup' || mode === 'register' || mode === 'reset') && (
             <div>
-              <div className="field-label">Password wiederholen</div>
-              <input className="w100" type="password" {...register('password2')} />
-              {errors.password2?.message && <div className="error mt8">{errors.password2.message}</div>}
+              <label htmlFor="auth-password2" className="field-label">Password wiederholen</label>
+              <input
+                id="auth-password2"
+                className="w100"
+                type="password"
+                {...register('password2')}
+                aria-invalid={Boolean(errors.password2?.message)}
+                aria-describedby={errors.password2?.message ? 'auth-password2-error' : undefined}
+              />
+              {errors.password2?.message && <div id="auth-password2-error" className="error mt8" role="alert">{errors.password2.message}</div>}
             </div>
           )}
 
           {mode === 'reset' && (
             <div>
-              <div className="field-label">Reset-Token (optional für Bestätigung)</div>
-              <input className="w100" {...register('resetToken')} placeholder="Token einfügen, um neues Passwort zu setzen" />
+              <label htmlFor="auth-reset-token" className="field-label">Reset-Token (optional für Bestätigung)</label>
+              <input id="auth-reset-token" className="w100" {...register('resetToken')} placeholder="Token einfügen, um neues Passwort zu setzen" />
             </div>
           )}
 
           {err && <InlineHint type={errKind} message={err} />}
-          {msg && <div className="muted">{msg}</div>}
+          {msg && <div className="muted" role="status" aria-live="polite">{msg}</div>}
 
           <button className="btn primary w100" disabled={busy}>
             {busy ? '...' : mode === 'setup' ? 'Admin-Passwort setzen' : mode === 'register' ? 'Anfrage senden' : mode === 'reset' ? (resetToken.trim() ? 'Passwort setzen' : 'Reset anfordern') : 'Login'}

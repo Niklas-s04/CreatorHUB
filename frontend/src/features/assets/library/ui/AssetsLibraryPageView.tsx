@@ -165,7 +165,7 @@ export default function AssetsPage() {
           <div className="muted">Suche, filtere und exportiere geprüfte Assets.</div>
         </div>
         <div className="control-row">
-          <div className="card tight">
+          <div className="card tight" role="status" aria-live="polite" aria-label={`Gefilterte Assets: ${assets.length}`}>
             <div className="muted small">Gefiltert</div>
             <div className="kpi">{assets.length}</div>
           </div>
@@ -191,7 +191,9 @@ export default function AssetsPage() {
 
       <div className="card asset-controls mt16">
         <div className="control-row stretch">
+          <label className="sr-only" htmlFor="assets-search">Assets suchen</label>
           <input
+            id="assets-search"
             className="grow"
             placeholder="Suche (Titel, Quelle, URL)"
             value={searchInput}
@@ -200,17 +202,20 @@ export default function AssetsPage() {
           <button className="btn" onClick={reload} disabled={loading}>Refresh</button>
         </div>
         <div className="control-row">
-          <select value={ownerType} onChange={e => setOwnerType(e.target.value as AssetOwnerType | '')}>
+          <label className="sr-only" htmlFor="assets-owner-type">Owner-Typ</label>
+          <select id="assets-owner-type" value={ownerType} onChange={e => setOwnerType(e.target.value as AssetOwnerType | '')}>
             {ownerTypeOptions.map(opt => (
               <option key={opt.value || 'all'} value={opt.value}>{opt.label}</option>
             ))}
           </select>
-          <select value={kind} onChange={e => setKind(e.target.value as AssetKind | '')}>
+          <label className="sr-only" htmlFor="assets-kind">Asset-Art</label>
+          <select id="assets-kind" value={kind} onChange={e => setKind(e.target.value as AssetKind | '')}>
             {kindOptions.map(opt => (
               <option key={opt.value || 'all'} value={opt.value}>{opt.label}</option>
             ))}
           </select>
-          <select value={licenseFilter} onChange={e => setLicenseFilter(e.target.value as LicenseFilter)}>
+          <label className="sr-only" htmlFor="assets-license-filter">Lizenzfilter</label>
+          <select id="assets-license-filter" value={licenseFilter} onChange={e => setLicenseFilter(e.target.value as LicenseFilter)}>
             {licenseFilterOptions.map(opt => (
               <option key={opt.value} value={opt.value}>{opt.label}</option>
             ))}

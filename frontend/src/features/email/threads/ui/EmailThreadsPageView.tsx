@@ -416,7 +416,7 @@ export default function EmailPage() {
         </button>
       </div>
 
-      {err && <div className="error">{err}</div>}
+      {err && <div className="error" role="alert">{err}</div>}
 
       <div className="email-layout">
         <div className="card email-sidebar">
@@ -449,13 +449,16 @@ export default function EmailPage() {
         <div className="email-main">
           <div className="card">
             <div className="control-row no-margin">
+              <label className="sr-only" htmlFor="email-thread-subject">Betreff</label>
               <input
+                id="email-thread-subject"
                 className="grow"
                 placeholder="Subject (optional)"
                 value={subject}
                 onChange={e => setSubject(e.target.value)}
               />
-              <select value={tone} onChange={e => setTone(e.target.value as EmailTone)}>
+              <label className="sr-only" htmlFor="email-thread-tone">Tonfall</label>
+              <select id="email-thread-tone" value={tone} onChange={e => setTone(e.target.value as EmailTone)}>
                 {toneOptions.map(opt => (
                   <option value={opt.value} key={opt.value}>{opt.label}</option>
                 ))}
@@ -465,6 +468,7 @@ export default function EmailPage() {
               </button>
             </div>
             <textarea
+              aria-label="E-Mail Rohtext"
               placeholder="E-Mail hier einfügen (raw)…"
               value={raw}
               onChange={e => setRaw(e.target.value)}
@@ -473,7 +477,7 @@ export default function EmailPage() {
           </div>
 
           <div className="card email-thread-pane">
-            {threadLoading && <div className="muted">Lade Thread…</div>}
+            {threadLoading && <div className="muted" role="status" aria-live="polite">Lade Thread…</div>}
             {!threadLoading && !threadDetail && (
               <div className="muted">Thread auswählen oder neuen Draft generieren.</div>
             )}
@@ -527,6 +531,15 @@ export default function EmailPage() {
                           key={d.id}
                           className={`draft-card ${d.id === currentDraft?.id ? 'active' : ''}`}
                           onClick={() => setActiveDraftId(d.id)}
+                          role="button"
+                          tabIndex={0}
+                          aria-pressed={d.id === currentDraft?.id}
+                          onKeyDown={event => {
+                            if (event.key === 'Enter' || event.key === ' ') {
+                              event.preventDefault()
+                              setActiveDraftId(d.id)
+                            }
+                          }}
                         >
                           <div className="row between">
                             <strong>{d.draft_subject || '(leer)'}</strong>
@@ -570,6 +583,7 @@ export default function EmailPage() {
                             <div className="muted small">{q}</div>
                             <input
                               className="w100"
+                              aria-label={`Antwort auf Frage ${i + 1}`}
                               value={answers[i] || ''}
                               onChange={e => setAnswers(prev => ({ ...prev, [i]: e.target.value }))}
                               placeholder="Deine Antwort…"
@@ -665,6 +679,7 @@ export default function EmailPage() {
                     <div className="section-head">
                       <h3>Vergleich</h3>
                       <select
+                        aria-label="Draft-Vergleich auswählen"
                         value={compareDraftId || ''}
                         onChange={e => setCompareDraftId(e.target.value || null)}
                       >

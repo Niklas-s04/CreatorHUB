@@ -12,11 +12,11 @@ export default function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   }
 
   return (
-    <aside className="sidebar">
+    <aside className="sidebar" aria-label="Seitennavigation">
       <div className="sidebar-brand">CreatorHUB</div>
-      <div className="sidebar-nav">
+      <nav className="sidebar-nav" aria-label="Hauptnavigation">
         {NAV_SECTIONS_TASK_BASED.map(section => (
-          <div className="sidebar-section" key={section.title}>
+          <section className="sidebar-section" key={section.title} aria-label={section.title}>
             <div className="sidebar-section-title">{section.title}</div>
             {section.items
               .filter(item => !item.requiredPermission || hasPermission(item.requiredPermission))
@@ -32,9 +32,9 @@ export default function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
                 <span>{item.label}</span>
               </NavLink>
             ))}
-          </div>
+          </section>
         ))}
-      </div>
+      </nav>
       <button type="button" className="sidebar-logout" onClick={onLogout}>
         <span className="sidebar-icon" aria-hidden="true">⇥</span>
         <span>Logout</span>

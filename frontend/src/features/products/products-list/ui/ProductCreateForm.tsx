@@ -49,14 +49,34 @@ export function ProductCreateForm({
       </div>
 
       <div className="control-row section-gap">
-        <input className="grow" placeholder="Titel*" {...register('title')} />
-        <input placeholder="Brand" {...register('brand')} />
-        <input placeholder="Model" {...register('model')} />
-        <input placeholder="Wert (EUR)" {...register('currentValue')} />
+        <label className="sr-only" htmlFor="product-create-title">Titel</label>
+        <input
+          id="product-create-title"
+          className="grow"
+          placeholder="Titel*"
+          {...register('title')}
+          aria-invalid={Boolean(errors.title)}
+          aria-describedby={errors.title ? 'product-create-title-error' : undefined}
+        />
+        <label className="sr-only" htmlFor="product-create-brand">Brand</label>
+        <input id="product-create-brand" placeholder="Brand" {...register('brand')} />
+        <label className="sr-only" htmlFor="product-create-model">Model</label>
+        <input id="product-create-model" placeholder="Model" {...register('model')} />
+        <label className="sr-only" htmlFor="product-create-current-value">Wert (EUR)</label>
+        <input
+          id="product-create-current-value"
+          placeholder="Wert (EUR)"
+          {...register('currentValue')}
+          aria-invalid={Boolean(errors.currentValue)}
+          aria-describedby={errors.currentValue ? 'product-create-current-value-error' : undefined}
+        />
       </div>
 
       {(errors.title || errors.currentValue) && (
-        <div className="error mt8">{errors.title?.message || errors.currentValue?.message}</div>
+        <div className="error mt8" role="alert">
+          {errors.title?.message && <span id="product-create-title-error">{errors.title.message}</span>}
+          {errors.currentValue?.message && <span id="product-create-current-value-error">{errors.currentValue.message}</span>}
+        </div>
       )}
     </form>
   )

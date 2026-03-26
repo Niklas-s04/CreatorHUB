@@ -387,12 +387,15 @@ export default function ProductsListPageView() {
               {showNew ? 'Schließen' : '+ Produkt'}
             </button>
             <div className="control-row">
-              <select value={exportDataset} onChange={e => setExportDataset(e.target.value as typeof exportDataset)}>
+              <label className="sr-only" htmlFor="products-export-dataset">Export-Datensatz</label>
+              <select id="products-export-dataset" value={exportDataset} onChange={e => setExportDataset(e.target.value as typeof exportDataset)}>
                 <option value="products">Produkte</option>
                 <option value="transactions">Transaktionen</option>
                 <option value="value_history">Wert-Historie</option>
               </select>
+              <label className="sr-only" htmlFor="products-export-years">Export-Jahre</label>
               <input
+                id="products-export-years"
                 className="w180"
                 placeholder="Jahre z.B. 2023,2024"
                 value={exportYears}
@@ -440,21 +443,24 @@ export default function ProductsListPageView() {
           onReset={resetFilters}
           extraActions={(
             <div className="control-row">
+              <label className="sr-only" htmlFor="products-view-name">Name für gespeicherte Ansicht</label>
               <input
+                id="products-view-name"
                 className="w180"
                 placeholder="Ansicht speichern…"
                 value={newViewName}
                 onChange={e => setNewViewName(e.target.value)}
               />
               <button className="btn" onClick={saveView}>View speichern</button>
-              <select onChange={e => applyView(e.target.value)} value="">
+              <label className="sr-only" htmlFor="products-saved-views">Gespeicherte Ansichten</label>
+              <select id="products-saved-views" onChange={e => applyView(e.target.value)} value="">
                 <option value="">Gespeicherte Ansichten…</option>
                 {savedViews.map(view => (
                   <option key={view.id} value={view.id}>{view.name}</option>
                 ))}
               </select>
               <details>
-                <summary className="btn ghost">Spalten</summary>
+                <summary className="btn ghost" aria-label="Spaltenauswahl öffnen">Spalten</summary>
                 <div className="card stack">
                   {ALL_COLUMNS.map(column => (
                     <label key={column.key} className="small">
