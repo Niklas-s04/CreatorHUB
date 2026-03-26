@@ -50,7 +50,7 @@ export function ProductsFilterBar({
         <select id="products-filter-page-size" value={String(pageSize)} onChange={e => onPageSizeChange(Number(e.target.value))}>
           <option value="25">25 / Seite</option>
           <option value="50">50 / Seite</option>
-          <option value="100">100 / Seite</option>
+          <option value="60">60 / Seite</option>
         </select>
         <button className="btn" onClick={onFilter}>Filter</button>
         <button className="btn ghost" onClick={onReset}>Reset</button>

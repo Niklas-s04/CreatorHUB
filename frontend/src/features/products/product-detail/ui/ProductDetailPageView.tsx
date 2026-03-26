@@ -685,7 +685,19 @@ export default function ProductDetailPageView() {
         </div>
         {jobStatus && <div className="muted small mt8">Job: {jobStatus}</div>}
 
-        {primaryThumb ? <img src={primaryThumb} className="img mt12" loading="lazy" decoding="async" /> : <div className="muted mt12">Kein Preview vorhanden.</div>}
+        {primaryThumb ? (
+          <img
+            src={primaryThumb}
+            className="img mt12"
+            loading="lazy"
+            decoding="async"
+            fetchPriority="low"
+            sizes="(max-width: 900px) 100vw, 640px"
+            alt={product.title ? `Preview für ${product.title}` : 'Produkt-Preview'}
+            width={640}
+            height={360}
+          />
+        ) : <div className="muted mt12">Kein Preview vorhanden.</div>}
 
         <div className="grid mt12">
           {effectiveAssets.map(asset => (

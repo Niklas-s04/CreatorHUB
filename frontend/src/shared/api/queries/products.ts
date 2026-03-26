@@ -34,7 +34,7 @@ function parseProductsPage(input: unknown, fallback: ProductsListParams): Produc
     return {
       items: parseProductsDtoArray(input).map(toProductListItemVm).filter(product => product.id >= 0),
       meta: {
-        limit: fallback.limit ?? 100,
+        limit: fallback.limit ?? 50,
         offset: fallback.offset ?? 0,
         total: input.length,
         sort_by: fallback.sort_by ?? 'updated_at',
@@ -46,7 +46,7 @@ function parseProductsPage(input: unknown, fallback: ProductsListParams): Produc
     return {
       items: [],
       meta: {
-        limit: fallback.limit ?? 100,
+        limit: fallback.limit ?? 50,
         offset: fallback.offset ?? 0,
         total: 0,
         sort_by: fallback.sort_by ?? 'updated_at',
@@ -81,7 +81,7 @@ export function useProductsListQuery(params: ProductsListParams) {
     placeholderData: previous => previous,
     queryFn: async () => {
       const search = new URLSearchParams()
-      search.set('limit', String(params.limit ?? 100))
+      search.set('limit', String(Math.min(60, params.limit ?? 50)))
       search.set('offset', String(params.offset ?? 0))
       search.set('sort_by', params.sort_by ?? 'updated_at')
       search.set('sort_order', params.sort_order ?? 'desc')

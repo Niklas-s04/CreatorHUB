@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { apiFetch } from '../../../../api'
 import { useAuthz } from '../../../../shared/hooks/useAuthz'
+import { useDebouncedValue } from '../../../../shared/hooks/useDebouncedValue'
 import { useRateCardDoc } from '../../../../shared/hooks/useRateCardDoc'
 import { getErrorMessage } from '../../../../shared/lib/errors'
 
@@ -145,6 +146,10 @@ export default function EmailPage() {
 
   const [threads, setThreads] = useState<ThreadsResponse>([])
   const [threadsLoading, setThreadsLoading] = useState(false)
+  const [threadSearchInput, setThreadSearchInput] = useState('')
+  const [threadsPageSize, setThreadsPageSize] = useState(20)
+  const [threadsOffset, setThreadsOffset] = useState(0)
+  const debouncedThreadSearch = useDebouncedValue(threadSearchInput.trim().toLowerCase(), 250)
 
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null)
   const [threadDetail, setThreadDetail] = useState<EmailThreadDetail | null>(null)
@@ -165,8 +170,8 @@ export default function EmailPage() {
   const [dealErr, setDealErr] = useState<string | null>(null)
 
   useEffect(() => {
-    loadThreads()
-  }, [])
+    void loadThreads()
+  }, [threadsPageSize, threadsOffset])
 
   useEffect(() => {
     setAnswers({})
@@ -181,9 +186,14 @@ export default function EmailPage() {
   async function loadThreads() {
     setThreadsLoading(true)
     try {
-      const data = await apiFetch('/email/threads?limit=50') as ThreadsResponse
+      const data = await apiFetch(
+        `/email/threads?limit=${threadsPageSize}&offset=${threadsOffset}&sort_by=updated_at&sort_order=desc`
+      ) as ThreadsResponse
       setThreads(data)
-      if (!selectedThreadId && data.length) {
+      if (selectedThreadId && data.some(thread => thread.id === selectedThreadId)) {
+        return
+      }
+      if (data.length) {
         await selectThread(data[0].id)
       }
     } catch (e: unknown) {
@@ -311,6 +321,20 @@ export default function EmailPage() {
     return threadDetail.drafts.filter(d => d.id !== activeDraftId)
   }, [threadDetail, activeDraftId])
 
+  const visibleThreads = useMemo(() => {
+    if (!debouncedThreadSearch) return threads
+    return threads.filter(thread => {
+      const subject = (thread.subject || '').toLowerCase()
+      const intent = thread.detected_intent.toLowerCase()
+      const body = (thread.raw_body || '').toLowerCase()
+      return (
+        subject.includes(debouncedThreadSearch) ||
+        intent.includes(debouncedThreadSearch) ||
+        body.includes(debouncedThreadSearch)
+      )
+    })
+  }, [threads, debouncedThreadSearch])
+
   const flags = useMemo(() => safeParseList(currentDraft?.risk_flags || null), [currentDraft])
   const questions = useMemo(() => safeParseList(currentDraft?.questions_to_ask || null), [currentDraft])
   const rateCardText = rateCardDoc?.content?.trim() || ''
@@ -422,15 +446,31 @@ export default function EmailPage() {
         <div className="card email-sidebar">
           <div className="section-head">
             <h3>Letzte Threads</h3>
-            <span className="muted small">{threads.length} offen</span>
+            <span className="muted small">{visibleThreads.length} sichtbar</span>
           </div>
 
-          {threads.length === 0 && !threadsLoading && (
+          <div className="control-row section-gap">
+            <input
+              className="grow"
+              placeholder="Threads suchen…"
+              value={threadSearchInput}
+              onChange={event => setThreadSearchInput(event.target.value)}
+            />
+            <select value={String(threadsPageSize)} onChange={event => {
+              setThreadsPageSize(Number(event.target.value))
+              setThreadsOffset(0)
+            }}>
+              <option value="20">20 / Seite</option>
+              <option value="40">40 / Seite</option>
+            </select>
+          </div>
+
+          {visibleThreads.length === 0 && !threadsLoading && (
             <div className="muted small">Noch keine Threads.</div>
           )}
 
           <div className="stack">
-            {threads.map(t => (
+            {visibleThreads.map(t => (
               <button
                 key={t.id}
                 className={`thread-pill ${t.id === selectedThreadId ? 'active' : ''}`}
@@ -443,6 +483,11 @@ export default function EmailPage() {
                 <div className="muted small">{formatDate(t.updated_at)}</div>
               </button>
             ))}
+          </div>
+          <div className="row between mt8">
+            <button className="btn" onClick={() => setThreadsOffset(current => Math.max(0, current - threadsPageSize))} disabled={threadsOffset <= 0}>← Zurück</button>
+            <span className="muted small">Offset {threadsOffset} · Limit {threadsPageSize}</span>
+            <button className="btn" onClick={() => setThreadsOffset(current => current + threadsPageSize)} disabled={threads.length < threadsPageSize}>Weiter →</button>
           </div>
         </div>
 

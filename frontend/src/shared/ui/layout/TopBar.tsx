@@ -1,6 +1,7 @@
 import { type FormEvent, Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { apiFetch } from '../../../api'
+import { useDebouncedValue } from '../../hooks/useDebouncedValue'
 
 type SearchHit = {
   id: string
@@ -110,33 +111,40 @@ export default function TopBar({ menuOpen = false, onToggleMenu }: { menuOpen?: 
   const [loading, setLoading] = useState(false)
   const [groups, setGroups] = useState<SearchGroup[]>([])
   const [activeKey, setActiveKey] = useState<string | null>(null)
+  const debouncedQuery = useDebouncedValue(query, 220)
 
   useEffect(() => {
-    const q = normalize(query)
+    const q = normalize(debouncedQuery)
     if (q.length < 2) {
       setGroups([])
       setActiveKey(null)
       return
     }
 
-    const timer = setTimeout(async () => {
+    let active = true
+
+    ;(async () => {
       setLoading(true)
       try {
         const response = await apiFetch<unknown>(`/search?q=${encodeURIComponent(q)}&per_type=4`)
+        if (!active) return
         const parsedGroups = parseSearchGroups(response)
         setGroups(parsedGroups)
         const firstHit = parsedGroups[0]?.hits[0]
         setActiveKey(firstHit ? `${firstHit.type}:${firstHit.id}` : null)
       } catch {
+        if (!active) return
         setGroups([])
         setActiveKey(null)
       } finally {
-        setLoading(false)
+        if (active) setLoading(false)
       }
-    }, 220)
+    })()
 
-    return () => clearTimeout(timer)
-  }, [query])
+    return () => {
+      active = false
+    }
+  }, [debouncedQuery])
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {

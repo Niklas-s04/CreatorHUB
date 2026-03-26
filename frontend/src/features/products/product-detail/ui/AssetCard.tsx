@@ -20,6 +20,8 @@ export function AssetCard({ asset, canReview, onReview, onPrimary }: AssetCardPr
           className="img"
           loading="lazy"
           decoding="async"
+          fetchPriority="low"
+          sizes="(max-width: 900px) 100vw, 320px"
           alt={asset.title || `Asset ${asset.id}`}
           width={320}
           height={180}

@@ -53,7 +53,7 @@ type SavedView = {
 function parsePositiveInt(value: string | null, fallback: number): number {
   const parsed = Number.parseInt(value || '', 10)
   const normalized = Number.isFinite(parsed) && parsed > 0 ? parsed : fallback
-  return Math.min(100, normalized)
+  return Math.min(60, normalized)
 }
 
 function parseOffset(value: string | null): number {

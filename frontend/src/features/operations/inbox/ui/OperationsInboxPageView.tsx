@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../../../../api'
 import { getErrorMessage } from '../../../../shared/lib/errors'
+import { useDebouncedValue } from '../../../../shared/hooks/useDebouncedValue'
 import { ErrorState } from '../../../../shared/ui/states/ErrorState'
 import { ListSkeleton } from '../../../../shared/ui/states/ListSkeleton'
 
@@ -93,6 +94,7 @@ export default function OperationsInboxPageView() {
   const [data, setData] = useState<OperationInboxOut | null>(null)
   const [loading, setLoading] = useState(true)
   const [err, setErr] = useState<string | null>(null)
+  const [searchInput, setSearchInput] = useState(searchParams.get('q') || '')
 
   const [userFilter, setUserFilter] = useState(searchParams.get('user') || 'all')
   const [roleFilter, setRoleFilter] = useState<'all' | OperationRole>((searchParams.get('role') as 'all' | OperationRole) || 'all')
@@ -104,6 +106,7 @@ export default function OperationsInboxPageView() {
     return parsed
   })
   const [offset, setOffset] = useState(() => Math.max(0, Number(searchParams.get('offset') || '0') || 0))
+  const debouncedSearch = useDebouncedValue(searchInput.trim().toLowerCase(), 250)
   const tableAnchorRef = useRef<HTMLDivElement | null>(null)
   function changePage(direction: 'prev' | 'next') {
     setOffset(curr => {
@@ -146,12 +149,14 @@ export default function OperationsInboxPageView() {
     else next.delete('priority')
     if (dueFilter !== 'all') next.set('due', dueFilter)
     else next.delete('due')
+    if (debouncedSearch) next.set('q', debouncedSearch)
+    else next.delete('q')
     next.set('limit', String(pageSize))
     next.set('offset', String(offset))
     if (next.toString() !== searchParams.toString()) {
       setSearchParams(next, { replace: true })
     }
-  }, [userFilter, roleFilter, priorityFilter, dueFilter, pageSize, offset, searchParams, setSearchParams])
+  }, [userFilter, roleFilter, priorityFilter, dueFilter, debouncedSearch, pageSize, offset, searchParams, setSearchParams])
 
   const allItems = data?.items ?? []
 
@@ -170,9 +175,13 @@ export default function OperationsInboxPageView() {
       if (roleFilter !== 'all' && item.responsible_role !== roleFilter) return false
       if (priorityFilter !== 'all' && item.priority !== priorityFilter) return false
       if (!matchesDueFilter(item, dueFilter)) return false
+      if (debouncedSearch) {
+        const haystack = `${item.title} ${item.description} ${item.assignee_username || ''} ${item.kind}`.toLowerCase()
+        if (!haystack.includes(debouncedSearch)) return false
+      }
       return true
     })
-  }, [allItems, userFilter, roleFilter, priorityFilter, dueFilter])
+  }, [allItems, userFilter, roleFilter, priorityFilter, dueFilter, debouncedSearch])
 
   const prioritySummary = useMemo(() => {
     return filteredItems.reduce(
@@ -238,6 +247,13 @@ export default function OperationsInboxPageView() {
           <h3>Filter</h3>
         </div>
         <div className="control-row">
+          <input
+            className="grow"
+            placeholder="Suche (Titel, Beschreibung, Assignee, Typ)"
+            value={searchInput}
+            onChange={e => setSearchInput(e.target.value)}
+          />
+
           <select value={userFilter} onChange={e => setUserFilter(e.target.value)}>
             <option value="all">Benutzer: Alle</option>
             {assigneeOptions.map(value => (

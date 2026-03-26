@@ -72,6 +72,29 @@ function hasLicense(asset: AssetLibraryItem) {
   return Boolean(asset.license_type || asset.license_url)
 }
 
+function ThumbVisibilityProbe({ assetId, onVisible }: { assetId: string; onVisible: (id: string) => void }) {
+  const ref = useRef<HTMLDivElement | null>(null)
+
+  useEffect(() => {
+    const node = ref.current
+    if (!node) return
+
+    const observer = new IntersectionObserver(
+      entries => {
+        if (!entries[0]?.isIntersecting) return
+        onVisible(assetId)
+        observer.disconnect()
+      },
+      { rootMargin: '240px 0px' }
+    )
+
+    observer.observe(node)
+    return () => observer.disconnect()
+  }, [assetId, onVisible])
+
+  return <div ref={ref} className="asset-thumb-probe" aria-hidden="true" />
+}
+
 export default function AssetsPage() {
   const toast = useToast()
   const [searchParams, setSearchParams] = useSearchParams()
@@ -83,13 +106,14 @@ export default function AssetsPage() {
   const [licenseFilter, setLicenseFilter] = useState<LicenseFilter>((searchParams.get('license_filter') as LicenseFilter) || 'any')
   const [pageSize, setPageSize] = useState(() => {
     const parsed = Number(searchParams.get('limit') || '24')
-    if (![24, 48, 96].includes(parsed)) return 24
+    if (![24, 36, 60].includes(parsed)) return 24
     return parsed
   })
   const [offset, setOffset] = useState(() => Math.max(0, Number(searchParams.get('offset') || '0') || 0))
   const debouncedSearchTerm = useDebouncedValue(searchInput.trim(), 350)
   const tableAnchorRef = useRef<HTMLDivElement | null>(null)
   const [thumbs, setThumbs] = useState<Record<string, string>>({})
+  const [visibleThumbIds, setVisibleThumbIds] = useState<Set<string>>(new Set())
   const [err, setErr] = useState<string | null>(null)
   const [downloadingId, setDownloadingId] = useState<string | null>(null)
   const thumbCacheRef = useRef<Record<string, string>>({})
@@ -136,10 +160,14 @@ export default function AssetsPage() {
     Object.values(thumbCacheRef.current).forEach(url => URL.revokeObjectURL(url))
     thumbCacheRef.current = {}
     setThumbs({})
+    setVisibleThumbIds(() => {
+      const initial = assets.filter(asset => asset.kind === 'image').slice(0, 12).map(asset => asset.id)
+      return new Set(initial)
+    })
   }, [assets])
 
   useEffect(() => {
-    const images = assets.filter(a => a.kind === 'image')
+    const images = assets.filter(a => a.kind === 'image' && visibleThumbIds.has(a.id))
     images.forEach(asset => {
       if (thumbCacheRef.current[asset.id]) return
       ;(async () => {
@@ -153,7 +181,16 @@ export default function AssetsPage() {
         }
       })()
     })
-  }, [assets])
+  }, [assets, visibleThumbIds])
+
+  function markThumbVisible(assetId: string) {
+    setVisibleThumbIds(current => {
+      if (current.has(assetId)) return current
+      const next = new Set(current)
+      next.add(assetId)
+      return next
+    })
+  }
 
   useEffect(() => {
     setOffset(0)
@@ -261,8 +298,8 @@ export default function AssetsPage() {
           <label className="sr-only" htmlFor="assets-page-size">Seitenlimit</label>
           <select id="assets-page-size" value={String(pageSize)} onChange={e => setPageSize(Number(e.target.value))}>
             <option value="24">24 / Seite</option>
-            <option value="48">48 / Seite</option>
-            <option value="96">96 / Seite</option>
+            <option value="36">36 / Seite</option>
+            <option value="60">60 / Seite</option>
           </select>
         </div>
         <div className="asset-checkboxes">
@@ -286,12 +323,15 @@ export default function AssetsPage() {
           return (
             <div key={asset.id} id={`asset-${asset.id}`} className="asset-card">
               <div className="asset-cover">
+                {asset.kind === 'image' && !thumbUrl && <ThumbVisibilityProbe assetId={asset.id} onVisible={markThumbVisible} />}
                 {asset.kind === 'image' && thumbUrl && (
                   <img
                     src={thumbUrl}
                     alt={asset.title || 'Asset preview'}
                     loading="lazy"
                     decoding="async"
+                    fetchPriority="low"
+                    sizes="(max-width: 900px) 100vw, 320px"
                     width={asset.width || 640}
                     height={asset.height || 360}
                   />

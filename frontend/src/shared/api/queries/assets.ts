@@ -46,7 +46,7 @@ export function useAssetLibraryQuery(params: AssetLibraryQueryParams) {
     approved_only: params.approvedOnly ? 'true' : 'false',
     primary_only: params.primaryOnly ? 'true' : 'false',
     license_filter: params.licenseFilter,
-    limit: String(Math.min(100, params.limit ?? 24)),
+    limit: String(Math.min(60, params.limit ?? 24)),
     offset: String(Math.max(0, params.offset ?? 0)),
   }
   if (params.search) normalizedParams.search = params.search

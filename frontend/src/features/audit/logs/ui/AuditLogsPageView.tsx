@@ -57,6 +57,9 @@ export default function AuditLogsPageView() {
   const canViewAudit = hasPermission('audit.view')
 
   const [entries, setEntries] = useState<AuditEntry[]>([])
+  const [total, setTotal] = useState(0)
+  const [limit, setLimit] = useState(25)
+  const [offset, setOffset] = useState(0)
   const [loading, setLoading] = useState(true)
   const [err, setErr] = useState<string | null>(null)
 
@@ -70,8 +73,12 @@ export default function AuditLogsPageView() {
     try {
       setErr(null)
       setLoading(true)
-      const response = await apiFetch<PageLike<AuditEntry>>('/audit?limit=50&offset=0&sort_by=created_at&sort_order=desc')
-      setEntries(parseAuditEntries(response))
+      const response = await apiFetch<PageLike<AuditEntry> & { meta?: { total?: number } }>(
+        `/audit?limit=${limit}&offset=${offset}&sort_by=created_at&sort_order=desc`
+      )
+      const parsed = parseAuditEntries(response)
+      setEntries(parsed)
+      setTotal(typeof response.meta?.total === 'number' ? response.meta.total : parsed.length)
     } catch (e: unknown) {
       setErr(getErrorMessage(e))
     } finally {
@@ -82,7 +89,7 @@ export default function AuditLogsPageView() {
   useEffect(() => {
     if (authzLoading) return
     void load()
-  }, [authzLoading, canViewAudit])
+  }, [authzLoading, canViewAudit, limit, offset])
 
   if (authzLoading || loading) {
     return <ListSkeleton rows={8} />
@@ -114,11 +121,20 @@ export default function AuditLogsPageView() {
       <div className="card">
         <div className="card-head">
           <h2>Audit-Logs</h2>
-          <button className="btn" onClick={() => {
-            void load()
-          }}>
-            Refresh
-          </button>
+          <div className="control-row">
+            <select value={String(limit)} onChange={event => {
+              setLimit(Number(event.target.value))
+              setOffset(0)
+            }}>
+              <option value="25">25 / Seite</option>
+              <option value="50">50 / Seite</option>
+            </select>
+            <button className="btn" onClick={() => {
+              void load()
+            }}>
+              Refresh
+            </button>
+          </div>
         </div>
         <table className="status-table">
           <caption className="sr-only">Audit-Events</caption>
@@ -148,6 +164,11 @@ export default function AuditLogsPageView() {
             )}
           </tbody>
         </table>
+        <div className="row between mt8">
+          <button className="btn" onClick={() => setOffset(current => Math.max(0, current - limit))} disabled={offset <= 0}>← Zurück</button>
+          <span className="muted small">Offset {offset} · Limit {limit} · Gesamt {total}</span>
+          <button className="btn" onClick={() => setOffset(current => current + limit)} disabled={entries.length < limit || offset + limit >= total}>Weiter →</button>
+        </div>
       </div>
     </div>
   )
