@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { apiFetchBlob } from '../../../../api'
 import { getErrorMessage } from '../../../../shared/lib/errors'
+import { useDebouncedValue } from '../../../../shared/hooks/useDebouncedValue'
 import { EmptyState } from '../../../../shared/ui/states/EmptyState'
 import { ErrorState } from '../../../../shared/ui/states/ErrorState'
 import { ListSkeleton } from '../../../../shared/ui/states/ListSkeleton'
@@ -72,13 +74,21 @@ function hasLicense(asset: AssetLibraryItem) {
 
 export default function AssetsPage() {
   const toast = useToast()
-  const [searchInput, setSearchInput] = useState('')
-  const [searchTerm, setSearchTerm] = useState('')
-  const [ownerType, setOwnerType] = useState<'' | AssetOwnerType>('')
-  const [kind, setKind] = useState<'' | AssetKind>('')
-  const [approvedOnly, setApprovedOnly] = useState(true)
-  const [primaryOnly, setPrimaryOnly] = useState(false)
-  const [licenseFilter, setLicenseFilter] = useState<LicenseFilter>('any')
+  const [searchParams, setSearchParams] = useSearchParams()
+  const [searchInput, setSearchInput] = useState(searchParams.get('q') || '')
+  const [ownerType, setOwnerType] = useState<'' | AssetOwnerType>((searchParams.get('owner_type') as AssetOwnerType | '') || '')
+  const [kind, setKind] = useState<'' | AssetKind>((searchParams.get('kind') as AssetKind | '') || '')
+  const [approvedOnly, setApprovedOnly] = useState(searchParams.get('approved_only') !== 'false')
+  const [primaryOnly, setPrimaryOnly] = useState(searchParams.get('primary_only') === 'true')
+  const [licenseFilter, setLicenseFilter] = useState<LicenseFilter>((searchParams.get('license_filter') as LicenseFilter) || 'any')
+  const [pageSize, setPageSize] = useState(() => {
+    const parsed = Number(searchParams.get('limit') || '24')
+    if (![24, 48, 96].includes(parsed)) return 24
+    return parsed
+  })
+  const [offset, setOffset] = useState(() => Math.max(0, Number(searchParams.get('offset') || '0') || 0))
+  const debouncedSearchTerm = useDebouncedValue(searchInput.trim(), 350)
+  const tableAnchorRef = useRef<HTMLDivElement | null>(null)
   const [thumbs, setThumbs] = useState<Record<string, string>>({})
   const [err, setErr] = useState<string | null>(null)
   const [downloadingId, setDownloadingId] = useState<string | null>(null)
@@ -91,18 +101,32 @@ export default function AssetsPage() {
   }, [])
 
   useEffect(() => {
-    const timer = setTimeout(() => setSearchTerm(searchInput.trim()), 400)
-    return () => clearTimeout(timer)
-  }, [searchInput])
+    const next = new URLSearchParams(searchParams)
+    if (debouncedSearchTerm) next.set('q', debouncedSearchTerm)
+    else next.delete('q')
+    if (ownerType) next.set('owner_type', ownerType)
+    else next.delete('owner_type')
+    if (kind) next.set('kind', kind)
+    else next.delete('kind')
+    next.set('approved_only', approvedOnly ? 'true' : 'false')
+    next.set('primary_only', primaryOnly ? 'true' : 'false')
+    next.set('license_filter', licenseFilter)
+    next.set('limit', String(pageSize))
+    next.set('offset', String(offset))
+    if (next.toString() !== searchParams.toString()) {
+      setSearchParams(next, { replace: true })
+    }
+  }, [debouncedSearchTerm, ownerType, kind, approvedOnly, primaryOnly, licenseFilter, pageSize, offset, searchParams, setSearchParams])
 
   const assetsQuery = useAssetLibraryQuery({
-    search: searchTerm || undefined,
+    search: debouncedSearchTerm || undefined,
     ownerType: ownerType || undefined,
     kind: kind || undefined,
     approvedOnly,
     primaryOnly,
     licenseFilter,
-    limit: 120,
+    limit: pageSize,
+    offset,
   })
   const assets = assetsQuery.data ?? []
   const loading = assetsQuery.isLoading || assetsQuery.isFetching
@@ -131,6 +155,10 @@ export default function AssetsPage() {
     })
   }, [assets])
 
+  useEffect(() => {
+    setOffset(0)
+  }, [debouncedSearchTerm, ownerType, kind, approvedOnly, primaryOnly, licenseFilter, pageSize])
+
   const stats = useMemo(() => {
     const licensed = assets.filter(a => hasLicense(a)).length
     const primary = assets.filter(a => a.is_primary).length
@@ -139,6 +167,15 @@ export default function AssetsPage() {
 
   function reload() {
     void assetsQuery.refetch()
+  }
+
+  function changePage(direction: 'prev' | 'next') {
+    setOffset(current => {
+      if (direction === 'prev') return Math.max(0, current - pageSize)
+      if (assets.length < pageSize) return current
+      return current + pageSize
+    })
+    tableAnchorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
 
   async function openOriginal(assetId: string) {
@@ -190,6 +227,7 @@ export default function AssetsPage() {
       {err && !queryErr && <ErrorState title="Aktion fehlgeschlagen" message={err} />}
 
       <div className="card asset-controls mt16">
+        <div ref={tableAnchorRef} />
         <div className="control-row stretch">
           <label className="sr-only" htmlFor="assets-search">Assets suchen</label>
           <input
@@ -220,6 +258,12 @@ export default function AssetsPage() {
               <option key={opt.value} value={opt.value}>{opt.label}</option>
             ))}
           </select>
+          <label className="sr-only" htmlFor="assets-page-size">Seitenlimit</label>
+          <select id="assets-page-size" value={String(pageSize)} onChange={e => setPageSize(Number(e.target.value))}>
+            <option value="24">24 / Seite</option>
+            <option value="48">48 / Seite</option>
+            <option value="96">96 / Seite</option>
+          </select>
         </div>
         <div className="asset-checkboxes">
           <label className="filter-check">
@@ -243,7 +287,14 @@ export default function AssetsPage() {
             <div key={asset.id} id={`asset-${asset.id}`} className="asset-card">
               <div className="asset-cover">
                 {asset.kind === 'image' && thumbUrl && (
-                  <img src={thumbUrl} alt={asset.title || 'Asset preview'} />
+                  <img
+                    src={thumbUrl}
+                    alt={asset.title || 'Asset preview'}
+                    loading="lazy"
+                    decoding="async"
+                    width={asset.width || 640}
+                    height={asset.height || 360}
+                  />
                 )}
                 {asset.kind === 'image' && !thumbUrl && (
                   <div className="asset-placeholder">Preview lädt…</div>
@@ -304,6 +355,12 @@ export default function AssetsPage() {
         {!assets.length && !loading && (
           <EmptyState title="Keine Assets gefunden" message="Passe die Filter an oder entferne Suchbegriffe." />
         )}
+      </div>
+
+      <div className="row between mt12">
+        <button className="btn" onClick={() => changePage('prev')} disabled={offset <= 0}>← Zurück</button>
+        <span className="muted small">Offset {offset} · Limit {pageSize} · Ergebnisse {assets.length}</span>
+        <button className="btn" onClick={() => changePage('next')} disabled={assets.length < pageSize}>Weiter →</button>
       </div>
     </div>
   )

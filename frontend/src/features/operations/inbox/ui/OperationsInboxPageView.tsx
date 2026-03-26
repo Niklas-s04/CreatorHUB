@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../../../../api'
 import { getErrorMessage } from '../../../../shared/lib/errors'
 import { ErrorState } from '../../../../shared/ui/states/ErrorState'
@@ -89,20 +89,37 @@ function matchesDueFilter(item: OperationInboxItem, dueFilter: DueFilter): boole
 }
 
 export default function OperationsInboxPageView() {
+  const [searchParams, setSearchParams] = useSearchParams()
   const [data, setData] = useState<OperationInboxOut | null>(null)
   const [loading, setLoading] = useState(true)
   const [err, setErr] = useState<string | null>(null)
 
-  const [userFilter, setUserFilter] = useState('all')
-  const [roleFilter, setRoleFilter] = useState<'all' | OperationRole>('all')
-  const [priorityFilter, setPriorityFilter] = useState<'all' | OperationPriority>('all')
-  const [dueFilter, setDueFilter] = useState<DueFilter>('all')
+  const [userFilter, setUserFilter] = useState(searchParams.get('user') || 'all')
+  const [roleFilter, setRoleFilter] = useState<'all' | OperationRole>((searchParams.get('role') as 'all' | OperationRole) || 'all')
+  const [priorityFilter, setPriorityFilter] = useState<'all' | OperationPriority>((searchParams.get('priority') as 'all' | OperationPriority) || 'all')
+  const [dueFilter, setDueFilter] = useState<DueFilter>((searchParams.get('due') as DueFilter) || 'all')
+  const [pageSize, setPageSize] = useState(() => {
+    const parsed = Number(searchParams.get('limit') || '50')
+    if (![25, 50, 100].includes(parsed)) return 50
+    return parsed
+  })
+  const [offset, setOffset] = useState(() => Math.max(0, Number(searchParams.get('offset') || '0') || 0))
+  const tableAnchorRef = useRef<HTMLDivElement | null>(null)
+  function changePage(direction: 'prev' | 'next') {
+    setOffset(curr => {
+      if (direction === 'prev') return Math.max(0, curr - pageSize)
+      if (allItems.length < pageSize) return curr
+      return curr + pageSize
+    })
+    tableAnchorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
+
 
   async function load() {
     try {
       setErr(null)
       setLoading(true)
-      const response = await apiFetch<OperationInboxOut>('/operations/inbox?limit=300')
+      const response = await apiFetch<OperationInboxOut>(`/operations/inbox?limit=${pageSize}&offset=${offset}`)
       setData(response)
     } catch (e: unknown) {
       setErr(getErrorMessage(e))
@@ -113,7 +130,28 @@ export default function OperationsInboxPageView() {
 
   useEffect(() => {
     void load()
-  }, [])
+  }, [pageSize, offset])
+
+  useEffect(() => {
+    setOffset(0)
+  }, [userFilter, roleFilter, priorityFilter, dueFilter, pageSize])
+
+  useEffect(() => {
+    const next = new URLSearchParams(searchParams)
+    if (userFilter !== 'all') next.set('user', userFilter)
+    else next.delete('user')
+    if (roleFilter !== 'all') next.set('role', roleFilter)
+    else next.delete('role')
+    if (priorityFilter !== 'all') next.set('priority', priorityFilter)
+    else next.delete('priority')
+    if (dueFilter !== 'all') next.set('due', dueFilter)
+    else next.delete('due')
+    next.set('limit', String(pageSize))
+    next.set('offset', String(offset))
+    if (next.toString() !== searchParams.toString()) {
+      setSearchParams(next, { replace: true })
+    }
+  }, [userFilter, roleFilter, priorityFilter, dueFilter, pageSize, offset, searchParams, setSearchParams])
 
   const allItems = data?.items ?? []
 
@@ -231,10 +269,20 @@ export default function OperationsInboxPageView() {
             <option value="next7">Fälligkeit: Nächste 7 Tage</option>
             <option value="none">Fälligkeit: Ohne Datum</option>
           </select>
+
+          <select value={String(pageSize)} onChange={e => {
+            setPageSize(Number(e.target.value))
+            setOffset(0)
+          }}>
+            <option value="25">25 / Seite</option>
+            <option value="50">50 / Seite</option>
+            <option value="100">100 / Seite</option>
+          </select>
         </div>
       </section>
 
       <section className="card">
+        <div ref={tableAnchorRef} />
         <div className="card-head">
           <h3>Offene Freigaben & ToDos</h3>
         </div>
@@ -286,6 +334,12 @@ export default function OperationsInboxPageView() {
           </tbody>
         </table>
       </section>
+
+      <div className="row between">
+        <button className="btn" onClick={() => changePage('prev')} disabled={offset <= 0}>← Zurück</button>
+        <span className="muted small">Offset {offset} · Limit {pageSize} · Ergebnisse {filteredItems.length}</span>
+        <button className="btn" onClick={() => changePage('next')} disabled={allItems.length < pageSize}>Weiter →</button>
+      </div>
     </div>
   )
 }

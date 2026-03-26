@@ -6,6 +6,18 @@ export default defineConfig({
   define: {
     __API_BASE__: JSON.stringify(process.env.VITE_API_BASE || '/api'),
   },
+  build: {
+    sourcemap: process.env.VITE_BUNDLE_ANALYZE === 'true',
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          react: ['react', 'react-dom', 'react-router-dom'],
+          query: ['@tanstack/react-query'],
+          forms: ['react-hook-form', '@hookform/resolvers', 'zod'],
+        },
+      },
+    },
+  },
   test: {
     environment: 'jsdom',
     globals: true,

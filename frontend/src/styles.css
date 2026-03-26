@@ -54,6 +54,7 @@
 
 *{ box-sizing:border-box; }
 html,body{ height:100%; }
+html{ scroll-behavior: smooth; }
 body{
   margin:0;
   font-family: var(--font);
@@ -200,6 +201,20 @@ table{ width:100%; border-collapse: collapse; }
 th, td{ padding: 8px 10px; border-bottom: 1px solid var(--border); text-align:left; }
 th{ color: var(--muted); font-weight: 700; }
 caption{ text-align:left; color: var(--muted); padding: 0 0 8px; }
+
+.table-virtual-wrap{
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: auto;
+  scroll-behavior: smooth;
+}
+
+.table-virtual-wrap thead th{
+  position: sticky;
+  top: 0;
+  background: var(--panel);
+  z-index: 1;
+}
 
 .pill{
   display:inline-block;

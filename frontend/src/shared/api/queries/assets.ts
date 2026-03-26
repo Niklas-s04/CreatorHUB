@@ -38,6 +38,7 @@ type AssetLibraryQueryParams = {
   primaryOnly: boolean
   licenseFilter: LicenseFilter
   limit?: number
+  offset?: number
 }
 
 export function useAssetLibraryQuery(params: AssetLibraryQueryParams) {
@@ -45,7 +46,8 @@ export function useAssetLibraryQuery(params: AssetLibraryQueryParams) {
     approved_only: params.approvedOnly ? 'true' : 'false',
     primary_only: params.primaryOnly ? 'true' : 'false',
     license_filter: params.licenseFilter,
-    limit: String(params.limit ?? 120),
+    limit: String(Math.min(100, params.limit ?? 24)),
+    offset: String(Math.max(0, params.offset ?? 0)),
   }
   if (params.search) normalizedParams.search = params.search
   if (params.ownerType) normalizedParams.owner_type = params.ownerType
@@ -53,7 +55,9 @@ export function useAssetLibraryQuery(params: AssetLibraryQueryParams) {
 
   return useQuery<AssetLibraryItem[]>({
     queryKey: queryKeys.assets.library(normalizedParams),
-    staleTime: 30_000,
+    staleTime: 60_000,
+    gcTime: 10 * 60_000,
+    placeholderData: previous => previous,
     queryFn: async () => {
       const search = new URLSearchParams(normalizedParams)
       return apiFetch<AssetLibraryItem[]>(`/assets/library?${search.toString()}`)

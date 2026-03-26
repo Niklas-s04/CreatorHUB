@@ -13,6 +13,7 @@ import {
 } from '../../../../shared/api/queries/products'
 import { useAuthz } from '../../../../shared/hooks/useAuthz'
 import { getErrorMessage } from '../../../../shared/lib/errors'
+import { ListSkeleton } from '../../../../shared/ui/states/ListSkeleton'
 import { AssetCard } from './AssetCard'
 import { useThumb } from './useThumb'
 
@@ -128,6 +129,7 @@ export default function ProductDetailPageView() {
 
   const [auditTimeline, setAuditTimeline] = useState<AuditItem[]>([])
   const [emailRefs, setEmailRefs] = useState<EmailThreadRef[]>([])
+  const [workspaceLoading, setWorkspaceLoading] = useState(false)
 
   const [imageQuery, setImageQuery] = useState('')
   const [imageSource, setImageSource] = useState('auto')
@@ -144,7 +146,9 @@ export default function ProductDetailPageView() {
 
   const product = productQuery.data ?? null
   const assets = assetsQuery.data ?? []
+  const [optimisticAssets, setOptimisticAssets] = useState<typeof assets | null>(null)
   const txs = transactionsQuery.data ?? []
+  const effectiveAssets = optimisticAssets ?? assets
 
   const canWriteProduct = hasPermission('product.write')
   const canUploadAsset = hasPermission('asset.upload')
@@ -156,9 +160,9 @@ export default function ProductDetailPageView() {
   const canReadEmail = hasPermission('email.read')
 
   const primary = useMemo(() => {
-    const approved = assets.filter(asset => asset.reviewState === 'approved')
+    const approved = effectiveAssets.filter(asset => asset.reviewState === 'approved')
     return approved.find(asset => asset.isPrimary) || approved[0] || null
-  }, [assets])
+  }, [effectiveAssets])
   const primaryThumb = useThumb(primary ? String(primary.id) : null)
 
   useEffect(() => {
@@ -188,24 +192,9 @@ export default function ProductDetailPageView() {
     if (!id || !product) return
     try {
       setErr(null)
+      setWorkspaceLoading(true)
 
-      const vhPromise = apiFetch<unknown>(`/products/${id}/value_history`)
-      const contentPromise = canReadContent
-        ? apiFetch<unknown>(`/content/items?product_id=${id}&limit=20&offset=0&sort_by=updated_at&sort_order=desc`)
-        : Promise.resolve(null)
-      const auditPromise = canViewAudit
-        ? apiFetch<unknown>(`/audit?entity_type=product&entity_id=${id}&limit=20&offset=0&sort_by=created_at&sort_order=desc`)
-        : Promise.resolve(null)
-      const emailPromise = canReadEmail
-        ? apiFetch<unknown>('/email/threads?limit=100&offset=0&sort_by=updated_at&sort_order=desc')
-        : Promise.resolve(null)
-
-      const [vhRaw, contentRaw, auditRaw, emailRaw] = await Promise.all([
-        vhPromise,
-        contentPromise,
-        auditPromise,
-        emailPromise,
-      ])
+      const vhRaw = await apiFetch<unknown>(`/products/${id}/value_history`)
 
       setValueHistory(
         asArray(vhRaw)
@@ -222,66 +211,90 @@ export default function ProductDetailPageView() {
           .filter((item): item is ValueHistoryEntry => Boolean(item && item.id))
       )
 
-      const contentItems = parsePageItems(contentRaw)
-      setContentLinks(
-        contentItems
+      const loadDeferred = async () => {
+        const contentRaw = canReadContent
+          ? await apiFetch<unknown>(`/content/items?product_id=${id}&limit=12&offset=0&sort_by=updated_at&sort_order=desc`)
+          : null
+        const auditRaw = canViewAudit
+          ? await apiFetch<unknown>(`/audit?entity_type=product&entity_id=${id}&limit=12&offset=0&sort_by=created_at&sort_order=desc`)
+          : null
+        const emailRaw = canReadEmail
+          ? await apiFetch<unknown>('/email/threads?limit=20&offset=0&sort_by=updated_at&sort_order=desc')
+          : null
+
+        const contentItems = parsePageItems(contentRaw)
+        setContentLinks(
+          contentItems
+            .map(item => {
+              if (!isRecord(item)) return null
+              return {
+                id: String(item.id || ''),
+                title: typeof item.title === 'string' ? item.title : null,
+                status: String(item.status || 'unknown'),
+                platform: String(item.platform || 'unknown'),
+                type: String(item.type || 'unknown'),
+                updated_at: typeof item.updated_at === 'string' ? item.updated_at : null,
+              }
+            })
+            .filter((item): item is ContentItemLink => Boolean(item && item.id))
+        )
+
+        const audits = parsePageItems(auditRaw)
+        setAuditTimeline(
+          audits
+            .map(item => {
+              if (!isRecord(item)) return null
+              return {
+                id: String(item.id || ''),
+                action: String(item.action || 'unknown'),
+                description: typeof item.description === 'string' ? item.description : null,
+                created_at: String(item.created_at || ''),
+                actor_name: typeof item.actor_name === 'string' ? item.actor_name : null,
+              }
+            })
+            .filter((item): item is AuditItem => Boolean(item && item.id))
+        )
+
+        const threads = parsePageItems(emailRaw)
+        const keywords = [product.title, product.brand, product.model]
+          .map(value => (value || '').trim().toLowerCase())
+          .filter(value => value.length >= 3)
+
+        const relatedThreads = threads
           .map(item => {
             if (!isRecord(item)) return null
             return {
               id: String(item.id || ''),
-              title: typeof item.title === 'string' ? item.title : null,
-              status: String(item.status || 'unknown'),
-              platform: String(item.platform || 'unknown'),
-              type: String(item.type || 'unknown'),
-              updated_at: typeof item.updated_at === 'string' ? item.updated_at : null,
+              subject: typeof item.subject === 'string' ? item.subject : null,
+              raw_body: String(item.raw_body || ''),
+              detected_intent: String(item.detected_intent || 'unknown'),
+              updated_at: String(item.updated_at || ''),
             }
           })
-          .filter((item): item is ContentItemLink => Boolean(item && item.id))
-      )
-
-      const audits = parsePageItems(auditRaw)
-      setAuditTimeline(
-        audits
-          .map(item => {
-            if (!isRecord(item)) return null
-            return {
-              id: String(item.id || ''),
-              action: String(item.action || 'unknown'),
-              description: typeof item.description === 'string' ? item.description : null,
-              created_at: String(item.created_at || ''),
-              actor_name: typeof item.actor_name === 'string' ? item.actor_name : null,
-            }
+          .filter((item): item is EmailThreadRef => Boolean(item && item.id))
+          .filter(thread => {
+            if (!keywords.length) return false
+            const hay = `${thread.subject || ''} ${thread.raw_body}`.toLowerCase()
+            return keywords.some(keyword => hay.includes(keyword))
           })
-          .filter((item): item is AuditItem => Boolean(item && item.id))
-      )
+          .slice(0, 10)
 
-      const threads = parsePageItems(emailRaw)
-      const keywords = [product.title, product.brand, product.model]
-        .map(value => (value || '').trim().toLowerCase())
-        .filter(value => value.length >= 3)
+        setEmailRefs(relatedThreads)
+      }
 
-      const relatedThreads = threads
-        .map(item => {
-          if (!isRecord(item)) return null
-          return {
-            id: String(item.id || ''),
-            subject: typeof item.subject === 'string' ? item.subject : null,
-            raw_body: String(item.raw_body || ''),
-            detected_intent: String(item.detected_intent || 'unknown'),
-            updated_at: String(item.updated_at || ''),
-          }
+      if ('requestIdleCallback' in window) {
+        ;(window as Window & { requestIdleCallback: (callback: () => void) => number }).requestIdleCallback(() => {
+          void loadDeferred()
         })
-        .filter((item): item is EmailThreadRef => Boolean(item && item.id))
-        .filter(thread => {
-          if (!keywords.length) return false
-          const hay = `${thread.subject || ''} ${thread.raw_body}`.toLowerCase()
-          return keywords.some(keyword => hay.includes(keyword))
-        })
-        .slice(0, 10)
-
-      setEmailRefs(relatedThreads)
+      } else {
+        setTimeout(() => {
+          void loadDeferred()
+        }, 300)
+      }
     } catch (e: unknown) {
       setErr(getErrorMessage(e))
+    } finally {
+      setWorkspaceLoading(false)
     }
   }
 
@@ -460,21 +473,52 @@ export default function ProductDetailPageView() {
 
   async function review(assetId: number, state: 'approved' | 'rejected') {
     if (!canReviewAsset) return
-    await reviewMutation.mutateAsync({ assetId, state })
-    await loadWorkspaceData()
+    const prev = optimisticAssets ?? assets
+    setOptimisticAssets(
+      prev.map(asset =>
+        asset.id === assetId
+          ? { ...asset, reviewState: state }
+          : asset
+      )
+    )
+    try {
+      await reviewMutation.mutateAsync({ assetId, state })
+      await loadWorkspaceData()
+    } catch (e: unknown) {
+      setOptimisticAssets(prev)
+      setErr(getErrorMessage(e))
+    } finally {
+      setOptimisticAssets(null)
+    }
   }
 
   async function setPrimary(assetId: number) {
     if (!canReviewAsset) return
-    await setPrimaryMutation.mutateAsync({ assetId })
-    await loadWorkspaceData()
+    const prev = optimisticAssets ?? assets
+    setOptimisticAssets(
+      prev.map(asset => ({
+        ...asset,
+        isPrimary: asset.id === assetId,
+      }))
+    )
+    try {
+      await setPrimaryMutation.mutateAsync({ assetId })
+      await loadWorkspaceData()
+    } catch (e: unknown) {
+      setOptimisticAssets(prev)
+      setErr(getErrorMessage(e))
+    } finally {
+      setOptimisticAssets(null)
+    }
   }
 
   if (!product && (productQuery.isLoading || !id)) {
     return (
       <div className="container">
         <h2>Produkt</h2>
-        <div className="muted">Lädt…</div>
+        <div className="card section-gap">
+          <ListSkeleton rows={8} />
+        </div>
       </div>
     )
   }
@@ -641,10 +685,10 @@ export default function ProductDetailPageView() {
         </div>
         {jobStatus && <div className="muted small mt8">Job: {jobStatus}</div>}
 
-        {primaryThumb ? <img src={primaryThumb} className="img mt12" /> : <div className="muted mt12">Kein Preview vorhanden.</div>}
+        {primaryThumb ? <img src={primaryThumb} className="img mt12" loading="lazy" decoding="async" /> : <div className="muted mt12">Kein Preview vorhanden.</div>}
 
         <div className="grid mt12">
-          {assets.map(asset => (
+          {effectiveAssets.map(asset => (
             <AssetCard
               key={asset.id}
               asset={asset}
@@ -653,7 +697,7 @@ export default function ProductDetailPageView() {
               onPrimary={setPrimary}
             />
           ))}
-          {!assets.length && <div className="muted">Keine Assets.</div>}
+          {!effectiveAssets.length && <div className="muted">Keine Assets.</div>}
         </div>
       </section>
 
@@ -674,6 +718,7 @@ export default function ProductDetailPageView() {
         <div className="grid mt12">
           <div className="card tight">
             <div className="title-strong">Wertverlauf</div>
+            {workspaceLoading && !valueHistory.length && <ListSkeleton rows={3} />}
             {valueHistory.map(entry => (
               <div key={entry.id} className="row between mt8">
                 <span>{entry.date}</span>
@@ -681,7 +726,7 @@ export default function ProductDetailPageView() {
                 <span className="muted small">{entry.source}</span>
               </div>
             ))}
-            {!valueHistory.length && <div className="muted mt8">Keine Werteinträge.</div>}
+            {!workspaceLoading && !valueHistory.length && <div className="muted mt8">Keine Werteinträge.</div>}
           </div>
           <div className="card tight">
             <div className="title-strong">Transaktionen</div>
@@ -726,6 +771,11 @@ export default function ProductDetailPageView() {
             </tr>
           </thead>
           <tbody>
+            {workspaceLoading && !contentLinks.length && (
+              <tr>
+                <td colSpan={5}><ListSkeleton rows={2} /></td>
+              </tr>
+            )}
             {contentLinks.map(item => (
               <tr key={item.id}>
                 <td>{item.title || 'Ohne Titel'}</td>
@@ -735,7 +785,7 @@ export default function ProductDetailPageView() {
                 <td>{formatDate(item.updated_at)}</td>
               </tr>
             ))}
-            {!contentLinks.length && (
+            {!workspaceLoading && !contentLinks.length && (
               <tr>
                 <td colSpan={5} className="muted">Keine Content-Bezüge vorhanden.</td>
               </tr>
@@ -754,6 +804,7 @@ export default function ProductDetailPageView() {
 
         {canViewAudit && (
           <div className="stack">
+            {workspaceLoading && !auditTimeline.length && <ListSkeleton rows={3} />}
             {auditTimeline.map(item => (
               <div className="card tight" key={item.id}>
                 <div className="row between">
@@ -764,7 +815,7 @@ export default function ProductDetailPageView() {
                 <div className="muted small">Akteur: {item.actor_name || 'system'}</div>
               </div>
             ))}
-            {!auditTimeline.length && <div className="muted">Keine produktbezogenen Audit-Einträge.</div>}
+            {!workspaceLoading && !auditTimeline.length && <div className="muted">Keine produktbezogenen Audit-Einträge.</div>}
           </div>
         )}
       </section>
@@ -787,6 +838,11 @@ export default function ProductDetailPageView() {
               </tr>
             </thead>
             <tbody>
+              {workspaceLoading && !emailRefs.length && (
+                <tr>
+                  <td colSpan={3}><ListSkeleton rows={2} /></td>
+                </tr>
+              )}
               {emailRefs.map(thread => (
                 <tr key={thread.id}>
                   <td>{thread.subject || 'Ohne Betreff'}</td>
@@ -794,7 +850,7 @@ export default function ProductDetailPageView() {
                   <td>{formatDate(thread.updated_at)}</td>
                 </tr>
               ))}
-              {!emailRefs.length && (
+              {!workspaceLoading && !emailRefs.length && (
                 <tr>
                   <td colSpan={3} className="muted">Keine direkt erkannten E-Mail-Bezüge.</td>
                 </tr>

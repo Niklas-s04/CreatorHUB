@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom'
+import { useMemo, useState } from 'react'
 import type { ProductListItemVm } from '../../../../shared/api/contracts'
 
 export type ProductColumnKey =
@@ -20,6 +21,7 @@ type ProductsTableProps = {
   onToggleRow: (id: string) => void
   onToggleAllRows: () => void
   onSort: (field: ProductSortField) => void
+  onPrefetchDetail?: (id: string) => void
 }
 
 const COLUMN_LABELS: Record<ProductColumnKey, string> = {
@@ -46,9 +48,14 @@ export function ProductsTable({
   onToggleRow,
   onToggleAllRows,
   onSort,
+  onPrefetchDetail,
 }: ProductsTableProps) {
+  const [scrollTop, setScrollTop] = useState(0)
   const selectedOnPage = items.filter(item => selectedIds.has(String(item.id))).length
   const allSelected = items.length > 0 && selectedOnPage === items.length
+  const rowHeight = 46
+  const viewportHeight = 520
+  const overscan = 8
 
   function sortIndicator(column: ProductColumnKey) {
     const field = SORTABLE_COLUMNS[column]
@@ -64,87 +71,134 @@ export function ProductsTable({
     return sortOrder === 'asc' ? 'ascending' : 'descending'
   }
 
+  const virtualization = useMemo(() => {
+    if (items.length <= 60) {
+      return {
+        enabled: false,
+        start: 0,
+        end: items.length,
+        topSpacer: 0,
+        bottomSpacer: 0,
+      }
+    }
+    const visibleCount = Math.ceil(viewportHeight / rowHeight)
+    const start = Math.max(0, Math.floor(scrollTop / rowHeight) - overscan)
+    const end = Math.min(items.length, start + visibleCount + overscan * 2)
+    return {
+      enabled: true,
+      start,
+      end,
+      topSpacer: start * rowHeight,
+      bottomSpacer: (items.length - end) * rowHeight,
+    }
+  }, [items.length, scrollTop])
+
+  const visibleItems = virtualization.enabled ? items.slice(virtualization.start, virtualization.end) : items
+
   return (
-    <table>
-      <caption className="sr-only">Produktliste mit Auswahl und Sortierung</caption>
-      <thead>
-        <tr>
-          <th scope="col">
-            <input
-              aria-label="Alle Produkte auf Seite auswählen"
-              type="checkbox"
-              checked={allSelected}
-              onChange={onToggleAllRows}
-            />
-          </th>
-          {visibleColumns.map(column => {
-            const sortableField = SORTABLE_COLUMNS[column]
-            return (
-              <th key={column} scope="col" aria-sort={getSortAria(column)}>
-                {sortableField ? (
-                  <button
-                    className="btn ghost"
-                    type="button"
-                    onClick={() => onSort(sortableField)}
-                    aria-label={`${COLUMN_LABELS[column]} sortieren`}
-                  >
-                    {COLUMN_LABELS[column]} {sortIndicator(column)}
-                  </button>
-                ) : (
-                  COLUMN_LABELS[column]
-                )}
-              </th>
-            )
-          })}
-        </tr>
-      </thead>
-      <tbody>
-        {items.map(product => (
-          <tr key={product.id}>
-            <td>
+    <div
+      className="table-virtual-wrap"
+      style={virtualization.enabled ? { maxHeight: `${viewportHeight}px`, overflowY: 'auto' } : undefined}
+      onScroll={virtualization.enabled ? event => setScrollTop(event.currentTarget.scrollTop) : undefined}
+    >
+      <table>
+        <caption className="sr-only">Produktliste mit Auswahl und Sortierung</caption>
+        <thead>
+          <tr>
+            <th scope="col">
               <input
-                aria-label={`Produkt ${product.title} auswählen`}
+                aria-label="Alle Produkte auf Seite auswählen"
                 type="checkbox"
-                checked={selectedIds.has(String(product.id))}
-                onChange={() => onToggleRow(String(product.id))}
+                checked={allSelected}
+                onChange={onToggleAllRows}
               />
-            </td>
+            </th>
             {visibleColumns.map(column => {
-              if (column === 'title') {
-                return (
-                  <th key={`${product.id}-${column}`} scope="row">
-                    <Link to={`/products/${product.id}`}>{product.title}</Link>
-                  </th>
-                )
-              }
-              if (column === 'category') return <td key={`${product.id}-${column}`}>{product.category}</td>
-              if (column === 'condition') {
-                return (
-                  <td key={`${product.id}-${column}`}>
-                    <span className="pill">{product.condition}</span>
-                  </td>
-                )
-              }
-              if (column === 'status') {
-                return (
-                  <td key={`${product.id}-${column}`}>
-                    <span className="pill">{product.status}</span>
-                  </td>
-                )
-              }
-              if (column === 'currentValue') {
-                return <td key={`${product.id}-${column}`}>{product.currentValue ?? ''}</td>
-              }
-              return <td key={`${product.id}-${column}`}>{product.currency}</td>
+              const sortableField = SORTABLE_COLUMNS[column]
+              return (
+                <th key={column} scope="col" aria-sort={getSortAria(column)}>
+                  {sortableField ? (
+                    <button
+                      className="btn ghost"
+                      type="button"
+                      onClick={() => onSort(sortableField)}
+                      aria-label={`${COLUMN_LABELS[column]} sortieren`}
+                    >
+                      {COLUMN_LABELS[column]} {sortIndicator(column)}
+                    </button>
+                  ) : (
+                    COLUMN_LABELS[column]
+                  )}
+                </th>
+              )
             })}
           </tr>
-        ))}
-        {!items.length && (
-          <tr>
-            <td colSpan={visibleColumns.length + 1} className="muted">Keine Treffer.</td>
-          </tr>
-        )}
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          {virtualization.enabled && virtualization.topSpacer > 0 && (
+            <tr aria-hidden="true">
+              <td colSpan={visibleColumns.length + 1} style={{ height: `${virtualization.topSpacer}px`, padding: 0, borderBottom: 0 }} />
+            </tr>
+          )}
+          {visibleItems.map(product => (
+            <tr key={product.id}>
+              <td>
+                <input
+                  aria-label={`Produkt ${product.title} auswählen`}
+                  type="checkbox"
+                  checked={selectedIds.has(String(product.id))}
+                  onChange={() => onToggleRow(String(product.id))}
+                />
+              </td>
+              {visibleColumns.map(column => {
+                if (column === 'title') {
+                  const id = String(product.id)
+                  return (
+                    <th key={`${product.id}-${column}`} scope="row">
+                      <Link
+                        to={`/products/${product.id}`}
+                        onMouseEnter={() => onPrefetchDetail?.(id)}
+                        onFocus={() => onPrefetchDetail?.(id)}
+                      >
+                        {product.title}
+                      </Link>
+                    </th>
+                  )
+                }
+                if (column === 'category') return <td key={`${product.id}-${column}`}>{product.category}</td>
+                if (column === 'condition') {
+                  return (
+                    <td key={`${product.id}-${column}`}>
+                      <span className="pill">{product.condition}</span>
+                    </td>
+                  )
+                }
+                if (column === 'status') {
+                  return (
+                    <td key={`${product.id}-${column}`}>
+                      <span className="pill">{product.status}</span>
+                    </td>
+                  )
+                }
+                if (column === 'currentValue') {
+                  return <td key={`${product.id}-${column}`}>{product.currentValue ?? ''}</td>
+                }
+                return <td key={`${product.id}-${column}`}>{product.currency}</td>
+              })}
+            </tr>
+          ))}
+          {virtualization.enabled && virtualization.bottomSpacer > 0 && (
+            <tr aria-hidden="true">
+              <td colSpan={visibleColumns.length + 1} style={{ height: `${virtualization.bottomSpacer}px`, padding: 0, borderBottom: 0 }} />
+            </tr>
+          )}
+          {!items.length && (
+            <tr>
+              <td colSpan={visibleColumns.length + 1} className="muted">Keine Treffer.</td>
+            </tr>
+          )}
+        </tbody>
+      </table>
+    </div>
   )
 }

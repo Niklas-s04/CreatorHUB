@@ -2,9 +2,12 @@ import React, { useMemo, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../../../../api'
+import { toProductDetailVm } from '../../../../shared/api/mappers'
 import { queryKeys } from '../../../../shared/api/queryKeys'
+import { parseProductDto } from '../../../../shared/api/validators'
 import { useCreateProductMutation, useProductsListQuery } from '../../../../shared/api/queries/products'
 import type { ProductCreateFormValues } from '../../../../shared/forms/schemas'
+import { useDebouncedValue } from '../../../../shared/hooks/useDebouncedValue'
 import { getErrorMessage } from '../../../../shared/lib/errors'
 import { useAuthz } from '../../../../shared/hooks/useAuthz'
 import { PageHeader } from '../../../../shared/ui/page/PageHeader'
@@ -49,7 +52,8 @@ type SavedView = {
 
 function parsePositiveInt(value: string | null, fallback: number): number {
   const parsed = Number.parseInt(value || '', 10)
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback
+  const normalized = Number.isFinite(parsed) && parsed > 0 ? parsed : fallback
+  return Math.min(100, normalized)
 }
 
 function parseOffset(value: string | null): number {
@@ -141,6 +145,8 @@ export default function ProductsListPageView() {
 
   const [q, setQ] = useState(urlQ)
   const [status, setStatus] = useState(urlStatus)
+  const debouncedQ = useDebouncedValue(q, 350)
+  const debouncedStatus = useDebouncedValue(status, 350)
   const [err, setErr] = useState<string | null>(null)
   const [showNew, setShowNew] = useState(false)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
@@ -153,6 +159,7 @@ export default function ProductsListPageView() {
     return loadColumnsFromStorage()
   }, [])
   const [visibleColumns, setVisibleColumns] = useState<ProductColumnKey[]>(initialColumns)
+  const [tableInteractionVersion, setTableInteractionVersion] = useState(0)
 
   const [exportDataset, setExportDataset] = useState<'products' | 'transactions' | 'value_history'>('products')
   const [exportYears, setExportYears] = useState('')
@@ -170,6 +177,24 @@ export default function ProductsListPageView() {
     [urlQ, urlStatus, urlLimit, urlOffset, urlSortBy, urlSortOrder]
   )
   const productsQuery = useProductsListQuery(listParams)
+
+  React.useEffect(() => {
+    const normalizedQ = debouncedQ.trim()
+    if (normalizedQ === urlQ && debouncedStatus === urlStatus) return
+    updateParams({
+      q: normalizedQ || null,
+      status: debouncedStatus || null,
+      offset: '0',
+    })
+    setSelectedIds(new Set())
+  }, [debouncedQ, debouncedStatus, urlQ, urlStatus])
+
+  React.useEffect(() => {
+    const table = document.getElementById('products-table-anchor')
+    if (!table || tableInteractionVersion === 0) return
+    table.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }, [tableInteractionVersion])
+
   const createMutation = useCreateProductMutation(listParams)
 
   const items = productsQuery.data?.items ?? []
@@ -222,12 +247,25 @@ export default function ProductsListPageView() {
     const nextOffset = direction === 'prev' ? Math.max(0, meta.offset - meta.limit) : meta.offset + meta.limit
     updateParams({ offset: String(nextOffset) })
     setSelectedIds(new Set())
+    setTableInteractionVersion(value => value + 1)
   }
 
   function handleSort(field: ProductSortField) {
     const nextOrder = meta.sort_by === field && meta.sort_order === 'desc' ? 'asc' : 'desc'
     updateParams({ sort_by: field, sort_order: nextOrder, offset: '0' })
     setSelectedIds(new Set())
+    setTableInteractionVersion(value => value + 1)
+  }
+
+  function prefetchProductDetail(id: string) {
+    void queryClient.prefetchQuery({
+      queryKey: queryKeys.products.detail(id),
+      queryFn: async () => {
+        const data = await apiFetch<unknown>(`/products/${id}`)
+        return toProductDetailVm(parseProductDto(data))
+      },
+      staleTime: 20_000,
+    })
   }
 
   function toggleColumn(column: ProductColumnKey) {
@@ -429,6 +467,7 @@ export default function ProductsListPageView() {
       )}
 
       <div className="card section-gap">
+        <div id="products-table-anchor" />
         <ProductsFilterBar
           query={q}
           status={status}
@@ -500,6 +539,7 @@ export default function ProductsListPageView() {
             onToggleRow={toggleRowSelection}
             onToggleAllRows={toggleAllOnPage}
             onSort={handleSort}
+            onPrefetchDetail={prefetchProductDetail}
           />
         )}
         <div className="row between mt8">

@@ -14,7 +14,19 @@ export function AssetCard({ asset, canReview, onReview, onPrimary }: AssetCardPr
 
   return (
     <div className="card tight">
-      {thumb ? <img src={thumb} className="img" /> : <div className="muted">No preview</div>}
+      {thumb ? (
+        <img
+          src={thumb}
+          className="img"
+          loading="lazy"
+          decoding="async"
+          alt={asset.title || `Asset ${asset.id}`}
+          width={320}
+          height={180}
+        />
+      ) : (
+        <div className="muted">No preview</div>
+      )}
 
       <div className="asset-title">
         {asset.title || `asset ${asset.id}`}

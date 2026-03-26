@@ -76,7 +76,9 @@ function parseProductsPage(input: unknown, fallback: ProductsListParams): Produc
 export function useProductsListQuery(params: ProductsListParams) {
   return useQuery<ProductsListPageVm>({
     queryKey: queryKeys.products.list(params),
-    staleTime: 20_000,
+    staleTime: 45_000,
+    gcTime: 10 * 60_000,
+    placeholderData: previous => previous,
     queryFn: async () => {
       const search = new URLSearchParams()
       search.set('limit', String(params.limit ?? 100))
