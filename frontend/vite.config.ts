@@ -25,7 +25,12 @@ export default defineConfig(({ mode }) => {
 
             if (id.includes('react-router-dom')) return 'react'
             if (id.includes('@tanstack/react-query')) return 'query'
-            if (id.includes('react-hook-form') || id.includes('@hookform/resolvers') || id.includes('zod')) return 'forms'
+            if (
+              id.includes('react-hook-form') ||
+              id.includes('@hookform/resolvers') ||
+              id.includes('zod')
+            )
+              return 'forms'
             if (id.includes('react') || id.includes('scheduler')) return 'react'
             return 'vendor'
           },
