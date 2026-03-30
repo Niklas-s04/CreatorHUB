@@ -23,7 +23,7 @@ TEST_TABLES = [
 
 def _build_app(db_session: Session, current_user: User) -> FastAPI:
     app = FastAPI()
-    app.include_router(audit.router, prefix='/api/audit')
+    app.include_router(audit.router, prefix="/api/audit")
 
     def _get_db_override() -> Generator[Session, None, None]:
         yield db_session
@@ -35,8 +35,8 @@ def _build_app(db_session: Session, current_user: User) -> FastAPI:
 
 def test_audit_list_filters_category_and_critical() -> None:
     engine = create_engine(
-        'sqlite+pysqlite:///:memory:',
-        connect_args={'check_same_thread': False},
+        "sqlite+pysqlite:///:memory:",
+        connect_args={"check_same_thread": False},
         poolclass=StaticPool,
     )
     for table in TEST_TABLES:
@@ -46,33 +46,33 @@ def test_audit_list_filters_category_and_critical() -> None:
     db = session_local()
 
     try:
-        admin = create_user(db, username='audit_admin')
+        admin = create_user(db, username="audit_admin")
         record_audit_log(
             db,
             actor=admin,
-            action='auth.password.change',
-            entity_type='user',
+            action="auth.password.change",
+            entity_type="user",
             entity_id=str(admin.id),
-            metadata={'audit_category': 'security', 'critical': True},
+            metadata={"audit_category": "security", "critical": True},
         )
         record_audit_log(
             db,
             actor=admin,
-            action='content.task.update',
-            entity_type='content_task',
-            entity_id='ct-1',
-            metadata={'audit_category': 'domain', 'critical': False},
+            action="content.task.update",
+            entity_type="content_task",
+            entity_id="ct-1",
+            metadata={"audit_category": "domain", "critical": False},
         )
         db.commit()
 
         app = _build_app(db, admin)
         with TestClient(app) as client:
-            response = client.get('/api/audit/?category=security&critical_only=true')
+            response = client.get("/api/audit/?category=security&critical_only=true")
 
         assert response.status_code == 200
         body = response.json()
-        assert body['meta']['total'] == 1
-        assert body['items'][0]['action'] == 'auth.password.change'
+        assert body["meta"]["total"] == 1
+        assert body["items"][0]["action"] == "auth.password.change"
     finally:
         db.close()
         for table in reversed(TEST_TABLES):
@@ -82,8 +82,8 @@ def test_audit_list_filters_category_and_critical() -> None:
 
 def test_audit_export_csv_respects_filters() -> None:
     engine = create_engine(
-        'sqlite+pysqlite:///:memory:',
-        connect_args={'check_same_thread': False},
+        "sqlite+pysqlite:///:memory:",
+        connect_args={"check_same_thread": False},
         poolclass=StaticPool,
     )
     for table in TEST_TABLES:
@@ -93,33 +93,33 @@ def test_audit_export_csv_respects_filters() -> None:
     db = session_local()
 
     try:
-        admin = create_user(db, username='audit_export_admin')
+        admin = create_user(db, username="audit_export_admin")
         record_audit_log(
             db,
             actor=admin,
-            action='registration.request.review',
-            entity_type='registration_request',
-            entity_id='req-1',
-            metadata={'audit_category': 'approval', 'critical': True},
+            action="registration.request.review",
+            entity_type="registration_request",
+            entity_id="req-1",
+            metadata={"audit_category": "approval", "critical": True},
         )
         record_audit_log(
             db,
             actor=admin,
-            action='email.draft.update',
-            entity_type='email_draft',
-            entity_id='draft-1',
-            metadata={'audit_category': 'ai_action', 'critical': False},
+            action="email.draft.update",
+            entity_type="email_draft",
+            entity_id="draft-1",
+            metadata={"audit_category": "ai_action", "critical": False},
         )
         db.commit()
 
         app = _build_app(db, admin)
         with TestClient(app) as client:
-            response = client.get('/api/audit/export/csv?category=approval')
+            response = client.get("/api/audit/export/csv?category=approval")
 
         assert response.status_code == 200
-        assert response.headers['content-type'].startswith('text/csv')
-        assert 'registration.request.review' in response.text
-        assert 'email.draft.update' not in response.text
+        assert response.headers["content-type"].startswith("text/csv")
+        assert "registration.request.review" in response.text
+        assert "email.draft.update" not in response.text
     finally:
         db.close()
         for table in reversed(TEST_TABLES):

@@ -71,7 +71,9 @@ def _slug(value: str) -> str:
     return re.sub(r"[^a-z0-9_\-]", "", text)
 
 
-def normalize_product_payload(payload: dict[str, Any]) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+def normalize_product_payload(
+    payload: dict[str, Any],
+) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     normalized = dict(payload)
     issues: list[dict[str, Any]] = []
 
@@ -199,7 +201,9 @@ def validate_product_reference_data(payload: dict[str, Any]) -> list[dict[str, A
     return issues
 
 
-def validate_domain_required_fields(payload: dict[str, Any], *, domain: str) -> list[dict[str, Any]]:
+def validate_domain_required_fields(
+    payload: dict[str, Any], *, domain: str
+) -> list[dict[str, Any]]:
     required = DOMAIN_REQUIRED_FIELDS.get(domain, DOMAIN_REQUIRED_FIELDS["default"])
     missing = sorted(
         [

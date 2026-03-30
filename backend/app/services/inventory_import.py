@@ -131,7 +131,9 @@ def import_products_from_csv(db: Session, *, config: CsvImportConfig) -> dict[st
             "idempotency": {
                 "mode": idempotency_mode,
                 "key_fields": idempotency_fields,
-                "strategy": "skip_existing_records" if idempotency_mode == "skip_existing" else "none",
+                "strategy": "skip_existing_records"
+                if idempotency_mode == "skip_existing"
+                else "none",
             },
         }
 
@@ -154,11 +156,7 @@ def import_products_from_csv(db: Session, *, config: CsvImportConfig) -> dict[st
         raise ValueError("invalid_header_row: contains empty header")
 
     duplicates = sorted(
-        {
-            header
-            for header in normalized_headers
-            if normalized_headers.count(header) > 1
-        }
+        {header for header in normalized_headers if normalized_headers.count(header) > 1}
     )
     if duplicates:
         raise ValueError(f"duplicate_header_columns: {', '.join(duplicates)}")
@@ -166,9 +164,7 @@ def import_products_from_csv(db: Session, *, config: CsvImportConfig) -> dict[st
     header_lookup = {_canonical(header): header for header in raw_headers}
     mapped_columns = {_canonical(column): column for column in config.column_map.values()}
     missing_columns = [
-        column
-        for canonical, column in mapped_columns.items()
-        if canonical not in header_lookup
+        column for canonical, column in mapped_columns.items() if canonical not in header_lookup
     ]
     if missing_columns:
         raise ValueError(f"missing_csv_columns: {', '.join(sorted(missing_columns))}")
@@ -361,7 +357,9 @@ def import_products_from_csv(db: Session, *, config: CsvImportConfig) -> dict[st
 
     error_count = len(errors)
     warning_count = len(warnings) + len(row_warnings)
-    quality_warning_count = len([item for item in quality_issues if item.get("severity") == "warning"])
+    quality_warning_count = len(
+        [item for item in quality_issues if item.get("severity") == "warning"]
+    )
     quality_error_count = len([item for item in quality_issues if item.get("severity") == "error"])
     status = "success"
     if error_count > 0 and (ready_rows > 0 or inserted_rows > 0):

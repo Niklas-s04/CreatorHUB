@@ -120,9 +120,7 @@ def alerts(request: Request) -> dict:
     monitor_once(request.app, settings)
     state = get_alert_state()
     active = [
-        {"code": code, **payload}
-        for code, payload in state.items()
-        if bool(payload.get("active"))
+        {"code": code, **payload} for code, payload in state.items() if bool(payload.get("active"))
     ]
     return {
         "definitions": get_alert_definitions(settings),

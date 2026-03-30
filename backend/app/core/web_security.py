@@ -75,7 +75,10 @@ class RequestSizeLimitMiddleware(BaseHTTPMiddleware):
                     log_security_event(
                         "request_rejected_body_too_large",
                         request=request,
-                        details={"content_length": content_length, "max_body_size": self.max_body_size},
+                        details={
+                            "content_length": content_length,
+                            "max_body_size": self.max_body_size,
+                        },
                     )
                     return JSONResponse(
                         status_code=413, content={"detail": "Request body too large"}

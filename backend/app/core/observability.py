@@ -61,7 +61,9 @@ def set_gauge(name: str, value: float, **labels: Any) -> None:
         _gauge_values[key] = float(value)
 
 
-def observe_histogram(name: str, value: float, *, buckets: tuple[float, ...] = DEFAULT_BUCKETS, **labels: Any) -> None:
+def observe_histogram(
+    name: str, value: float, *, buckets: tuple[float, ...] = DEFAULT_BUCKETS, **labels: Any
+) -> None:
     key = (name, _label_items(labels))
     with _metrics_lock:
         state = _hist_values.get(key)
@@ -127,7 +129,9 @@ def _set_alert(code: str, *, active: bool, severity: str, message: str) -> None:
 
     if previous is None or bool(previous.get("active")) != active:
         level = logging.ERROR if active else logging.INFO
-        alert_logger.log(level, "Observability alert state changed", extra={"alert_code": code, **current})
+        alert_logger.log(
+            level, "Observability alert state changed", extra={"alert_code": code, **current}
+        )
 
 
 def get_alert_definitions(settings: Settings) -> dict[str, Any]:
@@ -252,7 +256,9 @@ def observe_redis_call(command: str, func: Callable[[], Any]) -> Any:
         raise
 
 
-def collect_worker_snapshot(redis_conn: Any, queue_names: list[str] | None = None) -> dict[str, Any]:
+def collect_worker_snapshot(
+    redis_conn: Any, queue_names: list[str] | None = None
+) -> dict[str, Any]:
     from rq import Queue
     from rq.registry import FailedJobRegistry, FinishedJobRegistry, StartedJobRegistry
 

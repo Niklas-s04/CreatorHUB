@@ -175,7 +175,13 @@ class RequestContextLoggingMiddleware(BaseHTTPMiddleware):
 
         response.headers[REQUEST_ID_HEADER] = request_id
         duration_ms = round((time.perf_counter() - started) * 1000, 2)
-        level = logging.ERROR if status_code >= 500 else logging.WARNING if status_code >= 400 else logging.INFO
+        level = (
+            logging.ERROR
+            if status_code >= 500
+            else logging.WARNING
+            if status_code >= 400
+            else logging.INFO
+        )
         self.logger.log(
             level,
             "HTTP request completed",
@@ -204,7 +210,9 @@ def log_security_event(
     client_ip = None
 
     if request is not None:
-        request_id = getattr(request.state, "request_id", None) or request.headers.get(REQUEST_ID_HEADER)
+        request_id = getattr(request.state, "request_id", None) or request.headers.get(
+            REQUEST_ID_HEADER
+        )
         path = request.url.path
         method = request.method
         if request.client and request.client.host:
@@ -281,7 +289,9 @@ def configure_logging(settings: Settings) -> None:
     if settings.LOG_TO_FILE:
         base_dir = Path(settings.LOG_DIR)
         handlers.append(
-            _build_file_handler(base_dir / settings.LOG_FILE_NAME, settings.LOG_RETENTION_DAYS, settings)
+            _build_file_handler(
+                base_dir / settings.LOG_FILE_NAME, settings.LOG_RETENTION_DAYS, settings
+            )
         )
 
     if not handlers:

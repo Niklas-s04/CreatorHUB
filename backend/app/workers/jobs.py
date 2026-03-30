@@ -260,9 +260,7 @@ def image_hunt_job(
         db.commit()
 
         duration = max(0.0, time.perf_counter() - started)
-        observe_histogram(
-            "background_job_latency_seconds", duration, job="image_hunt", status="ok"
-        )
+        observe_histogram("background_job_latency_seconds", duration, job="image_hunt", status="ok")
         inc_counter("background_job_runs_total", job="image_hunt", status="ok")
 
         return {

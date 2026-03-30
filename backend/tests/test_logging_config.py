@@ -95,12 +95,16 @@ def test_configure_logging_applies_retention_to_file_handlers(tmp_path: Path) ->
 
     configure_logging(settings)
 
-    root_handlers = [h for h in logging.getLogger().handlers if isinstance(h, TimedRotatingFileHandler)]
+    root_handlers = [
+        h for h in logging.getLogger().handlers if isinstance(h, TimedRotatingFileHandler)
+    ]
     assert any(Path(handler.baseFilename).name == "app.log" for handler in root_handlers)
     assert any(handler.backupCount == 14 for handler in root_handlers)
 
     security_handlers = [
-        h for h in logging.getLogger("app.security").handlers if isinstance(h, TimedRotatingFileHandler)
+        h
+        for h in logging.getLogger("app.security").handlers
+        if isinstance(h, TimedRotatingFileHandler)
     ]
     assert any(Path(handler.baseFilename).name == "security.log" for handler in security_handlers)
     assert any(handler.backupCount == 120 for handler in security_handlers)

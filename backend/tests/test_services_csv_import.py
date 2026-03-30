@@ -177,7 +177,9 @@ def test_csv_import_reference_data_unknown_category_is_visible_warning(db_sessio
     )
 
     assert result["ready"] == 1
-    assert any(issue.get("code") == "unknown_category_reference" for issue in result["quality_issues"])
+    assert any(
+        issue.get("code") == "unknown_category_reference" for issue in result["quality_issues"]
+    )
     assert result["summary"]["data_quality_warnings"] >= 1
 
 
