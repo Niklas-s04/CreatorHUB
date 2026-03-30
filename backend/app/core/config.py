@@ -102,5 +102,39 @@ class Settings(BaseSettings):
     AUTO_ARCHIVE_INTERVAL_MINUTES: int = 720  # Standard: zweimal täglich
     AUTO_ARCHIVE_SOLD_AFTER_DAYS: int = 30
 
+    LOG_LEVEL: str = "INFO"
+    UVICORN_LOG_LEVEL: str = "INFO"
+    UVICORN_ACCESS_LOG_LEVEL: str = "WARNING"
+    LOG_FORMAT: Literal["json", "plain"] = "json"
+    LOG_TO_STDOUT: bool = True
+    LOG_TO_FILE: bool = False
+    LOG_DIR: str = "/data/logs"
+    LOG_FILE_NAME: str = "application.log"
+    LOG_RETENTION_DAYS: int = 30
+
+    SECURITY_LOG_LEVEL: str = "WARNING"
+    SECURITY_LOG_TO_SEPARATE_FILE: bool = True
+    SECURITY_LOG_FILE_NAME: str = "security-events.log"
+    SECURITY_LOG_RETENTION_DAYS: int = 90
+    SECURITY_LOG_PROPAGATE_TO_ROOT: bool = True
+
+    OBSERVABILITY_METRICS_ENABLED: bool = True
+    OBSERVABILITY_METRICS_PATH: str = "/health/metrics"
+    OBSERVABILITY_MONITOR_ENABLED: bool = True
+    OBSERVABILITY_MONITOR_INTERVAL_SECONDS: int = 30
+
+    ALERT_DB_FAILURE_CONSECUTIVE: int = 3
+    ALERT_REDIS_FAILURE_CONSECUTIVE: int = 3
+    ALERT_WORKER_FAILURE_CONSECUTIVE: int = 3
+    ALERT_QUEUE_LENGTH_WARN: int = 100
+    ALERT_QUEUE_LENGTH_CRITICAL: int = 500
+    ALERT_FAILED_JOBS_CRITICAL: int = 20
+
+    OTEL_ENABLED: bool = False
+    OTEL_SERVICE_NAME: str = "creatorhub-backend"
+    OTEL_EXPORTER_OTLP_ENDPOINT: str = ""
+    OTEL_EXPORTER_OTLP_INSECURE: bool = True
+    OTEL_SAMPLE_RATIO: float = 0.2
+
 
 settings = Settings()

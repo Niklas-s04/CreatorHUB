@@ -1561,3 +1561,51 @@ caption{ text-align:left; color: var(--muted); padding: 0 0 8px; }
   padding: 6px 8px;
   font-size: 13px;
 }
+
+.audit-filters{
+  display:grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: var(--space-2);
+  margin: var(--space-3) 0;
+}
+
+.audit-checkbox{
+  display:flex;
+  align-items:center;
+  gap: var(--space-2);
+  color: var(--text);
+  font-size: var(--font-size-sm);
+}
+
+.audit-checkbox input{
+  width:auto;
+}
+
+.audit-pill-critical{
+  border-color: var(--danger);
+  color: var(--danger);
+  font-weight: var(--font-weight-semibold);
+}
+
+.audit-summary{
+  cursor:pointer;
+  color: var(--accent);
+}
+
+.audit-details-grid{
+  display:grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: var(--space-3);
+  margin-top: var(--space-2);
+}
+
+.audit-json{
+  margin: 0;
+  padding: var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--panel2);
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: var(--font-size-xs);
+}

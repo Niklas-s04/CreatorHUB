@@ -241,6 +241,30 @@ Header hardening includes:
 
 Security behavior is environment-aware and stricter in production.
 
+## Logging, Security Events und Retention
+
+- Backend-Logs sind standardmäßig strukturiert (`LOG_FORMAT=json`) und enthalten pro Request eine Correlation-ID (`x-request-id`).
+- Wenn kein `x-request-id` Header gesetzt ist, wird serverseitig eine UUID erzeugt und im Response-Header zurückgegeben.
+- Security-relevante Ereignisse (z. B. CSRF-Verstöße, Rate-Limits, auffällige Requests) werden unter `app.security` gesondert erfasst.
+- Log-Inhalte werden defensiv maskiert (u. a. `password`, `token`, `api_key`, `cookie`, E-Mail/Telefon/IBAN/Kartendaten).
+- Retention/Löschfristen sind konfigurierbar:
+	- `LOG_RETENTION_DAYS` (Default 30)
+	- `SECURITY_LOG_RETENTION_DAYS` (Default 90)
+- Bei `LOG_TO_FILE=true` rotiert das System täglich und entfernt alte Dateien nach Ablauf der konfigurierten Frist.
+
+## Observability (Metriken, Tracing, Alerts)
+
+- API-, DB-, Redis- und Worker-Metriken werden als Prometheus-Text über `GET /health/metrics` bereitgestellt.
+- Erfasst werden u. a. Request-Anzahlen, Fehlerquoten, Latenzen sowie Queue-/Job-Zustände.
+- Hintergrundjobs (inkl. Queue-Tiefen und sichtbare Job-Register) sind abrufbar über:
+	- `GET /health/background-jobs`
+- Alert-Definitionen und aktueller Alert-Status sind abrufbar über:
+	- `GET /health/alerts`
+- OpenTelemetry kann aktiviert werden über:
+	- `OTEL_ENABLED=true`
+	- `OTEL_EXPORTER_OTLP_ENDPOINT=<collector-url>`
+- Bei aktivem OTel werden FastAPI, SQLAlchemy, Redis und Requests instrumentiert.
+
 ## Useful Commands
 
 ### Frontend

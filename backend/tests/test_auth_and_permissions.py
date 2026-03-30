@@ -108,6 +108,30 @@ def test_create_user_requires_admin_role(client, db_session: Session) -> None:
     assert response.json()["detail"] == "Insufficient permissions"
 
 
+def test_create_user_writes_audit_log(client, db_session: Session) -> None:
+    admin = create_user(db_session, username="admin_create_audit", role=UserRole.admin)
+    access_token, _ = create_tokens_for_user(db_session, user=admin)
+
+    response = client.post(
+        "/api/auth/users",
+        json={"username": "new_editor_audit", "password": "NewStrong!Pass123", "role": "editor"},
+        headers=_auth_header(access_token),
+    )
+
+    assert response.status_code == 200
+    created_user = response.json()
+
+    audit = (
+        db_session.query(AuditLog)
+        .filter(AuditLog.action == "user.create", AuditLog.entity_id == created_user["id"])
+        .first()
+    )
+    assert audit is not None
+    assert isinstance(audit.meta, dict)
+    assert audit.meta.get("audit_category") == "permission_change"
+    assert bool(audit.meta.get("critical")) is True
+
+
 def test_me_includes_effective_permissions(client, db_session: Session) -> None:
     editor = create_user(db_session, username="perm_editor", role=UserRole.editor)
     access_token, _ = create_tokens_for_user(db_session, user=editor)
@@ -242,3 +266,34 @@ def test_update_user_writes_revision_safe_audit_log(client, db_session: Session)
     assert audit.after is not None
     assert audit.before.get("role") == "editor"
     assert audit.after.get("role") == "viewer"
+
+
+def test_confirm_password_reset_writes_security_audit(client, db_session: Session) -> None:
+    user = create_user(db_session, username="reset_audit_user", role=UserRole.editor)
+
+    request_response = client.post(
+        "/api/auth/password-reset/request",
+        json={"username": user.username},
+    )
+    assert request_response.status_code == 200
+    reset_token = request_response.json().get("reset_token")
+    assert isinstance(reset_token, str) and reset_token
+
+    confirm_response = client.post(
+        "/api/auth/password-reset/confirm",
+        json={"token": reset_token, "new_password": "ResetStrong!Pass123"},
+    )
+    assert confirm_response.status_code == 200
+
+    audit = (
+        db_session.query(AuditLog)
+        .filter(
+            AuditLog.action == "auth.password.reset.confirm",
+            AuditLog.entity_id == str(user.id),
+        )
+        .first()
+    )
+    assert audit is not None
+    assert isinstance(audit.meta, dict)
+    assert audit.meta.get("audit_category") == "security"
+    assert bool(audit.meta.get("critical")) is True

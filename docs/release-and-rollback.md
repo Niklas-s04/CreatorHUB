@@ -43,3 +43,9 @@ Ein reproduzierbarer Release-Ablauf mit klaren Qualitäts-Gates und dokumentiert
   - `pip-audit` ohne ungeklärte Findings.
   - `npm audit --audit-level=critical` ohne kritische Findings.
 - Alembic Migrations-Check (`upgrade head`) erfolgreich.
+
+## Logging-Retention und Löschfristen
+- Applikationslogs: **30 Tage** (`LOG_RETENTION_DAYS`, Standardwert).
+- Security-Event-Logs: **90 Tage** (`SECURITY_LOG_RETENTION_DAYS`, Standardwert).
+- Umsetzung: tägliche Rotation, automatische Löschung älterer Log-Dateien nach Ablauf der Frist.
+- Für produktive Umgebungen mit Compliance-Anforderungen sind abweichende Fristen als explizite Konfigurationsentscheidung zu dokumentieren.

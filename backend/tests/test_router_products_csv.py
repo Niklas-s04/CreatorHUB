@@ -51,6 +51,9 @@ def test_csv_import_route_accepts_editor(client, db_session: Session) -> None:
     assert body["rows_total"] == 1
     assert body["ready"] == 1
     assert body["inserted"] == 0
+    assert body["summary"]["status"] == "success"
+    assert body["idempotency"]["mode"] == "skip_existing"
+    assert "quality_issues" in body
 
 
 def test_csv_export_products_respects_filters(client, db_session: Session) -> None:

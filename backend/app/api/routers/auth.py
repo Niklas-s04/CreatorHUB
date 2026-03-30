@@ -600,7 +600,7 @@ def me(current_user: User = Depends(get_current_user), db: Session = Depends(get
 def create_user(
     payload: UserCreate,
     db: Session = Depends(get_db),
-    _: User = Depends(require_permission(Permission.user_manage)),
+    admin: User = Depends(require_permission(Permission.user_manage)),
 ) -> UserOut:
     username = _validate_username(payload.username)
     password = _validate_password_strength(payload.password)
@@ -621,6 +621,24 @@ def create_user(
         password_changed_at=_utcnow(),
     )
     db.add(user)
+    db.flush()
+    record_audit_log(
+        db,
+        actor=admin,
+        action="user.create",
+        entity_type="user",
+        entity_id=str(user.id),
+        description=f"Created user '{user.username}'",
+        after={
+            "username": user.username,
+            "role": user.role.value,
+            "is_active": user.is_active,
+        },
+        metadata={
+            "audit_category": "permission_change",
+            "critical": True,
+        },
+    )
     db.commit()
     db.refresh(user)
     return user
@@ -711,6 +729,8 @@ def update_user(
             before=before,
             after=after,
             metadata={
+                "audit_category": "permission_change",
+                "critical": True,
                 "sensitive_action": sensitive_action.action,
                 "confirmation_required": sensitive_action.confirmation_required,
                 "confirmation_provided": sensitive_action.confirmation_provided,
@@ -789,6 +809,8 @@ def approve_registration_request(
             before={"status": before_status.value},
             after={"status": req.status.value},
             metadata={
+                "audit_category": "approval",
+                "critical": True,
                 "decision": "auto_reject_conflict",
                 "username": req.username,
                 "sensitive_action": sensitive_action.action,
@@ -838,6 +860,8 @@ def approve_registration_request(
         before={"status": before_status.value},
         after={"status": req.status.value},
         metadata={
+            "audit_category": "approval",
+            "critical": True,
             "decision": "approved",
             "username": req.username,
             "provisioned_role": UserRole.editor.value,
@@ -901,6 +925,8 @@ def reject_registration_request(
         before={"status": before_status.value},
         after={"status": req.status.value},
         metadata={
+            "audit_category": "approval",
+            "critical": True,
             "decision": "rejected",
             "username": req.username,
             "sensitive_action": sensitive_action.action,
@@ -961,6 +987,7 @@ def list_sessions(
 @router.delete("/sessions/{session_id}")
 def revoke_single_session(
     session_id: uuid.UUID,
+    request: Request,
     response: Response,
     context: AuthContext = Depends(get_current_auth_context),
     db: Session = Depends(get_db),
@@ -972,6 +999,26 @@ def revoke_single_session(
     )
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
+
+    record_audit_log(
+        db,
+        actor=context.user,
+        action="auth.session.revoke",
+        entity_type="auth_session",
+        entity_id=str(session.id),
+        description="Session revoked by user",
+        before={
+            "revoked_at": session.revoked_at.isoformat() if session.revoked_at else None,
+            "mfa_verified": bool(session.mfa_verified),
+        },
+        after={"revoked_at": _utcnow().isoformat(), "reason": "manual_revoke"},
+        metadata={
+            "audit_category": "security",
+            "critical": True,
+            "request_id": getattr(request.state, "request_id", None),
+        },
+    )
+
     revoke_session(db, session=session, reason="manual_revoke")
     db.commit()
     if session.id == context.session.id:
@@ -1022,6 +1069,7 @@ def mfa_provision(context: AuthContext = Depends(get_current_auth_context)) -> M
 
 @router.post("/mfa/enable", response_model=MfaEnableOut)
 def mfa_enable(
+    request: Request,
     response: Response,
     payload: MfaEnableIn,
     context: AuthContext = Depends(get_current_auth_context),
@@ -1035,6 +1083,21 @@ def mfa_enable(
     context.user.mfa_enabled = True
     context.user.mfa_recovery_codes = hash_recovery_codes(codes)
     context.session.mfa_verified = True
+    record_audit_log(
+        db,
+        actor=context.user,
+        action="auth.mfa.enable",
+        entity_type="user",
+        entity_id=str(context.user.id),
+        description="Enabled MFA for account",
+        before={"mfa_enabled": False},
+        after={"mfa_enabled": True, "recovery_codes_count": len(codes)},
+        metadata={
+            "audit_category": "security",
+            "critical": True,
+            "request_id": getattr(request.state, "request_id", None),
+        },
+    )
     access_token, refresh_token_value, _, _ = rotate_refresh_token(
         db, user=context.user, session=context.session
     )
@@ -1045,6 +1108,7 @@ def mfa_enable(
 
 @router.post("/mfa/disable", response_model=MfaStatusOut)
 def mfa_disable(
+    request: Request,
     response: Response,
     payload: MfaDisableIn,
     context: AuthContext = Depends(get_current_auth_context),
@@ -1059,6 +1123,21 @@ def mfa_disable(
     context.user.mfa_enabled = False
     context.user.mfa_recovery_codes = None
     context.session.mfa_verified = False
+    record_audit_log(
+        db,
+        actor=context.user,
+        action="auth.mfa.disable",
+        entity_type="user",
+        entity_id=str(context.user.id),
+        description="Disabled MFA for account",
+        before={"mfa_enabled": True},
+        after={"mfa_enabled": False},
+        metadata={
+            "audit_category": "security",
+            "critical": True,
+            "request_id": getattr(request.state, "request_id", None),
+        },
+    )
     access_token, refresh_token_value, _, _ = rotate_refresh_token(
         db, user=context.user, session=context.session
     )
@@ -1069,6 +1148,7 @@ def mfa_disable(
 
 @router.post("/change-password", response_model=TokenOut)
 def change_password(
+    request: Request,
     response: Response,
     payload: ChangePasswordIn,
     context: AuthContext = Depends(get_current_auth_context),
@@ -1095,6 +1175,21 @@ def change_password(
     for session in sessions:
         if session.id != context.session.id:
             revoke_session(db, session=session, reason="password_changed")
+
+    record_audit_log(
+        db,
+        actor=context.user,
+        action="auth.password.change",
+        entity_type="user",
+        entity_id=str(context.user.id),
+        description="Changed password and revoked other active sessions",
+        after={"revoked_other_sessions": len([s for s in sessions if s.id != context.session.id])},
+        metadata={
+            "audit_category": "security",
+            "critical": True,
+            "request_id": getattr(request.state, "request_id", None),
+        },
+    )
 
     access_token, refresh_token_value, _, _ = rotate_refresh_token(
         db, user=context.user, session=context.session
@@ -1138,13 +1233,29 @@ def request_password_reset(
             requested_user_agent=(request.headers.get("user-agent") or "")[:512] or None,
         )
     )
+    record_audit_log(
+        db,
+        actor=user,
+        action="auth.password.reset.request",
+        entity_type="user",
+        entity_id=str(user.id),
+        description="Password reset requested",
+        metadata={
+            "audit_category": "security",
+            "critical": True,
+            "request_id": getattr(request.state, "request_id", None),
+            "active_tokens_invalidated": len(previous_tokens),
+        },
+    )
     db.commit()
     return PasswordResetRequestOut(ok=True, reset_token=reset_token)
 
 
 @router.post("/password-reset/confirm", response_model=dict)
 def confirm_password_reset(
-    payload: PasswordResetConfirmIn, db: Session = Depends(get_db)
+    request: Request,
+    payload: PasswordResetConfirmIn,
+    db: Session = Depends(get_db),
 ) -> dict[str, str]:
     new_password = _validate_password_strength(payload.new_password)
     token_hash_value = hash_token(payload.token)
@@ -1178,6 +1289,21 @@ def confirm_password_reset(
     )
     for session in sessions:
         revoke_session(db, session=session, reason="password_reset")
+
+    record_audit_log(
+        db,
+        actor=user,
+        action="auth.password.reset.confirm",
+        entity_type="user",
+        entity_id=str(user.id),
+        description="Password reset confirmed and active sessions revoked",
+        after={"revoked_sessions": len(sessions)},
+        metadata={
+            "audit_category": "security",
+            "critical": True,
+            "request_id": getattr(request.state, "request_id", None),
+        },
+    )
 
     db.commit()
     return {"ok": "true"}

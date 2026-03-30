@@ -29,6 +29,14 @@ from app.api.routers import (
     search,
 )
 from app.core.config import settings
+from app.core.logging_config import RequestContextLoggingMiddleware, configure_logging
+from app.core.observability import (
+    ObservabilityMiddleware,
+    configure_otel_tracing,
+    observability_monitor_daemon,
+    observe_redis_call,
+    setup_db_observability,
+)
 from app.core.web_security import (
     CsrfProtectionMiddleware,
     RateLimitMiddleware,
@@ -68,6 +76,7 @@ def _initialize_runtime_resources(app: FastAPI) -> None:
     app.state.startup_complete = False
     app.state.bootstrap_complete = False
     app.state.auto_archive_task = None
+    app.state.observability_task = None
     app.state.redis_client = None
 
     with engine.connect() as conn:
@@ -79,7 +88,7 @@ def _initialize_runtime_resources(app: FastAPI) -> None:
         socket_connect_timeout=1,
         socket_timeout=1,
     )
-    redis_client.ping()
+    observe_redis_call("ping", lambda: redis_client.ping())
     app.state.redis_client = redis_client
 
     bootstrap_if_needed()
@@ -88,6 +97,10 @@ def _initialize_runtime_resources(app: FastAPI) -> None:
     if settings.AUTO_ARCHIVE_ENABLED:
         loop = asyncio.get_running_loop()
         app.state.auto_archive_task = loop.create_task(auto_archive_daemon())
+
+    if settings.OBSERVABILITY_MONITOR_ENABLED:
+        loop = asyncio.get_running_loop()
+        app.state.observability_task = loop.create_task(observability_monitor_daemon(app, settings))
 
     app.state.startup_complete = True
 
@@ -98,6 +111,12 @@ async def _shutdown_runtime_resources(app: FastAPI) -> None:
         task.cancel()
         with suppress(asyncio.CancelledError):
             await task
+
+    obs_task = getattr(app.state, "observability_task", None)
+    if obs_task:
+        obs_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await obs_task
 
     _close_worker_redis_connection()
 
@@ -176,6 +195,9 @@ def _validate_runtime_config() -> None:
 
 
 def create_app() -> FastAPI:
+    configure_logging(settings)
+    setup_db_observability(engine)
+
     try:
         _validate_runtime_config()
         _validate_security_settings()
@@ -228,6 +250,10 @@ def create_app() -> FastAPI:
         ],
     )
 
+    tracing_result = configure_otel_tracing(app, settings, engine)
+    app.state.tracing_enabled = tracing_result.enabled
+    app.state.tracing_reason = tracing_result.reason
+
     install_error_handlers(app)
 
     trusted_hosts = [h.strip() for h in settings.TRUSTED_HOSTS.split(",") if h.strip()]
@@ -266,6 +292,9 @@ def create_app() -> FastAPI:
             allow_methods=["*"],
             allow_headers=["*"],
         )
+
+    app.add_middleware(RequestContextLoggingMiddleware)
+    app.add_middleware(ObservabilityMiddleware)
 
     app.include_router(health.router, tags=["health"])
 

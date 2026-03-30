@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -8,6 +9,7 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.core.observability import inc_counter, observe_histogram
 from app.db.session import SessionLocal
 from app.models.ai_runs import AiRun
 from app.models.asset import Asset, AssetKind, AssetOwnerType, AssetReviewState, AssetSource
@@ -79,10 +81,13 @@ MIN_OVERALL_SCORE = 0.4
 def image_hunt_job(
     product_id: str, query: str | None = None, max_results: int = 12, source: str = "auto"
 ) -> dict[str, Any]:
+    started = time.perf_counter()
     db: Session = SessionLocal()
     try:
+        inc_counter("background_job_runs_total", job="image_hunt", status="started")
         p = db.query(Product).filter(Product.id == product_id).first()
         if not p:
+            inc_counter("background_job_runs_total", job="image_hunt", status="error")
             return {"error": "product_not_found"}
 
         q = (query or "").strip() or _build_query(p)
@@ -254,6 +259,12 @@ def image_hunt_job(
         )
         db.commit()
 
+        duration = max(0.0, time.perf_counter() - started)
+        observe_histogram(
+            "background_job_latency_seconds", duration, job="image_hunt", status="ok"
+        )
+        inc_counter("background_job_runs_total", job="image_hunt", status="ok")
+
         return {
             "query": q,
             "sources": sources,
@@ -263,5 +274,12 @@ def image_hunt_job(
             "skipped_duplicates": skipped_duplicates,
             "quality_rejections": quality_rejections,
         }
+    except Exception:
+        duration = max(0.0, time.perf_counter() - started)
+        observe_histogram(
+            "background_job_latency_seconds", duration, job="image_hunt", status="error"
+        )
+        inc_counter("background_job_runs_total", job="image_hunt", status="error")
+        raise
     finally:
         db.close()

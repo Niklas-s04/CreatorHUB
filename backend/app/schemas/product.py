@@ -106,13 +106,25 @@ class ProductStatusChange(BaseModel):
 
 class InventoryCsvImportRequest(BaseModel):
     csv_text: str = Field(min_length=1, description="Raw CSV (including header row)")
-    delimiter: str = Field(default=";", min_length=1, max_length=1)
+    delimiter: str = Field(default="auto", min_length=1, max_length=8)
     quotechar: str = Field(default='"', min_length=1, max_length=1)
     column_map: dict[str, str] = Field(description="Mapping of product field -> CSV column header")
     defaults: dict[str, Any] | None = Field(
         default=None, description="Fallback values for missing columns"
     )
     dry_run: bool = Field(default=True, description="If true, validates without inserting records")
+    idempotency_mode: str = Field(
+        default="skip_existing",
+        description="Idempotency mode: 'none' or 'skip_existing'",
+    )
+    idempotency_fields: list[str] | None = Field(
+        default=None,
+        description="Fields used as idempotency key (default: title, brand, model, serial_number)",
+    )
+    continue_on_error: bool = Field(
+        default=True,
+        description="Continue processing after row errors to allow partial successful imports",
+    )
 
 
 class InventoryCsvImportResult(BaseModel):
@@ -120,6 +132,11 @@ class InventoryCsvImportResult(BaseModel):
     rows_total: int
     ready: int
     inserted: int
+    skipped: int = 0
     errors: list[dict[str, Any]]
+    row_warnings: list[dict[str, Any]] = Field(default_factory=list)
+    quality_issues: list[dict[str, Any]] = Field(default_factory=list)
     preview: list[dict[str, Any]]
     warnings: list[str] | None = None
+    summary: dict[str, Any] = Field(default_factory=dict)
+    idempotency: dict[str, Any] = Field(default_factory=dict)

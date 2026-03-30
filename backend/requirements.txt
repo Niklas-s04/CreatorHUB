@@ -17,3 +17,10 @@ Pillow==10.4.0
 python-dateutil==2.9.0.post0
 pyotp==2.9.0
 pytest==8.3.5
+opentelemetry-api==1.28.2
+opentelemetry-sdk==1.28.2
+opentelemetry-exporter-otlp==1.28.2
+opentelemetry-instrumentation-fastapi==0.49b2
+opentelemetry-instrumentation-sqlalchemy==0.49b2
+opentelemetry-instrumentation-redis==0.49b2
+opentelemetry-instrumentation-requests==0.49b2

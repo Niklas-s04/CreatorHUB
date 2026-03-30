@@ -642,6 +642,9 @@ def import_products_csv(
         column_map=payload.column_map,
         defaults=payload.defaults,
         dry_run=payload.dry_run,
+        idempotency_mode=payload.idempotency_mode,
+        idempotency_fields=payload.idempotency_fields,
+        continue_on_error=payload.continue_on_error,
     )
     try:
         result = import_products_from_csv(db, config=config)

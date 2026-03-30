@@ -207,7 +207,8 @@ def require_sensitive_action(action: str):
             confirmation_provided=confirmation_provided,
             step_up_required=step_up_required,
             step_up_satisfied=step_up_satisfied,
-            request_id=request.headers.get("x-request-id"),
+            request_id=getattr(request.state, "request_id", None)
+            or request.headers.get("x-request-id"),
         )
 
     return _dep
