@@ -14,7 +14,7 @@ from app.api.deps import (
 )
 from app.api.querying import apply_sorting, pagination_params, to_page
 from app.core.authorization import Permission
-from app.models.content import ContentItem, ContentTask, TaskPriority, TaskStatus
+from app.models.content import ContentItem, ContentTask, EditorialStatus, TaskPriority, TaskStatus
 from app.models.user import User, UserRole
 from app.schemas.common import Page, SortOrder
 from app.schemas.content import (
@@ -39,12 +39,15 @@ def list_items(
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
     product_id: uuid.UUID | None = None,
+    editorial_status: EditorialStatus | None = None,
     paging: tuple[int, int, str, SortOrder] = Depends(pagination_params),
 ) -> Page[ContentItemOut]:
     limit, offset, sort_by, sort_order = paging
     qry = db.query(ContentItem)
     if product_id:
         qry = qry.filter(ContentItem.product_id == product_id)
+    if editorial_status:
+        qry = qry.filter(ContentItem.editorial_status == editorial_status)
 
     total = qry.order_by(None).count()
     qry, selected_sort, selected_order = apply_sorting(
@@ -52,10 +55,20 @@ def list_items(
         model=ContentItem,
         sort_by=sort_by,
         sort_order=sort_order,
-        allowed_fields={"created_at", "updated_at", "status", "platform", "type"},
+        allowed_fields={
+            "created_at",
+            "updated_at",
+            "status",
+            "platform",
+            "type",
+            "editorial_status",
+            "publish_date",
+            "review_cycle",
+        },
         fallback="updated_at",
     )
-    items = qry.offset(offset).limit(limit).all()
+    raw_items = qry.offset(offset).limit(limit).all()
+    items = [content_service.enrich_content_item(db, item) for item in raw_items]
     return to_page(
         items=items,
         total=total,
@@ -72,7 +85,10 @@ def create_item(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_permission(Permission.content_manage)),
 ) -> ContentItemOut:
-    return content_service.create_item(db, payload=payload, actor=current_user)
+    try:
+        return content_service.create_item(db, payload=payload, actor=current_user)
+    except BusinessRuleViolation as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.patch("/items/{item_id}", response_model=ContentItemOut)
@@ -91,6 +107,8 @@ def update_item(
         )
     except NotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except BusinessRuleViolation as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.delete("/items/{item_id}")

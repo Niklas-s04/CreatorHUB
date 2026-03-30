@@ -27,7 +27,7 @@ import {
   type MfaEnableFormValues,
 } from '../../../../shared/forms/schemas'
 import { useUnsavedChangesWarning } from '../../../../shared/forms/useUnsavedChangesWarning'
-import { parseKnowledgeDocsDtoArray } from '../../../../shared/api/validators'
+import { parseKnowledgeDocsPage } from '../../../../shared/api/validators'
 import { getErrorKind, getErrorMessage, type ErrorKind } from '../../../../shared/lib/errors'
 import { EmptyState } from '../../../../shared/ui/states/EmptyState'
 import { ErrorState } from '../../../../shared/ui/states/ErrorState'
@@ -73,7 +73,7 @@ export default function SettingsPage() {
       setErrKind('technical')
       setLoading(true)
       const d = await apiFetch<unknown>('/knowledge')
-      setDocs(parseKnowledgeDocsDtoArray(d).map(toKnowledgeDocVm).filter(doc => Boolean(doc.id)))
+      setDocs(parseKnowledgeDocsPage(d).map(toKnowledgeDocVm).filter(doc => Boolean(doc.id)))
       const [sessionRows, loginRows, mfa] = await Promise.all([
         getMySessions(),
         getLoginHistory(20),
@@ -170,7 +170,23 @@ export default function SettingsPage() {
   async function save(doc: KnowledgeDocVm) {
     try {
       setErr(null)
-      await apiFetch(`/knowledge/${doc.id}`, { method: 'PATCH', body: JSON.stringify({ title: doc.title, content: doc.content, type: doc.type }) })
+      await apiFetch(`/knowledge/${doc.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          title: doc.title,
+          content: doc.content,
+          type: doc.type,
+          source_name: doc.sourceName || null,
+          source_url: doc.sourceUrl || null,
+          source_type: doc.sourceType,
+          source_review_status: doc.sourceReviewStatus,
+          source_review_note: doc.sourceReviewNote || null,
+          origin_summary: doc.originSummary || null,
+          trust_level: doc.trustLevel,
+          is_outdated: doc.isOutdated,
+          outdated_reason: doc.outdatedReason || null,
+        }),
+      })
       await load()
       toast.success('Dokument gespeichert')
     } catch (e: unknown) {
@@ -399,17 +415,68 @@ function DocEditor({ doc, onSave }: DocEditorProps) {
   } = useForm<KnowledgeDocFormValues>({
     resolver: zodResolver(knowledgeDocSchema),
     mode: 'onChange',
-    defaultValues: { title: doc.title, content: doc.content },
+    defaultValues: {
+      title: doc.title,
+      content: doc.content,
+      sourceName: doc.sourceName,
+      sourceUrl: doc.sourceUrl,
+      sourceType: (doc.sourceType as KnowledgeDocFormValues['sourceType']) || 'internal',
+      sourceReviewStatus: (doc.sourceReviewStatus as KnowledgeDocFormValues['sourceReviewStatus']) || 'pending',
+      sourceReviewNote: doc.sourceReviewNote,
+      originSummary: doc.originSummary,
+      trustLevel: (doc.trustLevel as KnowledgeDocFormValues['trustLevel']) || 'medium',
+      isOutdated: doc.isOutdated,
+      outdatedReason: doc.outdatedReason,
+    },
   })
 
   useUnsavedChangesWarning(isDirty)
 
   useEffect(() => {
-    reset({ title: doc.title, content: doc.content })
-  }, [doc.id, doc.title, doc.content, reset])
+    reset({
+      title: doc.title,
+      content: doc.content,
+      sourceName: doc.sourceName,
+      sourceUrl: doc.sourceUrl,
+      sourceType: (doc.sourceType as KnowledgeDocFormValues['sourceType']) || 'internal',
+      sourceReviewStatus: (doc.sourceReviewStatus as KnowledgeDocFormValues['sourceReviewStatus']) || 'pending',
+      sourceReviewNote: doc.sourceReviewNote,
+      originSummary: doc.originSummary,
+      trustLevel: (doc.trustLevel as KnowledgeDocFormValues['trustLevel']) || 'medium',
+      isOutdated: doc.isOutdated,
+      outdatedReason: doc.outdatedReason,
+    })
+  }, [
+    doc.id,
+    doc.title,
+    doc.content,
+    doc.sourceName,
+    doc.sourceUrl,
+    doc.sourceType,
+    doc.sourceReviewStatus,
+    doc.sourceReviewNote,
+    doc.originSummary,
+    doc.trustLevel,
+    doc.isOutdated,
+    doc.outdatedReason,
+    reset,
+  ])
 
   function submit(values: KnowledgeDocFormValues) {
-    onSave({ ...doc, title: values.title, content: values.content })
+    onSave({
+      ...doc,
+      title: values.title,
+      content: values.content,
+      sourceName: values.sourceName,
+      sourceUrl: values.sourceUrl,
+      sourceType: values.sourceType,
+      sourceReviewStatus: values.sourceReviewStatus,
+      sourceReviewNote: values.sourceReviewNote,
+      originSummary: values.originSummary,
+      trustLevel: values.trustLevel,
+      isOutdated: values.isOutdated,
+      outdatedReason: values.outdatedReason,
+    })
     reset(values)
   }
 
@@ -419,6 +486,10 @@ function DocEditor({ doc, onSave }: DocEditorProps) {
         <div>
           <div className="pill">{doc.type}</div>
           <div className="title-strong mt8">{doc.title}</div>
+          <div className="muted mt8">
+            Version {doc.currentVersion} • Quelle-Review: {doc.sourceReviewStatus} • Vertrauen: {doc.trustLevel}
+            {doc.isOutdated ? ' • Veraltet' : ''}
+          </div>
         </div>
         <button className="btn" onClick={handleSubmit(submit)} disabled={!isDirty || !isValid}>Speichern</button>
       </div>
@@ -444,6 +515,111 @@ function DocEditor({ doc, onSave }: DocEditorProps) {
           aria-describedby={errors.content?.message ? `knowledge-content-${doc.id}-error` : undefined}
         />
         {errors.content?.message && <div id={`knowledge-content-${doc.id}-error`} className="error mt8" role="alert">{errors.content.message}</div>}
+      </div>
+
+      <div className="section-gap">
+        <h4>Quellenverwaltung</h4>
+        <label htmlFor={`knowledge-source-name-${doc.id}`} className="field-label">Quelle</label>
+        <input id={`knowledge-source-name-${doc.id}`} className="full-width" {...register('sourceName')} />
+        <label htmlFor={`knowledge-source-url-${doc.id}`} className="field-label mt8">Quellen-URL</label>
+        <input id={`knowledge-source-url-${doc.id}`} className="full-width" {...register('sourceUrl')} />
+        <label htmlFor={`knowledge-source-type-${doc.id}`} className="field-label mt8">Herkunftstyp</label>
+        <select id={`knowledge-source-type-${doc.id}`} className="full-width" {...register('sourceType')}>
+          <option value="internal">intern</option>
+          <option value="external">extern</option>
+          <option value="customer">kundenseitig</option>
+          <option value="legal">rechtlich</option>
+          <option value="other">sonstiges</option>
+        </select>
+        <label htmlFor={`knowledge-source-review-${doc.id}`} className="field-label mt8">Review-Status Quelle</label>
+        <select id={`knowledge-source-review-${doc.id}`} className="full-width" {...register('sourceReviewStatus')}>
+          <option value="pending">offen</option>
+          <option value="approved">freigegeben</option>
+          <option value="rejected">abgelehnt</option>
+          <option value="needs_update">Update nötig</option>
+        </select>
+        <label htmlFor={`knowledge-trust-${doc.id}`} className="field-label mt8">Vertrauensgrad</label>
+        <select id={`knowledge-trust-${doc.id}`} className="full-width" {...register('trustLevel')}>
+          <option value="low">niedrig</option>
+          <option value="medium">mittel</option>
+          <option value="high">hoch</option>
+          <option value="verified">verifiziert</option>
+        </select>
+        <label htmlFor={`knowledge-origin-summary-${doc.id}`} className="field-label mt8">Herkunftszusammenfassung</label>
+        <textarea id={`knowledge-origin-summary-${doc.id}`} className="full-width" rows={3} {...register('originSummary')} />
+        <label htmlFor={`knowledge-source-note-${doc.id}`} className="field-label mt8">Review-Notiz zur Quelle</label>
+        <textarea id={`knowledge-source-note-${doc.id}`} className="full-width" rows={3} {...register('sourceReviewNote')} />
+      </div>
+
+      <div className="section-gap">
+        <h4>Veralterung</h4>
+        <label className="field-label" htmlFor={`knowledge-outdated-${doc.id}`}>Als veraltet markieren</label>
+        <input id={`knowledge-outdated-${doc.id}`} type="checkbox" {...register('isOutdated')} />
+        <label htmlFor={`knowledge-outdated-reason-${doc.id}`} className="field-label mt8">Grund</label>
+        <textarea
+          id={`knowledge-outdated-reason-${doc.id}`}
+          className="full-width"
+          rows={3}
+          {...register('outdatedReason')}
+          aria-invalid={Boolean(errors.outdatedReason?.message)}
+          aria-describedby={errors.outdatedReason?.message ? `knowledge-outdated-reason-${doc.id}-error` : undefined}
+        />
+        {errors.outdatedReason?.message && (
+          <div id={`knowledge-outdated-reason-${doc.id}-error`} className="error mt8" role="alert">{errors.outdatedReason.message}</div>
+        )}
+        {doc.outdatedAt && <div className="muted mt8">Seit: {new Date(doc.outdatedAt).toLocaleString()}</div>}
+      </div>
+
+      <div className="section-gap">
+        <h4>Versionshistorie</h4>
+        {!doc.versions.length && <div className="muted">Noch keine Versionshistorie vorhanden.</div>}
+        {!!doc.versions.length && (
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">Version</th>
+                <th scope="col">Zeit</th>
+                <th scope="col">Person</th>
+                <th scope="col">Änderung</th>
+              </tr>
+            </thead>
+            <tbody>
+              {doc.versions.map(version => (
+                <tr key={version.id}>
+                  <td>{version.versionNumber}</td>
+                  <td>{version.createdAt ? new Date(version.createdAt).toLocaleString() : '-'}</td>
+                  <td>{version.changedByName || '-'}</td>
+                  <td>{version.changeNote || '-'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      <div className="section-gap">
+        <h4>Genutzte Entwürfe</h4>
+        {!doc.draftLinks.length && <div className="muted">Noch mit keinem Entwurf verknüpft.</div>}
+        {!!doc.draftLinks.length && (
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">Entwurf</th>
+                <th scope="col">Zeit</th>
+                <th scope="col">Verknüpft von</th>
+              </tr>
+            </thead>
+            <tbody>
+              {doc.draftLinks.map(link => (
+                <tr key={link.id}>
+                  <td>{link.emailDraftId}</td>
+                  <td>{link.linkedAt ? new Date(link.linkedAt).toLocaleString() : '-'}</td>
+                  <td>{link.linkedByName || '-'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
       </div>
     </div>
   )

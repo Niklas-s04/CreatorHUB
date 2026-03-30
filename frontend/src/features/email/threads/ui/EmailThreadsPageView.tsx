@@ -20,14 +20,74 @@ type EmailThreadSummary = {
 type EmailDraft = {
   id: string
   thread_id: string
+  parent_draft_id: string | null
+  template_id: string | null
+  version_number: number
+  source: 'ai_generate' | 'ai_refine' | 'template' | 'manual'
   tone: EmailTone
   draft_subject: string | null
   draft_body: string
   questions_to_ask: string | null
   risk_flags: string | null
+  risk_level: 'low' | 'medium' | 'high' | 'critical'
+  risk_summary: string | null
+  approval_required: boolean
+  approval_status: 'not_required' | 'pending' | 'approved' | 'rejected'
   approved: boolean
+  approval_reason: string | null
+  handoff_status: 'draft' | 'blocked' | 'ready_for_send' | 'handed_off'
+  handoff_note: string | null
+  handed_off_by_name: string | null
+  handed_off_at: string | null
   created_at: string
   updated_at: string
+}
+
+type EmailKnowledgeEvidence = {
+  draft_id: string
+  knowledge_doc_id: string
+  knowledge_doc_title: string
+  knowledge_doc_type: string
+  linked_at: string
+  linked_by_name: string | null
+}
+
+type EmailTemplate = {
+  id: string
+  thread_id: string | null
+  name: string
+  intent: string
+  subject_template: string | null
+  body_template: string
+  active: boolean
+  created_by_name: string | null
+  created_at: string
+  updated_at: string
+}
+
+type EmailDraftVersion = {
+  id: string
+  draft_id: string
+  version_number: number
+  draft_subject: string | null
+  draft_body: string
+  tone: EmailTone
+  changed_by_name: string | null
+  change_reason: string | null
+  created_at: string
+}
+
+type EmailDraftSuggestion = {
+  id: string
+  draft_id: string
+  suggestion_type: string
+  source: string
+  summary: string | null
+  payload: Record<string, unknown> | null
+  decided: boolean
+  decided_by_name: string | null
+  decided_at: string | null
+  created_at: string
 }
 
 type EmailThreadMessage = {
@@ -72,7 +132,48 @@ type DealDraftFormState = {
 type EmailThreadDetail = EmailThreadSummary & {
   drafts: EmailDraft[]
   messages: EmailThreadMessage[]
+  templates: EmailTemplate[]
+  draft_versions: EmailDraftVersion[]
+  draft_suggestions: EmailDraftSuggestion[]
+  knowledge_evidence: EmailKnowledgeEvidence[]
   deal_draft: DealDraft | null
+}
+
+type CreatorAiProfile = {
+  id: string
+  owner_user_id: string | null
+  profile_name: string
+  is_global_default: boolean
+  is_active: boolean
+  clear_name: string
+  artist_name: string
+  channel_link: string
+  themes: string[]
+  platforms: string[]
+  short_description: string | null
+  tone: 'neutral' | 'friendly' | 'professional' | 'energetic' | 'direct'
+  target_audience: string | null
+  language_code: string
+  content_focus: string[]
+}
+
+type CreatorAiSettingsPreview = {
+  source: string
+  profile_id: string | null
+  profile_name: string | null
+  missing_required: string[]
+  applied_settings: {
+    clear_name: string
+    artist_name: string
+    channel_link: string
+    themes: string[]
+    platforms: string[]
+    short_description: string
+    tone: string
+    target_audience: string
+    language_code: string
+    content_focus: string[]
+  }
 }
 
 type AnswersState = Record<number, string>
@@ -139,7 +240,7 @@ function safeParseList(value: string | null): string[] {
 }
 
 export default function EmailPage() {
-  const { hasPermission } = useAuthz()
+  const { hasPermission, me } = useAuthz()
   const [subject, setSubject] = useState('')
   const [raw, setRaw] = useState('')
   const [tone, setTone] = useState<EmailTone>('neutral')
@@ -159,6 +260,35 @@ export default function EmailPage() {
 
   const [answers, setAnswers] = useState<AnswersState>({})
   const [note, setNote] = useState('')
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string>('')
+  const [approvalReason, setApprovalReason] = useState('')
+  const [handoffNote, setHandoffNote] = useState('')
+  const [templateName, setTemplateName] = useState('')
+  const [templateSubject, setTemplateSubject] = useState('')
+  const [templateBody, setTemplateBody] = useState('')
+  const [templateSaving, setTemplateSaving] = useState(false)
+  const [draftSubjectEdit, setDraftSubjectEdit] = useState('')
+  const [draftBodyEdit, setDraftBodyEdit] = useState('')
+  const [draftEditReason, setDraftEditReason] = useState('')
+  const [draftSaving, setDraftSaving] = useState(false)
+
+  const [creatorProfiles, setCreatorProfiles] = useState<CreatorAiProfile[]>([])
+  const [selectedCreatorProfileId, setSelectedCreatorProfileId] = useState('')
+  const [settingsPreview, setSettingsPreview] = useState<CreatorAiSettingsPreview | null>(null)
+  const [profilesLoading, setProfilesLoading] = useState(false)
+  const [settingsSaving, setSettingsSaving] = useState(false)
+
+  const [profileName, setProfileName] = useState('')
+  const [profileClearName, setProfileClearName] = useState('')
+  const [profileArtistName, setProfileArtistName] = useState('')
+  const [profileChannelLink, setProfileChannelLink] = useState('')
+  const [profileThemesCsv, setProfileThemesCsv] = useState('')
+  const [profilePlatformsCsv, setProfilePlatformsCsv] = useState('youtube')
+  const [profileShortDescription, setProfileShortDescription] = useState('')
+  const [profileTone, setProfileTone] = useState<'neutral' | 'friendly' | 'professional' | 'energetic' | 'direct'>('neutral')
+  const [profileTargetAudience, setProfileTargetAudience] = useState('')
+  const [profileLanguageCode, setProfileLanguageCode] = useState('de')
+  const [profileContentFocusCsv, setProfileContentFocusCsv] = useState('community')
 
   const [err, setErr] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -174,9 +304,26 @@ export default function EmailPage() {
   }, [threadsPageSize, threadsOffset])
 
   useEffect(() => {
+    if (!hasPermission('email.generate')) return
+    void loadCreatorProfiles()
+  }, [hasPermission])
+
+  useEffect(() => {
+    if (!hasPermission('email.generate')) return
+    void loadSettingsPreview(selectedCreatorProfileId || null)
+  }, [selectedCreatorProfileId, hasPermission])
+
+  useEffect(() => {
     setAnswers({})
     setNote('')
   }, [activeDraftId])
+
+  useEffect(() => {
+    const draft = threadDetail?.drafts.find(item => item.id === activeDraftId) || null
+    setDraftSubjectEdit(draft?.draft_subject || '')
+    setDraftBodyEdit(draft?.draft_body || '')
+    setDraftEditReason('')
+  }, [activeDraftId, threadDetail])
 
   useEffect(() => {
     setDealForm(buildDealFormState(threadDetail?.deal_draft || null))
@@ -200,6 +347,108 @@ export default function EmailPage() {
       setErr(getErrorMessage(e))
     } finally {
       setThreadsLoading(false)
+    }
+  }
+
+  function csvToList(value: string): string[] {
+    return value
+      .split(',')
+      .map(entry => entry.trim())
+      .filter(Boolean)
+  }
+
+  function applyProfileToForm(profile: CreatorAiProfile) {
+    setProfileName(profile.profile_name)
+    setProfileClearName(profile.clear_name)
+    setProfileArtistName(profile.artist_name)
+    setProfileChannelLink(profile.channel_link)
+    setProfileThemesCsv((profile.themes || []).join(', '))
+    setProfilePlatformsCsv((profile.platforms || []).join(', '))
+    setProfileShortDescription(profile.short_description || '')
+    setProfileTone(profile.tone)
+    setProfileTargetAudience(profile.target_audience || '')
+    setProfileLanguageCode(profile.language_code || 'de')
+    setProfileContentFocusCsv((profile.content_focus || []).join(', '))
+  }
+
+  async function loadCreatorProfiles() {
+    setProfilesLoading(true)
+    try {
+      const data = await apiFetch('/email/ai-settings/profiles?include_global_default=true') as CreatorAiProfile[]
+      setCreatorProfiles(data)
+      if (!selectedCreatorProfileId) {
+        const firstUserProfile = data.find(profile => !profile.is_global_default) || data[0]
+        if (firstUserProfile) {
+          setSelectedCreatorProfileId(firstUserProfile.id)
+          applyProfileToForm(firstUserProfile)
+        }
+      }
+    } catch (e: unknown) {
+      setErr(getErrorMessage(e))
+    } finally {
+      setProfilesLoading(false)
+    }
+  }
+
+  async function loadSettingsPreview(profileId: string | null) {
+    try {
+      const query = profileId ? `?profile_id=${encodeURIComponent(profileId)}` : ''
+      const preview = await apiFetch(`/email/ai-settings/preview${query}`) as CreatorAiSettingsPreview
+      setSettingsPreview(preview)
+    } catch (e: unknown) {
+      setErr(getErrorMessage(e))
+    }
+  }
+
+  async function saveCreatorProfile() {
+    if (!canGenerate) return
+    const payload = {
+      profile_name: profileName.trim() || 'Creator Profil',
+      is_active: true,
+      clear_name: profileClearName.trim(),
+      artist_name: profileArtistName.trim(),
+      channel_link: profileChannelLink.trim(),
+      themes: csvToList(profileThemesCsv),
+      platforms: csvToList(profilePlatformsCsv),
+      short_description: profileShortDescription.trim() || null,
+      tone: profileTone,
+      target_audience: profileTargetAudience.trim() || null,
+      language_code: profileLanguageCode.trim() || 'de',
+      content_focus: csvToList(profileContentFocusCsv),
+    }
+
+    setSettingsSaving(true)
+    setErr(null)
+    let previewProfileId = selectedCreatorProfileId || null
+    try {
+      if (selectedCreatorProfileId) {
+        const existing = creatorProfiles.find(profile => profile.id === selectedCreatorProfileId)
+        if (existing?.is_global_default && me?.role === 'admin') {
+          await apiFetch('/email/ai-settings/default', {
+            method: 'PUT',
+            body: JSON.stringify(payload),
+          })
+        } else {
+          await apiFetch(`/email/ai-settings/profiles/${selectedCreatorProfileId}`, {
+            method: 'PATCH',
+            body: JSON.stringify(payload),
+          })
+        }
+      } else {
+        const created = await apiFetch('/email/ai-settings/profiles', {
+          method: 'POST',
+          body: JSON.stringify(payload),
+        }) as CreatorAiProfile
+        setSelectedCreatorProfileId(created.id)
+        previewProfileId = created.id
+      }
+
+      await loadCreatorProfiles()
+      await loadSettingsPreview(previewProfileId)
+    } catch (e: unknown) {
+      setErr(getErrorMessage(e))
+    } finally {
+      setSettingsSaving(false)
     }
   }
 
@@ -256,6 +505,8 @@ export default function EmailPage() {
           subject: subject || null,
           raw_body: raw,
           tone,
+          template_id: selectedTemplateId || null,
+          creator_profile_id: selectedCreatorProfileId || null,
         }),
       }) as EmailDraft
 
@@ -288,6 +539,8 @@ export default function EmailPage() {
           thread_id: threadDetail.id,
           draft_id: draft.id,
           tone,
+          template_id: selectedTemplateId || null,
+          creator_profile_id: selectedCreatorProfileId || null,
           qa,
           note: note.trim() || null,
         }),
@@ -306,6 +559,88 @@ export default function EmailPage() {
     navigator.clipboard.writeText(text)
   }
 
+  async function setApproval(approved: boolean) {
+    if (!currentDraft) return
+    setErr(null)
+    try {
+      await apiFetch(`/email/drafts/${currentDraft.id}/approval`, {
+        method: 'PATCH',
+        body: JSON.stringify({ approved, reason: approvalReason.trim() || null }),
+      })
+      if (threadDetail) await loadThreadDetail(threadDetail.id, currentDraft.id)
+      setApprovalReason('')
+    } catch (e: unknown) {
+      setErr(getErrorMessage(e))
+    }
+  }
+
+  async function setHandoff(status: 'draft' | 'blocked' | 'ready_for_send' | 'handed_off') {
+    if (!currentDraft) return
+    setErr(null)
+    try {
+      await apiFetch(`/email/drafts/${currentDraft.id}/handoff`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status, note: handoffNote.trim() || null }),
+      })
+      if (threadDetail) await loadThreadDetail(threadDetail.id, currentDraft.id)
+      if (status === 'handed_off' || status === 'blocked') setHandoffNote('')
+    } catch (e: unknown) {
+      setErr(getErrorMessage(e))
+    }
+  }
+
+  async function saveTemplate() {
+    if (!threadDetail) return
+    const cleanedName = templateName.trim()
+    const cleanedBody = templateBody.trim()
+    if (!cleanedName || !cleanedBody) return
+    setTemplateSaving(true)
+    setErr(null)
+    try {
+      await apiFetch('/email/templates', {
+        method: 'POST',
+        body: JSON.stringify({
+          name: cleanedName,
+          intent: threadDetail.detected_intent || 'unknown',
+          subject_template: templateSubject.trim() || null,
+          body_template: cleanedBody,
+          thread_id: threadDetail.id,
+          active: true,
+        }),
+      })
+      await loadThreadDetail(threadDetail.id, currentDraft?.id)
+      setTemplateName('')
+      setTemplateSubject('')
+      setTemplateBody('')
+    } catch (e: unknown) {
+      setErr(getErrorMessage(e))
+    } finally {
+      setTemplateSaving(false)
+    }
+  }
+
+  async function saveDraftEdits() {
+    if (!currentDraft || !threadDetail) return
+    setDraftSaving(true)
+    setErr(null)
+    try {
+      await apiFetch(`/email/drafts/${currentDraft.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          draft_subject: draftSubjectEdit.trim() || null,
+          draft_body: draftBodyEdit.trim(),
+          change_reason: draftEditReason.trim() || null,
+        }),
+      })
+      await loadThreadDetail(threadDetail.id, currentDraft.id)
+      setDraftEditReason('')
+    } catch (e: unknown) {
+      setErr(getErrorMessage(e))
+    } finally {
+      setDraftSaving(false)
+    }
+  }
+
   const currentDraft = useMemo(() => {
     if (!threadDetail) return null
     return threadDetail.drafts.find(d => d.id === activeDraftId) || threadDetail.drafts[0] || null
@@ -321,6 +656,39 @@ export default function EmailPage() {
     return threadDetail.drafts.filter(d => d.id !== activeDraftId)
   }, [threadDetail, activeDraftId])
 
+  const versionsForCurrentDraft = useMemo(() => {
+    if (!threadDetail || !currentDraft) return []
+    return threadDetail.draft_versions.filter(version => version.draft_id === currentDraft.id)
+  }, [threadDetail, currentDraft])
+
+  const suggestionsForCurrentDraft = useMemo(() => {
+    if (!threadDetail || !currentDraft) return []
+    return threadDetail.draft_suggestions.filter(suggestion => suggestion.draft_id === currentDraft.id)
+  }, [threadDetail, currentDraft])
+
+  const knowledgeEvidenceForCurrentDraft = useMemo(() => {
+    if (!threadDetail || !currentDraft) return []
+    return threadDetail.knowledge_evidence.filter(entry => entry.draft_id === currentDraft.id)
+  }, [threadDetail, currentDraft])
+
+  const flags = useMemo(() => safeParseList(currentDraft?.risk_flags || null), [currentDraft])
+  const questions = useMemo(() => safeParseList(currentDraft?.questions_to_ask || null), [currentDraft])
+
+  const confidenceIndicator = useMemo(() => {
+    if (!currentDraft) return { score: 0, label: 'n/a', tone: 'warn' as const }
+    let score = 100
+    if (currentDraft.risk_level === 'medium') score -= 20
+    if (currentDraft.risk_level === 'high') score -= 40
+    if (currentDraft.risk_level === 'critical') score -= 60
+    score -= Math.min(flags.length * 5, 25)
+    if (currentDraft.approval_status !== 'approved') score -= 10
+    if (currentDraft.handoff_status === 'blocked') score -= 10
+    const bounded = Math.max(0, Math.min(100, score))
+    if (bounded >= 75) return { score: bounded, label: 'high', tone: 'info' as const }
+    if (bounded >= 50) return { score: bounded, label: 'medium', tone: 'warn' as const }
+    return { score: bounded, label: 'low', tone: 'danger' as const }
+  }, [currentDraft, flags.length])
+
   const visibleThreads = useMemo(() => {
     if (!debouncedThreadSearch) return threads
     return threads.filter(thread => {
@@ -335,8 +703,6 @@ export default function EmailPage() {
     })
   }, [threads, debouncedThreadSearch])
 
-  const flags = useMemo(() => safeParseList(currentDraft?.risk_flags || null), [currentDraft])
-  const questions = useMemo(() => safeParseList(currentDraft?.questions_to_ask || null), [currentDraft])
   const rateCardText = rateCardDoc?.content?.trim() || ''
   const hasRateCard = Boolean(rateCardText)
 
@@ -434,6 +800,7 @@ export default function EmailPage() {
         <div>
           <h2 className="page-title">E-Mail Threads</h2>
           <div className="page-subtitle">Drafting, QA, Deal-Intake und Verlauf in einer Oberfläche.</div>
+          <div className="muted small">AI erstellt nur Vorschläge. Versand erfolgt nie automatisch und erfordert menschliche Freigabe.</div>
         </div>
         <button className="btn" onClick={loadThreads} disabled={threadsLoading}>
           {threadsLoading ? 'Aktualisiere…' : 'Refresh'}
@@ -506,6 +873,36 @@ export default function EmailPage() {
               <select id="email-thread-tone" value={tone} onChange={e => setTone(e.target.value as EmailTone)}>
                 {toneOptions.map(opt => (
                   <option value={opt.value} key={opt.value}>{opt.label}</option>
+                ))}
+              </select>
+              <label className="sr-only" htmlFor="email-thread-template">Template</label>
+              <select
+                id="email-thread-template"
+                value={selectedTemplateId}
+                onChange={event => setSelectedTemplateId(event.target.value)}
+              >
+                <option value="">Kein Template</option>
+                {(threadDetail?.templates || []).map(template => (
+                  <option key={template.id} value={template.id}>{template.name}</option>
+                ))}
+              </select>
+              <label className="sr-only" htmlFor="email-creator-profile">Creator Profil</label>
+              <select
+                id="email-creator-profile"
+                value={selectedCreatorProfileId}
+                onChange={event => {
+                  const profileId = event.target.value
+                  setSelectedCreatorProfileId(profileId)
+                  const profile = creatorProfiles.find(item => item.id === profileId)
+                  if (profile) applyProfileToForm(profile)
+                }}
+                disabled={profilesLoading}
+              >
+                <option value="">Fallback (auto)</option>
+                {creatorProfiles.map(profile => (
+                  <option key={profile.id} value={profile.id}>
+                    {profile.is_global_default ? `[Global] ${profile.profile_name}` : profile.profile_name}
+                  </option>
                 ))}
               </select>
               <button className="btn primary" onClick={generate} disabled={!canGenerate || !raw.trim() || busy}>
@@ -610,6 +1007,45 @@ export default function EmailPage() {
                       )}
                     </div>
 
+                    {currentDraft && (
+                      <div className="stack mt8">
+                        <div className="muted small">Risk Level: <strong>{currentDraft.risk_level}</strong></div>
+                        <div className="muted small">Summary: {currentDraft.risk_summary || 'Keine Details'}</div>
+                        <div className="muted small">Approval: {currentDraft.approval_status}</div>
+                        <div className="muted small">Handoff: {currentDraft.handoff_status}</div>
+                        <div className="muted small">Confidence: <strong>{confidenceIndicator.score}% ({confidenceIndicator.label})</strong></div>
+                      </div>
+                    )}
+
+                    <hr />
+
+                    {currentDraft && (
+                      <div className="stack section-gap">
+                        <div className="muted small">Freigabe / Handoff</div>
+                        <input
+                          className="w100"
+                          value={approvalReason}
+                          onChange={event => setApprovalReason(event.target.value)}
+                          placeholder="Freigabe- oder Ablehnungsgrund"
+                        />
+                        <div className="control-row">
+                          <button className="btn" onClick={() => setApproval(true)} disabled={!canGenerate}>Approve</button>
+                          <button className="btn" onClick={() => setApproval(false)} disabled={!canGenerate}>Reject</button>
+                        </div>
+                        <input
+                          className="w100"
+                          value={handoffNote}
+                          onChange={event => setHandoffNote(event.target.value)}
+                          placeholder="Handoff-Notiz (für blocked/handed_off erforderlich)"
+                        />
+                        <div className="control-row">
+                          <button className="btn" onClick={() => setHandoff('ready_for_send')} disabled={!canGenerate}>Ready</button>
+                          <button className="btn" onClick={() => setHandoff('blocked')} disabled={!canGenerate}>Block</button>
+                          <button className="btn" onClick={() => setHandoff('handed_off')} disabled={!canGenerate}>Handed Off</button>
+                        </div>
+                      </div>
+                    )}
+
                     <hr />
 
                     <div className="muted small">Rückfragen</div>
@@ -645,6 +1081,204 @@ export default function EmailPage() {
                       </div>
                     )}
                   </div>
+                </div>
+
+                <div className="card">
+                  <div className="section-head">
+                    <div>
+                      <h3>AI Settings (Creator Profil)</h3>
+                      <div className="muted small">Nutzerbezogene Parameter fuer die Generierung inkl. Fallback-Logik und transparenter Vorschau.</div>
+                    </div>
+                    <button className="btn" onClick={saveCreatorProfile} disabled={!canGenerate || settingsSaving}>
+                      {settingsSaving ? 'Speichere…' : 'Profil speichern'}
+                    </button>
+                  </div>
+
+                  <div className="deal-fields-grid section-gap">
+                    <div className="stack">
+                      <span className="muted small">Profilname</span>
+                      <input value={profileName} onChange={event => setProfileName(event.target.value)} placeholder="z.B. Creator Hauptprofil" />
+                    </div>
+                    <div className="stack">
+                      <span className="muted small">Klarname (Pflicht)</span>
+                      <input value={profileClearName} onChange={event => setProfileClearName(event.target.value)} placeholder="Vorname Nachname" />
+                    </div>
+                    <div className="stack">
+                      <span className="muted small">Künstlername (Pflicht)</span>
+                      <input value={profileArtistName} onChange={event => setProfileArtistName(event.target.value)} placeholder="Creator Alias" />
+                    </div>
+                    <div className="stack">
+                      <span className="muted small">Kanallink (Pflicht)</span>
+                      <input value={profileChannelLink} onChange={event => setProfileChannelLink(event.target.value)} placeholder="https://..." />
+                    </div>
+                    <div className="stack">
+                      <span className="muted small">Themen (CSV, Pflicht)</span>
+                      <input value={profileThemesCsv} onChange={event => setProfileThemesCsv(event.target.value)} placeholder="beauty, lifestyle" />
+                    </div>
+                    <div className="stack">
+                      <span className="muted small">Plattformen (CSV, Pflicht)</span>
+                      <input value={profilePlatformsCsv} onChange={event => setProfilePlatformsCsv(event.target.value)} placeholder="youtube, instagram" />
+                    </div>
+                    <div className="stack">
+                      <span className="muted small">Tonalitaet</span>
+                      <select value={profileTone} onChange={event => setProfileTone(event.target.value as typeof profileTone)}>
+                        <option value="neutral">neutral</option>
+                        <option value="friendly">friendly</option>
+                        <option value="professional">professional</option>
+                        <option value="energetic">energetic</option>
+                        <option value="direct">direct</option>
+                      </select>
+                    </div>
+                    <div className="stack">
+                      <span className="muted small">Zielgruppe</span>
+                      <input value={profileTargetAudience} onChange={event => setProfileTargetAudience(event.target.value)} placeholder="z.B. Gen Z" />
+                    </div>
+                    <div className="stack">
+                      <span className="muted small">Sprache</span>
+                      <input value={profileLanguageCode} onChange={event => setProfileLanguageCode(event.target.value)} placeholder="de oder en-US" />
+                    </div>
+                    <div className="stack">
+                      <span className="muted small">Content-Schwerpunkte (CSV)</span>
+                      <input value={profileContentFocusCsv} onChange={event => setProfileContentFocusCsv(event.target.value)} placeholder="community, storytelling" />
+                    </div>
+                  </div>
+
+                  <div className="stack section-gap">
+                    <span className="muted small">Kurzbeschreibung (optional)</span>
+                    <textarea rows={3} value={profileShortDescription} onChange={event => setProfileShortDescription(event.target.value)} />
+                  </div>
+
+                  {settingsPreview && (
+                    <div className="stack section-gap">
+                      <div className="muted small">Aktive Settings-Quelle: <strong>{settingsPreview.source}</strong></div>
+                      <div className="muted small">Profil: {settingsPreview.profile_name || '(Fallback)'}</div>
+                      {!!settingsPreview.missing_required.length && (
+                        <div className="error small">Fehlende Pflichtfelder (Fallback aktiv): {settingsPreview.missing_required.join(', ')}</div>
+                      )}
+                      <div className="prebox prebox-scroll">{JSON.stringify(settingsPreview.applied_settings, null, 2)}</div>
+                    </div>
+                  )}
+                </div>
+
+                <div className="card">
+                  <div className="section-head">
+                    <div>
+                      <h3>Template Management</h3>
+                      <div className="muted small">Thread-spezifische Vorlagen fuer konsistente Antworten.</div>
+                    </div>
+                  </div>
+                  <div className="deal-fields-grid section-gap">
+                    <div className="stack">
+                      <span className="muted small">Template Name</span>
+                      <input value={templateName} onChange={event => setTemplateName(event.target.value)} placeholder="z.B. Sponsoring Erstantwort" />
+                    </div>
+                    <div className="stack">
+                      <span className="muted small">Template Subject (optional)</span>
+                      <input value={templateSubject} onChange={event => setTemplateSubject(event.target.value)} placeholder="Betreff-Vorlage" />
+                    </div>
+                  </div>
+                  <div className="stack section-gap">
+                    <span className="muted small">Template Body</span>
+                    <textarea rows={4} value={templateBody} onChange={event => setTemplateBody(event.target.value)} placeholder="Vorlageninhalt" />
+                    <button className="btn" onClick={saveTemplate} disabled={!canGenerate || templateSaving || !templateName.trim() || !templateBody.trim()}>
+                      {templateSaving ? 'Speichere…' : 'Template speichern'}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="card">
+                  <div className="section-head">
+                    <div>
+                      <h3>Redaktion</h3>
+                      <div className="muted small">Manuelle Änderungen speichern eine neue Versionshistorie und setzen Freigabe zurück.</div>
+                    </div>
+                  </div>
+                  {currentDraft && (
+                    <div className="stack section-gap">
+                      <div className="stack">
+                        <span className="muted small">Draft Subject</span>
+                        <input value={draftSubjectEdit} onChange={event => setDraftSubjectEdit(event.target.value)} />
+                      </div>
+                      <div className="stack">
+                        <span className="muted small">Draft Body</span>
+                        <textarea rows={6} value={draftBodyEdit} onChange={event => setDraftBodyEdit(event.target.value)} />
+                      </div>
+                      <div className="stack">
+                        <span className="muted small">Änderungsgrund (optional)</span>
+                        <input value={draftEditReason} onChange={event => setDraftEditReason(event.target.value)} />
+                      </div>
+                      <button className="btn" onClick={saveDraftEdits} disabled={!canGenerate || draftSaving || !draftBodyEdit.trim()}>
+                        {draftSaving ? 'Speichere…' : 'Redaktion speichern'}
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                <div className="card">
+                  <div className="section-head">
+                    <div>
+                      <h3>Versionen & Audit</h3>
+                      <div className="muted small">Nachvollziehbarkeit von AI/System-Vorschlaegen und Entscheidungen.</div>
+                    </div>
+                  </div>
+                  {currentDraft && (
+                    <div className="stack section-gap">
+                      <div>
+                        <div className="muted small">Draft-Versionen</div>
+                        {versionsForCurrentDraft.length === 0 ? (
+                          <div className="muted small">Keine Versionseintraege.</div>
+                        ) : (
+                          <div className="stack">
+                            {versionsForCurrentDraft.map(version => (
+                              <div key={version.id} className="message-pill system">
+                                <div className="row between">
+                                  <span className="muted small">v{version.version_number} · {formatDate(version.created_at)}</span>
+                                  <span className="muted small">{version.changed_by_name || 'system'}</span>
+                                </div>
+                                <div className="muted small">{version.change_reason || 'keine Notiz'}</div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                      <div>
+                        <div className="muted small">Wissensgrundlage</div>
+                        {knowledgeEvidenceForCurrentDraft.length === 0 ? (
+                          <div className="muted small">Keine verknüpften Knowledge-Dokumente.</div>
+                        ) : (
+                          <div className="stack">
+                            {knowledgeEvidenceForCurrentDraft.map(entry => (
+                              <div key={`${entry.draft_id}:${entry.knowledge_doc_id}`} className="message-pill system">
+                                <div className="row between">
+                                  <span className="muted small">{entry.knowledge_doc_type} · {formatDate(entry.linked_at)}</span>
+                                  <span className="muted small">{entry.linked_by_name || 'system'}</span>
+                                </div>
+                                <div className="muted small">{entry.knowledge_doc_title}</div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                      <div>
+                        <div className="muted small">Suggestion-Audit</div>
+                        {suggestionsForCurrentDraft.length === 0 ? (
+                          <div className="muted small">Keine Suggestion-Eintraege.</div>
+                        ) : (
+                          <div className="stack">
+                            {suggestionsForCurrentDraft.map(suggestion => (
+                              <div key={suggestion.id} className="message-pill assistant">
+                                <div className="row between">
+                                  <span className="muted small">{suggestion.suggestion_type} · {formatDate(suggestion.created_at)}</span>
+                                  <span className="muted small">{suggestion.source}</span>
+                                </div>
+                                <div className="muted small">{suggestion.summary || 'keine Zusammenfassung'}</div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 <div className="card">

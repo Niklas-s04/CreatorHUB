@@ -53,6 +53,7 @@ def ensure_default_tasks_for_item(db: Session, content_item: ContentItem) -> int
             ContentTask(
                 content_item_id=content_item.id,
                 type=task_type,
+                title=note,
                 status=TaskStatus.todo,
                 notes=note,
             )

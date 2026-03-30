@@ -5,14 +5,18 @@ from datetime import date
 
 from sqlalchemy.orm import Session
 
+from app.models.asset import Asset, AssetOwnerType, AssetReviewState
 from app.models.base import utcnow
 from app.models.content import (
     ContentItem,
+    ContentItemRevision,
     ContentStatus,
     ContentTask,
     ContentTaskView,
+    EditorialStatus,
     TaskStatus,
 )
+from app.models.product import Product, ProductStatus
 from app.models.user import User, UserRole
 from app.models.workflow import WorkflowStatus
 from app.schemas.content import (
@@ -49,17 +53,209 @@ CONTENT_RE_REVIEW_FIELDS: set[str] = {
     "publish_date",
     "external_url",
 }
+CONTENT_REVISION_FIELDS: set[str] = CONTENT_RE_REVIEW_FIELDS | {
+    "status",
+    "workflow_status",
+    "review_reason",
+    "editorial_status",
+    "editorial_owner_id",
+    "editorial_owner_name",
+    "last_change_summary",
+}
+
+CONTENT_STATUS_TO_EDITORIAL: dict[ContentStatus, EditorialStatus] = {
+    ContentStatus.idea: EditorialStatus.backlog,
+    ContentStatus.draft: EditorialStatus.drafting,
+    ContentStatus.recorded: EditorialStatus.drafting,
+    ContentStatus.edited: EditorialStatus.in_review,
+    ContentStatus.scheduled: EditorialStatus.ready_to_publish,
+    ContentStatus.published: EditorialStatus.published,
+}
+
+
+def _serialize_value(value):
+    if hasattr(value, "value"):
+        return value.value
+    if isinstance(value, uuid.UUID):
+        return str(value)
+    if isinstance(value, date):
+        return value.isoformat()
+    return value
+
+
+def _normalize_optional_text(value: str | None) -> str | None:
+    if value is None:
+        return None
+    trimmed = value.strip()
+    return trimmed or None
+
+
+def _resolve_editorial_status(
+    *,
+    item_status: ContentStatus,
+    workflow_status: WorkflowStatus,
+    fallback: EditorialStatus,
+) -> EditorialStatus:
+    if item_status == ContentStatus.published:
+        return EditorialStatus.published
+    if workflow_status == WorkflowStatus.rejected:
+        return EditorialStatus.changes_requested
+    if workflow_status == WorkflowStatus.in_review:
+        return EditorialStatus.in_review
+    if workflow_status == WorkflowStatus.approved and item_status == ContentStatus.scheduled:
+        return EditorialStatus.ready_to_publish
+    if workflow_status == WorkflowStatus.approved:
+        return EditorialStatus.approved
+    return CONTENT_STATUS_TO_EDITORIAL.get(item_status, fallback)
+
+
+def _ensure_product_link_valid(db: Session, *, product_id: uuid.UUID | None) -> None:
+    if product_id is None:
+        return
+    product = db.query(Product).filter(Product.id == product_id).first()
+    if not product:
+        raise BusinessRuleViolation("Linked product not found")
+    if product.status == ProductStatus.archived:
+        raise BusinessRuleViolation("Archived products cannot be linked to new content")
+
+
+def _ensure_primary_asset_link_valid(
+    db: Session,
+    *,
+    content_item_id: uuid.UUID,
+    primary_asset_id: uuid.UUID | None,
+) -> None:
+    if primary_asset_id is None:
+        return
+    asset = db.query(Asset).filter(Asset.id == primary_asset_id).first()
+    if not asset:
+        raise BusinessRuleViolation("Primary asset not found")
+    if asset.owner_type != AssetOwnerType.content or asset.owner_id != content_item_id:
+        raise BusinessRuleViolation("Primary asset must belong to the content item")
+    if asset.review_state != AssetReviewState.approved:
+        raise BusinessRuleViolation("Primary asset must be approved")
+
+
+def _asset_counts(db: Session, *, content_item_id: uuid.UUID) -> tuple[int, int, int]:
+    rows = db.query(Asset.review_state).filter(
+        Asset.owner_type == AssetOwnerType.content,
+        Asset.owner_id == content_item_id,
+    )
+    total = 0
+    approved = 0
+    pending = 0
+    for (state,) in rows.all():
+        total += 1
+        if state == AssetReviewState.approved:
+            approved += 1
+        elif state in {
+            AssetReviewState.pending,
+            AssetReviewState.pending_review,
+            AssetReviewState.needs_review,
+            AssetReviewState.quarantine,
+        }:
+            pending += 1
+    return total, approved, pending
+
+
+def _enrich_content_item(item: ContentItem, db: Session) -> ContentItem:
+    total, approved, pending = _asset_counts(db, content_item_id=item.id)
+    item.asset_count = total
+    item.approved_asset_count = approved
+    item.pending_asset_count = pending
+    return item
+
+
+def enrich_content_item(db: Session, item: ContentItem) -> ContentItem:
+    return _enrich_content_item(item, db)
+
+
+def _append_item_revision(
+    db: Session,
+    *,
+    item: ContentItem,
+    before: dict[str, str | int | bool | None],
+    after: dict[str, str | int | bool | None],
+    actor: User | None,
+    change_summary: str | None,
+) -> None:
+    changed_fields = sorted(set(before.keys()) | set(after.keys()))
+    if not changed_fields:
+        return
+    last_revision_number = (
+        db.query(ContentItemRevision.revision_number)
+        .filter(ContentItemRevision.content_item_id == item.id)
+        .order_by(ContentItemRevision.revision_number.desc())
+        .first()
+    )
+    next_revision_number = (last_revision_number[0] if last_revision_number else 0) + 1
+    db.add(
+        ContentItemRevision(
+            content_item_id=item.id,
+            revision_number=next_revision_number,
+            changed_fields=changed_fields,
+            before_json=before,
+            after_json=after,
+            workflow_status=item.workflow_status,
+            editorial_status=item.editorial_status,
+            content_status=item.status,
+            review_reason=item.review_reason,
+            change_summary=change_summary,
+            changed_by_id=actor.id if actor else None,
+            changed_by_name=actor.username if actor else None,
+        )
+    )
+
+
+def _ensure_publish_ready(item: ContentItem, db: Session) -> None:
+    if item.workflow_status != WorkflowStatus.approved:
+        raise BusinessRuleViolation("Content must be approved before publishing")
+
+    open_tasks = (
+        db.query(ContentTask.id)
+        .filter(
+            ContentTask.content_item_id == item.id,
+            ContentTask.status != TaskStatus.done,
+        )
+        .count()
+    )
+    if open_tasks > 0:
+        raise BusinessRuleViolation("All content tasks must be done before publishing")
+
+    approved_assets = (
+        db.query(Asset.id)
+        .filter(
+            Asset.owner_type == AssetOwnerType.content,
+            Asset.owner_id == item.id,
+            Asset.review_state == AssetReviewState.approved,
+        )
+        .count()
+    )
+    if approved_assets == 0:
+        raise BusinessRuleViolation("At least one approved content asset is required for publishing")
 
 
 def list_items(db: Session, *, product_id: uuid.UUID | None = None) -> list[ContentItem]:
     q = db.query(ContentItem)
     if product_id:
         q = q.filter(ContentItem.product_id == product_id)
-    return q.order_by(ContentItem.updated_at.desc()).all()
+    items = q.order_by(ContentItem.updated_at.desc()).all()
+    return [_enrich_content_item(item, db) for item in items]
 
 
 def create_item(db: Session, *, payload: ContentItemCreate, actor: User | None) -> ContentItem:
-    item = ContentItem(**payload.model_dump())
+    _ensure_product_link_valid(db, product_id=payload.product_id)
+    item_data = payload.model_dump()
+    item_data["title"] = _normalize_optional_text(item_data.get("title"))
+    item_data["hook"] = _normalize_optional_text(item_data.get("hook"))
+    item_data["script_md"] = _normalize_optional_text(item_data.get("script_md"))
+    item_data["description_md"] = _normalize_optional_text(item_data.get("description_md"))
+    item_data["tags_csv"] = _normalize_optional_text(item_data.get("tags_csv"))
+    item_data["external_url"] = _normalize_optional_text(item_data.get("external_url"))
+    item_data["review_reason"] = _normalize_optional_text(item_data.get("review_reason"))
+    item_data["editorial_owner_name"] = _normalize_optional_text(item_data.get("editorial_owner_name"))
+    item_data["last_change_summary"] = _normalize_optional_text(item_data.get("last_change_summary"))
+    item = ContentItem(**item_data)
     validate_content_status_change(
         current_status=item.status,
         target_status=item.status,
@@ -75,7 +271,26 @@ def create_item(db: Session, *, payload: ContentItemCreate, actor: User | None) 
     with transaction_boundary(db):
         db.add(item)
         db.flush()
+        _ensure_primary_asset_link_valid(db, content_item_id=item.id, primary_asset_id=item.primary_asset_id)
+        item.editorial_status = _resolve_editorial_status(
+            item_status=item.status,
+            workflow_status=item.workflow_status,
+            fallback=item.editorial_status,
+        )
         created_tasks = ensure_default_tasks_for_item(db, item)
+        _append_item_revision(
+            db,
+            item=item,
+            before={},
+            after={
+                "status": item.status.value,
+                "workflow_status": item.workflow_status.value,
+                "editorial_status": item.editorial_status.value,
+                "type": item.type.value,
+            },
+            actor=actor,
+            change_summary=item.last_change_summary or "Initial content item",
+        )
         record_audit_log(
             db,
             actor=actor,
@@ -86,13 +301,16 @@ def create_item(db: Session, *, payload: ContentItemCreate, actor: User | None) 
             after={
                 "status": item.status.value,
                 "workflow_status": item.workflow_status.value,
+                "editorial_status": item.editorial_status.value,
                 "platform": item.platform.value,
                 "type": item.type.value,
+                "product_id": str(item.product_id) if item.product_id else None,
+                "primary_asset_id": str(item.primary_asset_id) if item.primary_asset_id else None,
                 "default_tasks_created": created_tasks,
             },
         )
     db.refresh(item)
-    return item
+    return _enrich_content_item(item, db)
 
 
 def update_item(
@@ -107,6 +325,23 @@ def update_item(
         raise NotFoundError("Content item not found")
 
     updates = payload.model_dump(exclude_unset=True)
+    for key in {
+        "title",
+        "hook",
+        "script_md",
+        "description_md",
+        "tags_csv",
+        "external_url",
+        "review_reason",
+        "editorial_owner_name",
+        "last_change_summary",
+    }:
+        if key in updates:
+            updates[key] = _normalize_optional_text(updates.get(key))
+
+    if "product_id" in updates:
+        _ensure_product_link_valid(db, product_id=updates.get("product_id"))
+
     requested_workflow_status = updates.pop("workflow_status", None)
     explicit_review_reason = updates.pop("review_reason", None)
     target_status = updates.get("status", item.status)
@@ -125,8 +360,8 @@ def update_item(
     previous_status = item.status
     previous_workflow_status = item.workflow_status
     previous_review_reason = item.review_reason
-    before: dict[str, str | None] = {}
-    after: dict[str, str | None] = {}
+    before: dict[str, str | int | bool | None] = {}
+    after: dict[str, str | int | bool | None] = {}
     changed_fields: set[str] = set()
 
     for key, value in updates.items():
@@ -134,14 +369,15 @@ def update_item(
             changed_fields.add(key)
 
     target_workflow_status = requested_workflow_status or item.workflow_status
-    review_reason = explicit_review_reason
+    review_reason = explicit_review_reason if explicit_review_reason is not None else item.review_reason
     if requested_workflow_status is None and requires_re_review(
         current_status=item.workflow_status,
         changed_fields=changed_fields,
         relevant_fields=CONTENT_RE_REVIEW_FIELDS,
     ):
         target_workflow_status = WorkflowStatus.in_review
-        review_reason = review_reason or auto_re_review_reason(changed_fields)
+        if explicit_review_reason is None:
+            review_reason = auto_re_review_reason(changed_fields)
 
     validate_workflow_status_change(
         current_status=item.workflow_status,
@@ -161,9 +397,15 @@ def update_item(
             current = getattr(item, key)
             if current == value:
                 continue
-            before[key] = getattr(current, "value", current)
+            before[key] = _serialize_value(current)
             setattr(item, key, value)
-            after[key] = getattr(value, "value", value)
+            after[key] = _serialize_value(value)
+
+        _ensure_primary_asset_link_valid(
+            db,
+            content_item_id=item.id,
+            primary_asset_id=item.primary_asset_id,
+        )
 
         if previous_workflow_status != target_workflow_status:
             apply_workflow_change(
@@ -180,6 +422,52 @@ def update_item(
             before["review_reason"] = item.review_reason
             item.review_reason = explicit_review_reason.strip() or None
             after["review_reason"] = item.review_reason
+
+        if previous_workflow_status != item.workflow_status and item.workflow_status == WorkflowStatus.approved:
+            before["review_cycle"] = item.review_cycle
+            item.review_cycle += 1
+            after["review_cycle"] = item.review_cycle
+
+        if target_status == ContentStatus.published and previous_status != ContentStatus.published:
+            _ensure_publish_ready(item, db)
+            before["published_at"] = (
+                item.published_at.isoformat() if item.published_at else None
+            )
+            before["published_by_id"] = str(item.published_by_id) if item.published_by_id else None
+            before["published_by_name"] = item.published_by_name
+            item.published_at = utcnow()
+            item.published_by_id = actor.id if actor else None
+            item.published_by_name = actor.username if actor else None
+            after["published_at"] = item.published_at.isoformat()
+            after["published_by_id"] = str(item.published_by_id) if item.published_by_id else None
+            after["published_by_name"] = item.published_by_name
+
+        if target_status != ContentStatus.published and item.published_at is not None:
+            before["published_at"] = item.published_at.isoformat()
+            item.published_at = None
+            item.published_by_id = None
+            item.published_by_name = None
+            after["published_at"] = None
+
+        resolved_editorial_status = _resolve_editorial_status(
+            item_status=item.status,
+            workflow_status=item.workflow_status,
+            fallback=item.editorial_status,
+        )
+        if item.editorial_status != resolved_editorial_status:
+            before["editorial_status"] = item.editorial_status.value
+            item.editorial_status = resolved_editorial_status
+            after["editorial_status"] = item.editorial_status.value
+
+        if before and any(field in before for field in CONTENT_REVISION_FIELDS):
+            _append_item_revision(
+                db,
+                item=item,
+                before={k: _serialize_value(v) for k, v in before.items()},
+                after={k: _serialize_value(v) for k, v in after.items()},
+                actor=actor,
+                change_summary=item.last_change_summary,
+            )
 
         if before:
             record_audit_log(
@@ -238,7 +526,7 @@ def update_item(
             )
 
     db.refresh(item)
-    return item
+    return _enrich_content_item(item, db)
 
 
 def delete_item(db: Session, *, item_id: uuid.UUID, actor: User | None) -> None:
@@ -345,11 +633,22 @@ def delete_task_view(db: Session, *, view_id: uuid.UUID, user: User) -> None:
 
 
 def create_task(db: Session, *, payload: ContentTaskCreate, actor: User | None) -> ContentTask:
-    task = ContentTask(**payload.model_dump())
+    task_data = payload.model_dump()
+    task_data["title"] = _normalize_optional_text(task_data.get("title"))
+    task = ContentTask(**task_data)
+    if task.title is None:
+        task.title = task.type.value.replace("_", " ").title()
     _validate_task_assignment(task.assignee_user_id, task.assignee_role)
+    _validate_task_dependency(
+        db,
+        task_id=task.id,
+        content_item_id=task.content_item_id,
+        blocked_by_task_id=task.blocked_by_task_id,
+    )
     with transaction_boundary(db):
         db.add(task)
         db.flush()
+        _sync_task_completion(task)
         _apply_task_notification_and_escalation(task, actor=actor, db=db)
         record_audit_log(
             db,
@@ -357,13 +656,17 @@ def create_task(db: Session, *, payload: ContentTaskCreate, actor: User | None) 
             action="content.task.create",
             entity_type="content_task",
             entity_id=str(task.id),
-            description=f"Created content task '{task.type.value}'",
+            description=f"Created content task '{task.title or task.type.value}'",
             after={
+                "title": task.title,
                 "status": task.status.value,
                 "priority": task.priority.value,
                 "type": task.type.value,
                 "assignee_user_id": str(task.assignee_user_id) if task.assignee_user_id else None,
                 "assignee_role": task.assignee_role.value if task.assignee_role else None,
+                "blocked_by_task_id": (
+                    str(task.blocked_by_task_id) if task.blocked_by_task_id else None
+                ),
                 "content_item_id": str(task.content_item_id),
             },
         )
@@ -383,21 +686,32 @@ def update_task(
         raise NotFoundError("Content task not found")
 
     updates = payload.model_dump(exclude_unset=True)
-    before: dict[str, str | None] = {}
-    after: dict[str, str | None] = {}
+    if "title" in updates:
+        updates["title"] = _normalize_optional_text(updates.get("title"))
+    before: dict[str, str | int | bool | None] = {}
+    after: dict[str, str | int | bool | None] = {}
 
     target_assignee_user_id = updates.get("assignee_user_id", task.assignee_user_id)
     target_assignee_role = updates.get("assignee_role", task.assignee_role)
     _validate_task_assignment(target_assignee_user_id, target_assignee_role)
+    target_blocked_by = updates.get("blocked_by_task_id", task.blocked_by_task_id)
+    _validate_task_dependency(
+        db,
+        task_id=task.id,
+        content_item_id=task.content_item_id,
+        blocked_by_task_id=target_blocked_by,
+    )
 
     with transaction_boundary(db):
         for key, value in updates.items():
             current = getattr(task, key)
             if current == value:
                 continue
-            before[key] = getattr(current, "value", current)
+            before[key] = _serialize_value(current)
             setattr(task, key, value)
-            after[key] = getattr(value, "value", value)
+            after[key] = _serialize_value(value)
+
+        _sync_task_completion(task)
 
         _apply_task_notification_and_escalation(task, actor=actor, db=db)
 
@@ -446,6 +760,31 @@ def _validate_task_assignment(
 ) -> None:
     if assignee_user_id is not None and assignee_role is not None:
         raise BusinessRuleViolation("assign either assignee_user_id or assignee_role, not both")
+
+
+def _validate_task_dependency(
+    db: Session,
+    *,
+    task_id: uuid.UUID,
+    content_item_id: uuid.UUID,
+    blocked_by_task_id: uuid.UUID | None,
+) -> None:
+    if blocked_by_task_id is None:
+        return
+    if blocked_by_task_id == task_id:
+        raise BusinessRuleViolation("task cannot be blocked by itself")
+    blocked_by = db.query(ContentTask).filter(ContentTask.id == blocked_by_task_id).first()
+    if not blocked_by:
+        raise BusinessRuleViolation("blocked_by_task_id not found")
+    if blocked_by.content_item_id != content_item_id:
+        raise BusinessRuleViolation("task dependency must belong to the same content item")
+
+
+def _sync_task_completion(task: ContentTask) -> None:
+    if task.status == TaskStatus.done and task.completed_at is None:
+        task.completed_at = utcnow()
+    if task.status != TaskStatus.done and task.completed_at is not None:
+        task.completed_at = None
 
 
 def _apply_task_filters(query, *, filters: ContentTaskFilterParams):

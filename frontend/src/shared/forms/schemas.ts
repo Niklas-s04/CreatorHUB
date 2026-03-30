@@ -97,6 +97,23 @@ export type MfaDisableFormValues = z.infer<typeof mfaDisableSchema>
 export const knowledgeDocSchema = z.object({
   title: z.string().trim().min(1, 'Titel ist erforderlich'),
   content: z.string().trim().min(1, 'Inhalt ist erforderlich'),
+  sourceName: z.string().trim(),
+  sourceUrl: z.string().trim(),
+  sourceType: z.enum(['internal', 'external', 'customer', 'legal', 'other']),
+  sourceReviewStatus: z.enum(['pending', 'approved', 'rejected', 'needs_update']),
+  sourceReviewNote: z.string().trim(),
+  originSummary: z.string().trim(),
+  trustLevel: z.enum(['low', 'medium', 'high', 'verified']),
+  isOutdated: z.boolean(),
+  outdatedReason: z.string().trim(),
+}).superRefine((data, ctx) => {
+  if (data.isOutdated && !data.outdatedReason) {
+    ctx.addIssue({
+      path: ['outdatedReason'],
+      code: z.ZodIssueCode.custom,
+      message: 'Grund ist erforderlich, wenn Inhalt als veraltet markiert wird',
+    })
+  }
 })
 
 export type KnowledgeDocFormValues = z.infer<typeof knowledgeDocSchema>

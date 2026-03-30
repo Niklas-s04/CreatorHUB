@@ -14,7 +14,7 @@ from app.api.deps import (
 )
 from app.api.querying import apply_sorting, pagination_params, to_page
 from app.core.authorization import Permission
-from app.models.knowledge import KnowledgeDoc, KnowledgeDocType
+from app.models.knowledge import KnowledgeDoc, KnowledgeDocType, KnowledgeSourceReviewStatus
 from app.models.user import User
 from app.schemas.common import Page, SortOrder
 from app.schemas.knowledge import KnowledgeDocCreate, KnowledgeDocOut, KnowledgeDocUpdate
@@ -29,12 +29,18 @@ def list_docs(
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
     type: KnowledgeDocType | None = None,
+    source_review_status: KnowledgeSourceReviewStatus | None = None,
+    is_outdated: bool | None = None,
     paging: tuple[int, int, str, SortOrder] = Depends(pagination_params),
 ) -> Page[KnowledgeDocOut]:
     limit, offset, sort_by, sort_order = paging
     qry = db.query(KnowledgeDoc)
     if type:
         qry = qry.filter(KnowledgeDoc.type == type)
+    if source_review_status:
+        qry = qry.filter(KnowledgeDoc.source_review_status == source_review_status)
+    if is_outdated is not None:
+        qry = qry.filter(KnowledgeDoc.is_outdated.is_(is_outdated))
 
     total = qry.order_by(None).count()
     qry, selected_sort, selected_order = apply_sorting(
@@ -42,7 +48,16 @@ def list_docs(
         model=KnowledgeDoc,
         sort_by=sort_by,
         sort_order=sort_order,
-        allowed_fields={"created_at", "updated_at", "title", "type"},
+        allowed_fields={
+            "created_at",
+            "updated_at",
+            "title",
+            "type",
+            "source_review_status",
+            "trust_level",
+            "is_outdated",
+            "current_version",
+        },
         fallback="updated_at",
     )
     items = qry.offset(offset).limit(limit).all()

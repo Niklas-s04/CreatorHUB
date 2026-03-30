@@ -104,13 +104,63 @@ export function parseKnowledgeDocsDtoArray(input: unknown): KnowledgeDocDto[] {
   if (!Array.isArray(input)) return []
   return input.map(item => {
     const src = isRecord(item) ? item : {}
+    const versionsRaw = Array.isArray(src.versions) ? src.versions : []
+    const draftLinksRaw = Array.isArray(src.draft_links) ? src.draft_links : []
     return {
       id: asString(src.id, ''),
       type: asString(src.type, 'unknown'),
       title: asString(src.title, 'Ohne Titel'),
       content: asString(src.content, ''),
+      workflow_status: asString(src.workflow_status, 'draft'),
+      review_reason: asNullableString(src.review_reason),
+      source_name: asNullableString(src.source_name),
+      source_url: asNullableString(src.source_url),
+      source_type: asString(src.source_type, 'internal'),
+      source_review_status: asString(src.source_review_status, 'pending'),
+      source_review_note: asNullableString(src.source_review_note),
+      origin_summary: asNullableString(src.origin_summary),
+      trust_level: asString(src.trust_level, 'medium'),
+      is_outdated: asBoolean(src.is_outdated),
+      outdated_reason: asNullableString(src.outdated_reason),
+      outdated_at: asNullableString(src.outdated_at),
+      current_version: asNumber(src.current_version, 1),
+      versions: versionsRaw.map(version => {
+        const versionSrc = isRecord(version) ? version : {}
+        return {
+          id: asString(versionSrc.id, ''),
+          version_number: asNumber(versionSrc.version_number, 1),
+          title: asString(versionSrc.title, 'Ohne Titel'),
+          type: asString(versionSrc.type, 'unknown'),
+          workflow_status: asString(versionSrc.workflow_status, 'draft'),
+          source_review_status: asString(versionSrc.source_review_status, 'pending'),
+          trust_level: asString(versionSrc.trust_level, 'medium'),
+          is_outdated: asBoolean(versionSrc.is_outdated),
+          change_note: asNullableString(versionSrc.change_note),
+          changed_by_name: asNullableString(versionSrc.changed_by_name),
+          created_at: asString(versionSrc.created_at, ''),
+        }
+      }),
+      draft_links: draftLinksRaw.map(link => {
+        const linkSrc = isRecord(link) ? link : {}
+        return {
+          id: asString(linkSrc.id, ''),
+          email_draft_id: asString(linkSrc.email_draft_id, ''),
+          linked_at: asString(linkSrc.linked_at, ''),
+          linked_by_name: asNullableString(linkSrc.linked_by_name),
+        }
+      }),
     }
   })
+}
+
+export function parseKnowledgeDocsPage(input: unknown): KnowledgeDocDto[] {
+  if (Array.isArray(input)) {
+    return parseKnowledgeDocsDtoArray(input)
+  }
+  if (!isRecord(input) || !Array.isArray(input.items)) {
+    return []
+  }
+  return parseKnowledgeDocsDtoArray(input.items)
 }
 
 export function parseContentTasksDtoArray(input: unknown): ContentTaskDto[] {

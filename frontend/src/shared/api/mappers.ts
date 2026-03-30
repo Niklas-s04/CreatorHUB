@@ -65,11 +65,51 @@ export function toProductTransactionVm(dto: ProductTransactionDto): ProductTrans
 }
 
 export function toKnowledgeDocVm(dto: KnowledgeDocDto): KnowledgeDocVm {
+  const versions = (dto.versions ?? []).map(version => ({
+    id: version.id,
+    versionNumber: version.version_number,
+    title: version.title,
+    type: version.type,
+    workflowStatus: version.workflow_status,
+    sourceReviewStatus: version.source_review_status,
+    trustLevel: version.trust_level,
+    isOutdated: version.is_outdated,
+    changeNote: version.change_note ?? '',
+    changedByName: version.changed_by_name ?? '',
+    createdAt: version.created_at,
+  })).sort((a, b) => b.versionNumber - a.versionNumber)
+
+  const draftLinks = (dto.draft_links ?? []).map(link => ({
+    id: link.id,
+    emailDraftId: link.email_draft_id,
+    linkedAt: link.linked_at,
+    linkedByName: link.linked_by_name ?? '',
+  })).sort((a, b) => {
+    const aTs = Date.parse(a.linkedAt || '')
+    const bTs = Date.parse(b.linkedAt || '')
+    return (Number.isFinite(bTs) ? bTs : 0) - (Number.isFinite(aTs) ? aTs : 0)
+  })
+
   return {
     id: dto.id,
     type: dto.type,
     title: dto.title,
     content: dto.content,
+    workflowStatus: dto.workflow_status ?? 'draft',
+    reviewReason: dto.review_reason ?? '',
+    sourceName: dto.source_name ?? '',
+    sourceUrl: dto.source_url ?? '',
+    sourceType: dto.source_type ?? 'internal',
+    sourceReviewStatus: dto.source_review_status ?? 'pending',
+    sourceReviewNote: dto.source_review_note ?? '',
+    originSummary: dto.origin_summary ?? '',
+    trustLevel: dto.trust_level ?? 'medium',
+    isOutdated: dto.is_outdated ?? false,
+    outdatedReason: dto.outdated_reason ?? '',
+    outdatedAt: dto.outdated_at ?? '',
+    currentVersion: dto.current_version ?? 1,
+    versions,
+    draftLinks,
   }
 }
 

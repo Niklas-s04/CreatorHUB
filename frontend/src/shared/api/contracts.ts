@@ -41,6 +41,42 @@ export type KnowledgeDocDto = {
   type: string
   title: string
   content: string
+  workflow_status?: string
+  review_reason?: string | null
+  source_name?: string | null
+  source_url?: string | null
+  source_type?: string
+  source_review_status?: string
+  source_review_note?: string | null
+  origin_summary?: string | null
+  trust_level?: string
+  is_outdated?: boolean
+  outdated_reason?: string | null
+  outdated_at?: string | null
+  current_version?: number
+  versions?: KnowledgeDocVersionDto[]
+  draft_links?: KnowledgeDocDraftLinkDto[]
+}
+
+export type KnowledgeDocVersionDto = {
+  id: string
+  version_number: number
+  title: string
+  type: string
+  workflow_status: string
+  source_review_status: string
+  trust_level: string
+  is_outdated: boolean
+  change_note: string | null
+  changed_by_name: string | null
+  created_at: string
+}
+
+export type KnowledgeDocDraftLinkDto = {
+  id: string
+  email_draft_id: string
+  linked_at: string
+  linked_by_name: string | null
 }
 
 export type ContentTaskDto = {
@@ -104,6 +140,42 @@ export type KnowledgeDocVm = {
   type: string
   title: string
   content: string
+  workflowStatus: string
+  reviewReason: string
+  sourceName: string
+  sourceUrl: string
+  sourceType: string
+  sourceReviewStatus: string
+  sourceReviewNote: string
+  originSummary: string
+  trustLevel: string
+  isOutdated: boolean
+  outdatedReason: string
+  outdatedAt: string
+  currentVersion: number
+  versions: KnowledgeDocVersionVm[]
+  draftLinks: KnowledgeDocDraftLinkVm[]
+}
+
+export type KnowledgeDocVersionVm = {
+  id: string
+  versionNumber: number
+  title: string
+  type: string
+  workflowStatus: string
+  sourceReviewStatus: string
+  trustLevel: string
+  isOutdated: boolean
+  changeNote: string
+  changedByName: string
+  createdAt: string
+}
+
+export type KnowledgeDocDraftLinkVm = {
+  id: string
+  emailDraftId: string
+  linkedAt: string
+  linkedByName: string
 }
 
 export type DashboardProductVm = {
