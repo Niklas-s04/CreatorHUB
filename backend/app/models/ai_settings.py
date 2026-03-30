@@ -41,8 +41,12 @@ class CreatorAiProfile(Base, UUIDMixin, TimestampMixin):
     language_code: Mapped[str] = mapped_column(String(16), default="de")
     content_focus: Mapped[list[str]] = mapped_column(JSON, default=list)
 
-    created_by_id: Mapped[uuid.UUID | None] = mapped_column(PGUUID(as_uuid=True), nullable=True, index=True)
+    created_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), nullable=True, index=True
+    )
     created_by_name: Mapped[str | None] = mapped_column(String(128), nullable=True)
-    updated_by_id: Mapped[uuid.UUID | None] = mapped_column(PGUUID(as_uuid=True), nullable=True, index=True)
+    updated_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), nullable=True, index=True
+    )
     updated_by_name: Mapped[str | None] = mapped_column(String(128), nullable=True)
     last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

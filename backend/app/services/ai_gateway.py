@@ -175,7 +175,9 @@ def safe_ollama_json(
                         "fallback_reason": "json_parse_failed",
                     },
                 )
-            raise AiOutputTechnicalError("Invalid JSON output and no fallback payload provided") from exc
+            raise AiOutputTechnicalError(
+                "Invalid JSON output and no fallback payload provided"
+            ) from exc
         fix_system = "You are a JSON repair utility. Output ONLY valid JSON."
         fix_user = f"Fix to valid JSON only. Original:\n{content}"
         try:
@@ -196,7 +198,9 @@ def safe_ollama_json(
                         "fallback_reason": "json_repair_failed",
                     },
                 )
-            raise AiOutputTechnicalError("JSON repair failed and no fallback payload provided") from repair_exc
+            raise AiOutputTechnicalError(
+                "JSON repair failed and no fallback payload provided"
+            ) from repair_exc
 
     if not isinstance(parsed, dict):
         technical_errors.append("json_root_not_object")

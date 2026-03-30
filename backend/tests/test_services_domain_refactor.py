@@ -140,7 +140,12 @@ def test_knowledge_service_crud_and_audit(service_db: Session) -> None:
     assert doc.title == "Policy"
     assert doc.content == "Keep data safe"
     assert doc.current_version == 1
-    assert service_db.query(KnowledgeDocVersion).filter(KnowledgeDocVersion.knowledge_doc_id == doc.id).count() == 1
+    assert (
+        service_db.query(KnowledgeDocVersion)
+        .filter(KnowledgeDocVersion.knowledge_doc_id == doc.id)
+        .count()
+        == 1
+    )
 
     updated = knowledge_service.update_doc(
         service_db,
@@ -343,7 +348,9 @@ def test_email_handoff_requires_ready_state_and_note(service_db: Session) -> Non
     assert handed_off.handed_off_at is not None
 
 
-def test_ai_draft_requires_human_approval_by_default(service_db: Session, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_ai_draft_requires_human_approval_by_default(
+    service_db: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
     admin = _create_admin(service_db, username="hil_admin")
 
     def _fake_generate(*_args, **_kwargs):
@@ -374,7 +381,9 @@ def test_ai_draft_requires_human_approval_by_default(service_db: Session, monkey
     assert draft.handoff_status == EmailHandoffStatus.blocked
 
 
-def test_creator_ai_settings_profile_preview_and_generation(service_db: Session, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_creator_ai_settings_profile_preview_and_generation(
+    service_db: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
     admin = _create_admin(service_db, username="ai_profile_admin")
 
     default_profile = email_router.upsert_global_default_profile(
@@ -519,9 +528,7 @@ def test_manual_draft_update_creates_new_revision_and_resets_approval(service_db
     assert updated.approval_status == EmailApprovalStatus.pending
     assert updated.handoff_status == EmailHandoffStatus.blocked
     version_count = (
-        service_db.query(EmailDraftVersion)
-        .filter(EmailDraftVersion.draft_id == draft.id)
-        .count()
+        service_db.query(EmailDraftVersion).filter(EmailDraftVersion.draft_id == draft.id).count()
     )
     assert version_count >= 2
 
@@ -773,7 +780,9 @@ def test_content_publish_requires_approved_workflow_tasks_and_asset(service_db: 
     published = content_service.update_item(
         service_db,
         item_id=item.id,
-        payload=ContentItemUpdate(status=ContentStatus.published, primary_asset_id=approved_asset.id),
+        payload=ContentItemUpdate(
+            status=ContentStatus.published, primary_asset_id=approved_asset.id
+        ),
         actor=admin,
     )
     assert published.status == ContentStatus.published

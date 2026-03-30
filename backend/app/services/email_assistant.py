@@ -44,7 +44,9 @@ EMAIL_OUTPUT_SCHEMA = {
 }
 
 
-def _fallback_email_result(subject: str | None, creator_settings: dict[str, Any] | None = None) -> dict[str, Any]:
+def _fallback_email_result(
+    subject: str | None, creator_settings: dict[str, Any] | None = None
+) -> dict[str, Any]:
     language_code = str((creator_settings or {}).get("language_code") or "de")
     artist_name = str((creator_settings or {}).get("artist_name") or "Creator")
     clarification = {
@@ -116,7 +118,9 @@ Rules:
     return prompt, [str(doc_id) for doc_id in doc_ids]
 
 
-def _build_untrusted_user_block(*, subject: str | None, raw_body: str, note: str | None = None) -> str:
+def _build_untrusted_user_block(
+    *, subject: str | None, raw_body: str, note: str | None = None
+) -> str:
     return (
         "UNTRUSTED_USER_CONTENT_START\n"
         f"subject: {subject or ''}\n"
@@ -288,7 +292,9 @@ Template body:
 {template_body or ""}
 """.strip()
 
-    untrusted_block = _build_untrusted_user_block(subject=subject, raw_body=raw_body, note=note_block)
+    untrusted_block = _build_untrusted_user_block(
+        subject=subject, raw_body=raw_body, note=note_block
+    )
     qa_untrusted = "\n".join(qa_lines) if qa_lines else ""
     injection_flags = detect_prompt_injection(
         (subject or "") + "\n" + raw_body + "\n" + qa_untrusted + "\n" + note_block

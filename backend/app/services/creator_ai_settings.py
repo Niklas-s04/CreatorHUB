@@ -86,15 +86,25 @@ def validate_profile_data(payload: dict[str, Any]) -> dict[str, Any]:
     clear_name = _clean_text(str(payload.get("clear_name") or ""), max_len=128)
     artist_name = _clean_text(str(payload.get("artist_name") or ""), max_len=128)
     channel_link = _clean_text(str(payload.get("channel_link") or ""), max_len=1024)
-    themes = _normalize_list(payload.get("themes") if isinstance(payload.get("themes"), list) else [])
+    themes = _normalize_list(
+        payload.get("themes") if isinstance(payload.get("themes"), list) else []
+    )
     platforms = _normalize_list(
         payload.get("platforms") if isinstance(payload.get("platforms"), list) else []
     )
-    short_description = _clean_text(payload.get("short_description") if isinstance(payload.get("short_description"), str) else None, max_len=2000)
+    short_description = _clean_text(
+        payload.get("short_description")
+        if isinstance(payload.get("short_description"), str)
+        else None,
+        max_len=2000,
+    )
     raw_tone = payload.get("tone")
     tone_value = getattr(raw_tone, "value", raw_tone)
     tone = _clean_text(str(tone_value or "neutral"), max_len=32) or "neutral"
-    target_audience = _clean_text(payload.get("target_audience") if isinstance(payload.get("target_audience"), str) else None, max_len=256)
+    target_audience = _clean_text(
+        payload.get("target_audience") if isinstance(payload.get("target_audience"), str) else None,
+        max_len=256,
+    )
     language_code = _clean_text(str(payload.get("language_code") or "de"), max_len=16) or "de"
     content_focus = _normalize_list(
         payload.get("content_focus") if isinstance(payload.get("content_focus"), list) else []

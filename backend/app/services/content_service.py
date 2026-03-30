@@ -232,7 +232,9 @@ def _ensure_publish_ready(item: ContentItem, db: Session) -> None:
         .count()
     )
     if approved_assets == 0:
-        raise BusinessRuleViolation("At least one approved content asset is required for publishing")
+        raise BusinessRuleViolation(
+            "At least one approved content asset is required for publishing"
+        )
 
 
 def list_items(db: Session, *, product_id: uuid.UUID | None = None) -> list[ContentItem]:
@@ -253,8 +255,12 @@ def create_item(db: Session, *, payload: ContentItemCreate, actor: User | None) 
     item_data["tags_csv"] = _normalize_optional_text(item_data.get("tags_csv"))
     item_data["external_url"] = _normalize_optional_text(item_data.get("external_url"))
     item_data["review_reason"] = _normalize_optional_text(item_data.get("review_reason"))
-    item_data["editorial_owner_name"] = _normalize_optional_text(item_data.get("editorial_owner_name"))
-    item_data["last_change_summary"] = _normalize_optional_text(item_data.get("last_change_summary"))
+    item_data["editorial_owner_name"] = _normalize_optional_text(
+        item_data.get("editorial_owner_name")
+    )
+    item_data["last_change_summary"] = _normalize_optional_text(
+        item_data.get("last_change_summary")
+    )
     item = ContentItem(**item_data)
     validate_content_status_change(
         current_status=item.status,
@@ -271,7 +277,9 @@ def create_item(db: Session, *, payload: ContentItemCreate, actor: User | None) 
     with transaction_boundary(db):
         db.add(item)
         db.flush()
-        _ensure_primary_asset_link_valid(db, content_item_id=item.id, primary_asset_id=item.primary_asset_id)
+        _ensure_primary_asset_link_valid(
+            db, content_item_id=item.id, primary_asset_id=item.primary_asset_id
+        )
         item.editorial_status = _resolve_editorial_status(
             item_status=item.status,
             workflow_status=item.workflow_status,
@@ -369,7 +377,9 @@ def update_item(
             changed_fields.add(key)
 
     target_workflow_status = requested_workflow_status or item.workflow_status
-    review_reason = explicit_review_reason if explicit_review_reason is not None else item.review_reason
+    review_reason = (
+        explicit_review_reason if explicit_review_reason is not None else item.review_reason
+    )
     if requested_workflow_status is None and requires_re_review(
         current_status=item.workflow_status,
         changed_fields=changed_fields,
@@ -423,16 +433,17 @@ def update_item(
             item.review_reason = explicit_review_reason.strip() or None
             after["review_reason"] = item.review_reason
 
-        if previous_workflow_status != item.workflow_status and item.workflow_status == WorkflowStatus.approved:
+        if (
+            previous_workflow_status != item.workflow_status
+            and item.workflow_status == WorkflowStatus.approved
+        ):
             before["review_cycle"] = item.review_cycle
             item.review_cycle += 1
             after["review_cycle"] = item.review_cycle
 
         if target_status == ContentStatus.published and previous_status != ContentStatus.published:
             _ensure_publish_ready(item, db)
-            before["published_at"] = (
-                item.published_at.isoformat() if item.published_at else None
-            )
+            before["published_at"] = item.published_at.isoformat() if item.published_at else None
             before["published_by_id"] = str(item.published_by_id) if item.published_by_id else None
             before["published_by_name"] = item.published_by_name
             item.published_at = utcnow()

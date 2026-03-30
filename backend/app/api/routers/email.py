@@ -84,7 +84,9 @@ def _normalize_risk_flags(raw_flags: Any) -> list[str]:
     return []
 
 
-def _risk_profile(flags: list[str]) -> tuple[int, EmailRiskLevel, str, bool, EmailApprovalStatus, EmailHandoffStatus]:
+def _risk_profile(
+    flags: list[str],
+) -> tuple[int, EmailRiskLevel, str, bool, EmailApprovalStatus, EmailHandoffStatus]:
     score = 0
     for flag in flags:
         if flag in CRITICAL_RISK_FLAGS:
@@ -212,16 +214,22 @@ def _validate_handoff_transition(
 ) -> None:
     if status == EmailHandoffStatus.ready_for_send:
         if not (draft.draft_subject or "").strip() or not (draft.draft_body or "").strip():
-            raise HTTPException(status_code=400, detail="Draft subject and body are required for handoff")
+            raise HTTPException(
+                status_code=400, detail="Draft subject and body are required for handoff"
+            )
         if draft.approval_required and draft.approval_status != EmailApprovalStatus.approved:
             raise HTTPException(status_code=400, detail="Draft must be approved before handoff")
     if status == EmailHandoffStatus.handed_off:
         if draft.handoff_status != EmailHandoffStatus.ready_for_send:
-            raise HTTPException(status_code=400, detail="Draft must be ready_for_send before handoff")
+            raise HTTPException(
+                status_code=400, detail="Draft must be ready_for_send before handoff"
+            )
         if draft.approval_required and draft.approval_status != EmailApprovalStatus.approved:
             raise HTTPException(status_code=400, detail="Draft must be approved before handoff")
         if not note:
-            raise HTTPException(status_code=400, detail="Handoff note is required when marking handed_off")
+            raise HTTPException(
+                status_code=400, detail="Handoff note is required when marking handed_off"
+            )
     if status == EmailHandoffStatus.blocked and not note:
         raise HTTPException(status_code=400, detail="Blocking handoff requires a reason")
 
@@ -258,7 +266,9 @@ def list_creator_profiles(
             .order_by(CreatorAiProfile.updated_at.desc())
             .all()
         )
-        profiles = profiles + [p for p in global_defaults if p.id not in {item.id for item in profiles}]
+        profiles = profiles + [
+            p for p in global_defaults if p.id not in {item.id for item in profiles}
+        ]
     return profiles
 
 
@@ -444,7 +454,10 @@ def upsert_global_default_profile(
         entity_type="creator_ai_profile",
         entity_id=str(profile.id),
         description="Upserted global creator AI defaults",
-        after={"profile_name": profile.profile_name, "is_global_default": profile.is_global_default},
+        after={
+            "profile_name": profile.profile_name,
+            "is_global_default": profile.is_global_default,
+        },
     )
     db.commit()
     return profile
@@ -552,7 +565,9 @@ def create_draft(
             "subject": payload.subject or thread.subject,
             "tone": payload.tone.value,
             "raw_body": payload.raw_body,
-            "creator_profile_id": str(payload.creator_profile_id) if payload.creator_profile_id else None,
+            "creator_profile_id": str(payload.creator_profile_id)
+            if payload.creator_profile_id
+            else None,
             "ai_settings_source": settings_source,
             "ai_settings_profile_name": profile.profile_name if profile else None,
         },
@@ -756,7 +771,9 @@ def refine_draft(
             "draft_id": str(payload.draft_id),
             "qa": payload.qa,
             "note": payload.note,
-            "creator_profile_id": str(payload.creator_profile_id) if payload.creator_profile_id else None,
+            "creator_profile_id": str(payload.creator_profile_id)
+            if payload.creator_profile_id
+            else None,
             "ai_settings_source": settings_source,
             "ai_settings_profile_name": profile.profile_name if profile else None,
         },
@@ -882,7 +899,11 @@ def set_draft_approval(
     reason = (payload.reason or "").strip() or None
     if draft.approval_required and current_user.role != UserRole.admin:
         raise HTTPException(status_code=403, detail="Only admins can approve high-risk drafts")
-    if draft.risk_level in {EmailRiskLevel.high, EmailRiskLevel.critical} and payload.approved and not reason:
+    if (
+        draft.risk_level in {EmailRiskLevel.high, EmailRiskLevel.critical}
+        and payload.approved
+        and not reason
+    ):
         raise HTTPException(
             status_code=400,
             detail="Approval reason required for high-risk drafts",
@@ -917,7 +938,11 @@ def set_draft_approval(
         suggestion_type=EmailDraftSuggestionType.approval_decision,
         source="workflow",
         summary=("Approved" if payload.approved else "Rejected") + " draft",
-        payload={"approved": payload.approved, "reason": reason, "risk_level": draft.risk_level.value},
+        payload={
+            "approved": payload.approved,
+            "reason": reason,
+            "risk_level": draft.risk_level.value,
+        },
         decided=True,
         actor=current_user,
     )
@@ -1127,7 +1152,9 @@ def list_templates(
 ) -> list[EmailTemplateOut]:
     qry = db.query(EmailTemplate)
     if thread_id:
-        qry = qry.filter(or_(EmailTemplate.thread_id.is_(None), EmailTemplate.thread_id == thread_id))
+        qry = qry.filter(
+            or_(EmailTemplate.thread_id.is_(None), EmailTemplate.thread_id == thread_id)
+        )
     if active_only:
         qry = qry.filter(EmailTemplate.active.is_(True))
     return qry.order_by(EmailTemplate.updated_at.desc()).all()
