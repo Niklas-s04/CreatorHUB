@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import uuid
+from datetime import datetime
 
 from pydantic import BaseModel, Field
 
@@ -14,6 +15,8 @@ class UserOut(BaseModel):
     is_active: bool
     needs_password_setup: bool
     mfa_enabled: bool
+    locked_until: datetime | None = None
+    last_activity_at: datetime | None = None
     active_sessions: int = 0
     permissions: list[str] = Field(default_factory=list)
 

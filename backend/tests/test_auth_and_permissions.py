@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from app.api import deps
 from app.core.config import settings
 from app.models.audit import AuditLog
-from app.models.auth_session import AuthSession, RevokedToken
+from app.models.auth_session import AuthSession, PasswordResetToken, RevokedToken
 from app.models.product import Product
 from app.models.registration_request import RegistrationRequest, RegistrationRequestStatus
 from app.models.user import UserRole
@@ -227,6 +227,36 @@ def test_approve_registration_requires_step_up_mfa_when_enabled(
         headers=_auth_header(token),
     )
     assert allowed.status_code == 200
+    assert allowed.json()["reviewed_by_username"] == admin.username
+
+
+def test_reject_registration_stores_reason_and_history(client, db_session: Session) -> None:
+    admin = create_user(db_session, username="admin_reject_reason", role=UserRole.admin)
+    token, _ = create_tokens_for_user(db_session, user=admin)
+
+    req = RegistrationRequest(
+        username="pending_reject_reason",
+        hashed_password="hashed",
+        status=RegistrationRequestStatus.pending,
+    )
+    db_session.add(req)
+    db_session.commit()
+    db_session.refresh(req)
+
+    response = client.post(
+        f"/api/auth/registration-requests/{req.id}/reject?reason=Unklare%20Angaben",
+        headers=_auth_header(token),
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "rejected"
+    assert body["rejection_reason"] == "Unklare Angaben"
+    assert body["reviewed_by_username"] == admin.username
+
+    history = client.get("/api/auth/registration-requests", headers=_auth_header(token))
+    assert history.status_code == 200
+    rows = history.json()
+    assert any(row["username"] == req.username and row["rejection_reason"] == "Unklare Angaben" for row in rows)
 
 
 def test_update_user_blocks_self_role_or_status_change(client, db_session: Session) -> None:
@@ -266,6 +296,75 @@ def test_update_user_writes_revision_safe_audit_log(client, db_session: Session)
     assert audit.after is not None
     assert audit.before.get("role") == "editor"
     assert audit.after.get("role") == "viewer"
+    assert audit.meta is not None
+    assert audit.meta.get("permissions_before") is not None
+    assert audit.meta.get("permissions_after") is not None
+
+
+def test_admin_lock_revokes_access_and_can_be_reversed(client, db_session: Session) -> None:
+    admin = create_user(db_session, username="admin_lock_guard", role=UserRole.admin)
+    target = create_user(db_session, username="target_lock_guard", role=UserRole.editor)
+    admin_token, _ = create_tokens_for_user(db_session, user=admin)
+    target_token, _ = create_tokens_for_user(db_session, user=target)
+
+    locked = client.post(
+        f"/api/auth/users/{target.id}/lock",
+        headers=_auth_header(admin_token),
+    )
+    assert locked.status_code == 200
+    assert locked.json()["locked_until"] is not None
+
+    denied = client.get("/api/auth/me", headers=_auth_header(target_token))
+    assert denied.status_code in {401, 429}
+
+    sessions = client.get(
+        f"/api/auth/users/{target.id}/sessions",
+        headers=_auth_header(admin_token),
+    )
+    assert sessions.status_code == 200
+    assert any(entry["revoked_reason"] == "admin_lock" for entry in sessions.json())
+
+    unlocked = client.post(
+        f"/api/auth/users/{target.id}/unlock",
+        headers=_auth_header(admin_token),
+    )
+    assert unlocked.status_code == 200
+    assert unlocked.json()["locked_until"] is None
+
+
+def test_admin_password_reset_issues_token_and_audits(client, db_session: Session) -> None:
+    admin = create_user(db_session, username="admin_reset_guard", role=UserRole.admin)
+    target = create_user(db_session, username="target_reset_guard", role=UserRole.editor)
+    admin_token, _ = create_tokens_for_user(db_session, user=admin)
+
+    response = client.post(
+        f"/api/auth/users/{target.id}/password-reset",
+        headers=_auth_header(admin_token),
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert isinstance(body.get("reset_token"), str)
+
+    reset_token = (
+        db_session.query(PasswordResetToken)
+        .filter(PasswordResetToken.user_id == target.id)
+        .order_by(PasswordResetToken.created_at.desc())
+        .first()
+    )
+    assert reset_token is not None
+
+    audit = (
+        db_session.query(AuditLog)
+        .filter(
+            AuditLog.action == "user.password.reset.request",
+            AuditLog.entity_id == str(target.id),
+        )
+        .first()
+    )
+    assert audit is not None
+    assert isinstance(audit.meta, dict)
+    assert audit.meta.get("audit_category") == "security"
+    assert bool(audit.meta.get("critical")) is True
 
 
 def test_confirm_password_reset_writes_security_audit(client, db_session: Session) -> None:

@@ -17,6 +17,7 @@ from fastapi import (
     status,
 )
 from fastapi.security import OAuth2PasswordRequestForm
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.api.deps import (
@@ -43,6 +44,7 @@ from app.models.registration_request import RegistrationRequest, RegistrationReq
 from app.models.user import User, UserRole
 from app.schemas.auth import (
     AdminBootstrapStatusOut,
+    AdminSessionOut,
     AdminPasswordSetupIn,
     ChangePasswordIn,
     LoginHistoryOut,
@@ -118,6 +120,44 @@ def _validate_password_strength(password: str) -> str:
 
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
+
+
+def _is_user_locked(user: User) -> bool:
+    return bool(user.locked_until and user.locked_until > _utcnow())
+
+
+def _user_summary(
+    user: User,
+    *,
+    active_sessions: int = 0,
+    last_activity_at: datetime | None = None,
+) -> UserOut:
+    return UserOut(
+        id=user.id,
+        username=user.username,
+        role=user.role,
+        is_active=user.is_active,
+        needs_password_setup=user.needs_password_setup,
+        mfa_enabled=user.mfa_enabled,
+        locked_until=user.locked_until,
+        last_activity_at=last_activity_at,
+        active_sessions=active_sessions,
+        permissions=permission_values_for_role(user.role),
+    )
+
+
+def _serialize_registration_request(
+    req: RegistrationRequest, reviewer_name: str | None = None
+) -> RegisterRequestOut:
+    return RegisterRequestOut(
+        id=req.id,
+        username=req.username,
+        status=req.status,
+        reviewed_at=req.reviewed_at,
+        reviewed_by_user_id=req.reviewed_by_user_id,
+        reviewed_by_username=reviewer_name,
+        rejection_reason=req.rejection_reason,
+    )
 
 
 def _safe_exp_from_payload(payload: dict) -> datetime:
@@ -445,6 +485,11 @@ def refresh_token(request: Request, response: Response, db: Session = Depends(ge
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="User inactive or not found"
         )
+    if _is_user_locked(user):
+        _clear_auth_cookies(response)
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Account temporarily locked"
+        )
 
     try:
         session_id = uuid.UUID(str(sid))
@@ -545,6 +590,8 @@ def register_request(
         before_status = existing_request.status
         existing_request.status = RegistrationRequestStatus.pending
         existing_request.reviewed_by_user_id = None
+        existing_request.reviewed_at = None
+        existing_request.rejection_reason = None
         emit_domain_event(
             db,
             actor=None,
@@ -584,16 +631,7 @@ def me(current_user: User = Depends(get_current_user), db: Session = Depends(get
         )
         .count()
     )
-    return UserOut(
-        id=current_user.id,
-        username=current_user.username,
-        role=current_user.role,
-        is_active=current_user.is_active,
-        needs_password_setup=current_user.needs_password_setup,
-        mfa_enabled=current_user.mfa_enabled,
-        active_sessions=active_sessions,
-        permissions=permission_values_for_role(current_user.role),
-    )
+    return _user_summary(current_user, active_sessions=active_sessions)
 
 
 @router.post("/users", response_model=UserOut)
@@ -641,42 +679,62 @@ def create_user(
     )
     db.commit()
     db.refresh(user)
-    return user
+    return _user_summary(user)
 
 
 @router.get("/users", response_model=list[UserOut])
 def list_users(
     db: Session = Depends(get_db), _: User = Depends(require_permission(Permission.user_read))
 ) -> list[UserOut]:
+    now = _utcnow()
     users = db.query(User).order_by(User.created_at.desc()).all()
     user_ids = [u.id for u in users]
-    counts: dict[uuid.UUID, int] = {}
+    active_session_counts: dict[uuid.UUID, int] = {}
+    session_activity: dict[uuid.UUID, datetime | None] = {}
+    login_activity: dict[uuid.UUID, datetime | None] = {}
+
     if user_ids:
-        rows = (
-            db.query(AuthSession.user_id)
+        session_rows = (
+            db.query(
+                AuthSession.user_id,
+                func.count(AuthSession.id),
+                func.max(AuthSession.last_activity_at),
+            )
             .filter(
                 AuthSession.user_id.in_(user_ids),
                 AuthSession.revoked_at.is_(None),
-                AuthSession.expires_at > _utcnow(),
+                AuthSession.expires_at > now,
             )
+            .group_by(AuthSession.user_id)
             .all()
         )
-        for row in rows:
-            counts[row[0]] = counts.get(row[0], 0) + 1
+        for user_id, active_sessions, last_session_activity in session_rows:
+            active_session_counts[user_id] = int(active_sessions or 0)
+            session_activity[user_id] = last_session_activity
 
-    return [
-        UserOut(
-            id=user.id,
-            username=user.username,
-            role=user.role,
-            is_active=user.is_active,
-            needs_password_setup=user.needs_password_setup,
-            mfa_enabled=user.mfa_enabled,
-            active_sessions=counts.get(user.id, 0),
-            permissions=permission_values_for_role(user.role),
+        login_rows = (
+            db.query(LoginHistory.user_id, func.max(LoginHistory.occurred_at))
+            .filter(LoginHistory.user_id.in_(user_ids), LoginHistory.success.is_(True))
+            .group_by(LoginHistory.user_id)
+            .all()
         )
-        for user in users
-    ]
+        for user_id, last_login_at in login_rows:
+            login_activity[user_id] = last_login_at
+
+    summaries: list[UserOut] = []
+    for user in users:
+        last_activity_at = session_activity.get(user.id)
+        last_login_at = login_activity.get(user.id)
+        if last_login_at and (last_activity_at is None or last_login_at > last_activity_at):
+            last_activity_at = last_login_at
+        summaries.append(
+            _user_summary(
+                user,
+                active_sessions=active_session_counts.get(user.id, 0),
+                last_activity_at=last_activity_at,
+            )
+        )
+    return summaries
 
 
 @router.patch("/users/{user_id}", response_model=UserOut)
@@ -731,6 +789,8 @@ def update_user(
             metadata={
                 "audit_category": "permission_change",
                 "critical": True,
+                "permissions_before": permission_values_for_role(UserRole(before["role"])),
+                "permissions_after": permission_values_for_role(user.role),
                 "sensitive_action": sensitive_action.action,
                 "confirmation_required": sensitive_action.confirmation_required,
                 "confirmation_provided": sensitive_action.confirmation_provided,
@@ -742,28 +802,258 @@ def update_user(
 
     db.commit()
     db.refresh(user)
-    return UserOut(
-        id=user.id,
-        username=user.username,
-        role=user.role,
-        is_active=user.is_active,
-        needs_password_setup=user.needs_password_setup,
-        mfa_enabled=user.mfa_enabled,
-        active_sessions=0,
-        permissions=permission_values_for_role(user.role),
+    return _user_summary(user)
+
+
+@router.get("/users/{user_id}/sessions", response_model=list[AdminSessionOut])
+def list_user_sessions(
+    user_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    context: AuthContext = Depends(get_current_auth_context),
+    _: User = Depends(require_permission(Permission.user_read)),
+) -> list[AdminSessionOut]:
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    sessions = (
+        db.query(AuthSession)
+        .filter(AuthSession.user_id == user.id)
+        .order_by(AuthSession.last_activity_at.desc(), AuthSession.created_at.desc())
+        .all()
     )
+
+    return [
+        AdminSessionOut(
+            id=session.id,
+            created_at=session.created_at,
+            last_activity_at=session.last_activity_at,
+            expires_at=session.expires_at,
+            idle_expires_at=session.idle_expires_at,
+            ip_address=session.ip_address,
+            device_label=session.device_label,
+            user_agent=session.user_agent,
+            mfa_verified=session.mfa_verified,
+            is_current=bool(context.user.id == user.id and session.id == context.session.id),
+            revoked_at=session.revoked_at,
+            revoked_reason=session.revoked_reason,
+        )
+        for session in sessions
+    ]
+
+
+@router.post("/users/{user_id}/password-reset", response_model=PasswordResetRequestOut)
+def admin_request_password_reset(
+    user_id: uuid.UUID,
+    request: Request,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_permission(Permission.user_manage)),
+    sensitive_action: SensitiveActionContext = Depends(
+        require_sensitive_action("user.password.reset")
+    ),
+) -> PasswordResetRequestOut:
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    if user.username.lower() == settings.BOOTSTRAP_ADMIN_USERNAME.lower():
+        raise HTTPException(status_code=400, detail="Admin account is managed separately")
+
+    now = _utcnow()
+    before_locked_until = user.locked_until.isoformat() if user.locked_until else None
+    before_failed_attempts = int(user.failed_login_attempts or 0)
+    previous_tokens = (
+        db.query(PasswordResetToken)
+        .filter(
+            PasswordResetToken.user_id == user.id,
+            PasswordResetToken.used_at.is_(None),
+            PasswordResetToken.expires_at > now,
+        )
+        .all()
+    )
+    for token in previous_tokens:
+        token.used_at = now
+
+    reset_token = secrets.token_urlsafe(32)
+    reset_entry = PasswordResetToken(
+        user_id=user.id,
+        token_hash=hash_token(reset_token),
+        expires_at=now + timedelta(minutes=settings.PASSWORD_RESET_TOKEN_TTL_MINUTES),
+        requested_ip=get_client_ip(request),
+        requested_user_agent=(request.headers.get("user-agent") or "")[:512] or None,
+    )
+    db.add(reset_entry)
+
+    revoked_sessions = (
+        db.query(AuthSession)
+        .filter(AuthSession.user_id == user.id, AuthSession.revoked_at.is_(None))
+        .all()
+    )
+    for session in revoked_sessions:
+        revoke_session(db, session=session, reason="admin_password_reset")
+
+    user.failed_login_attempts = 0
+    user.locked_until = None
+
+    record_audit_log(
+        db,
+        actor=admin,
+        action="user.password.reset.request",
+        entity_type="user",
+        entity_id=str(user.id),
+        description=f"Generated password reset token for user '{user.username}'",
+        before={
+            "locked_until": before_locked_until,
+            "failed_login_attempts": before_failed_attempts,
+        },
+        after={
+            "reset_token_issued": True,
+            "reset_token_expires_at": reset_entry.expires_at.isoformat(),
+            "revoked_sessions": len(revoked_sessions),
+        },
+        metadata={
+            "audit_category": "security",
+            "critical": True,
+            "sensitive_action": sensitive_action.action,
+            "confirmation_required": sensitive_action.confirmation_required,
+            "confirmation_provided": sensitive_action.confirmation_provided,
+            "step_up_required": sensitive_action.step_up_required,
+            "step_up_satisfied": sensitive_action.step_up_satisfied,
+            "request_id": sensitive_action.request_id,
+        },
+    )
+
+    db.commit()
+    return PasswordResetRequestOut(ok=True, reset_token=reset_token)
+
+
+@router.post("/users/{user_id}/lock", response_model=UserOut)
+def lock_user(
+    user_id: uuid.UUID,
+    request: Request,
+    minutes: int = Query(default=settings.AUTH_LOCK_MINUTES, ge=1, le=10080),
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_permission(Permission.user_manage)),
+    sensitive_action: SensitiveActionContext = Depends(require_sensitive_action("user.lock")),
+) -> UserOut:
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    if user.username.lower() == settings.BOOTSTRAP_ADMIN_USERNAME.lower():
+        raise HTTPException(status_code=400, detail="Admin account is managed separately")
+
+    before = {
+        "locked_until": user.locked_until.isoformat() if user.locked_until else None,
+        "failed_login_attempts": int(user.failed_login_attempts or 0),
+    }
+    user.locked_until = _utcnow() + timedelta(minutes=minutes)
+    user.failed_login_attempts = max(int(user.failed_login_attempts or 0), settings.AUTH_MAX_FAILED_ATTEMPTS)
+
+    revoked_sessions = (
+        db.query(AuthSession)
+        .filter(AuthSession.user_id == user.id, AuthSession.revoked_at.is_(None))
+        .all()
+    )
+    for session in revoked_sessions:
+        revoke_session(db, session=session, reason="admin_lock")
+
+    after = {
+        "locked_until": user.locked_until.isoformat() if user.locked_until else None,
+        "failed_login_attempts": int(user.failed_login_attempts or 0),
+        "revoked_sessions": len(revoked_sessions),
+    }
+    record_audit_log(
+        db,
+        actor=admin,
+        action="user.lock",
+        entity_type="user",
+        entity_id=str(user.id),
+        description=f"Locked user '{user.username}'",
+        before=before,
+        after=after,
+        metadata={
+            "audit_category": "security",
+            "critical": True,
+            "minutes": minutes,
+            "sensitive_action": sensitive_action.action,
+            "confirmation_required": sensitive_action.confirmation_required,
+            "confirmation_provided": sensitive_action.confirmation_provided,
+            "step_up_required": sensitive_action.step_up_required,
+            "step_up_satisfied": sensitive_action.step_up_satisfied,
+            "request_id": sensitive_action.request_id,
+        },
+    )
+
+    db.commit()
+    db.refresh(user)
+    return _user_summary(user)
+
+
+@router.post("/users/{user_id}/unlock", response_model=UserOut)
+def unlock_user(
+    user_id: uuid.UUID,
+    request: Request,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_permission(Permission.user_manage)),
+    sensitive_action: SensitiveActionContext = Depends(require_sensitive_action("user.unlock")),
+) -> UserOut:
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    if user.username.lower() == settings.BOOTSTRAP_ADMIN_USERNAME.lower():
+        raise HTTPException(status_code=400, detail="Admin account is managed separately")
+
+    before = {
+        "locked_until": user.locked_until.isoformat() if user.locked_until else None,
+        "failed_login_attempts": int(user.failed_login_attempts or 0),
+    }
+    user.locked_until = None
+    user.failed_login_attempts = 0
+
+    record_audit_log(
+        db,
+        actor=admin,
+        action="user.unlock",
+        entity_type="user",
+        entity_id=str(user.id),
+        description=f"Unlocked user '{user.username}'",
+        before=before,
+        after={"locked_until": None, "failed_login_attempts": 0},
+        metadata={
+            "audit_category": "security",
+            "critical": True,
+            "sensitive_action": sensitive_action.action,
+            "confirmation_required": sensitive_action.confirmation_required,
+            "confirmation_provided": sensitive_action.confirmation_provided,
+            "step_up_required": sensitive_action.step_up_required,
+            "step_up_satisfied": sensitive_action.step_up_satisfied,
+            "request_id": sensitive_action.request_id,
+        },
+    )
+
+    db.commit()
+    db.refresh(user)
+    return _user_summary(user)
 
 
 @router.get("/registration-requests", response_model=list[RegisterRequestOut])
 def list_registration_requests(
-    status_filter: RegistrationRequestStatus | None = RegistrationRequestStatus.pending,
+    status_filter: RegistrationRequestStatus | None = Query(default=None),
     db: Session = Depends(get_db),
     _: User = Depends(require_permission(Permission.user_approve_registration)),
 ) -> list[RegisterRequestOut]:
     query = db.query(RegistrationRequest)
     if status_filter is not None:
         query = query.filter(RegistrationRequest.status == status_filter)
-    return query.order_by(RegistrationRequest.created_at.desc()).all()
+    requests = query.order_by(RegistrationRequest.created_at.desc()).all()
+    reviewer_ids = {req.reviewed_by_user_id for req in requests if req.reviewed_by_user_id}
+    reviewer_names: dict[uuid.UUID, str] = {}
+    if reviewer_ids:
+        for reviewer in db.query(User).filter(User.id.in_(reviewer_ids)).all():
+            reviewer_names[reviewer.id] = reviewer.username
+    return [
+        _serialize_registration_request(req, reviewer_names.get(req.reviewed_by_user_id))
+        for req in requests
+    ]
 
 
 @router.post("/registration-requests/{request_id}/approve", response_model=RegisterRequestOut)
@@ -799,6 +1089,8 @@ def approve_registration_request(
         before_status = req.status
         req.status = RegistrationRequestStatus.rejected
         req.reviewed_by_user_id = admin.id
+        req.reviewed_at = _utcnow()
+        req.rejection_reason = "username_exists"
         record_audit_log(
             db,
             actor=admin,
@@ -850,6 +1142,8 @@ def approve_registration_request(
     before_status = req.status
     req.status = RegistrationRequestStatus.approved
     req.reviewed_by_user_id = admin.id
+    req.reviewed_at = _utcnow()
+    req.rejection_reason = None
     record_audit_log(
         db,
         actor=admin,
@@ -889,12 +1183,13 @@ def approve_registration_request(
     )
     db.commit()
     db.refresh(req)
-    return req
+    return _serialize_registration_request(req, admin.username)
 
 
 @router.post("/registration-requests/{request_id}/reject", response_model=RegisterRequestOut)
 def reject_registration_request(
     request_id: uuid.UUID,
+    reason: str,
     db: Session = Depends(get_db),
     admin: User = Depends(require_permission(Permission.user_approve_registration)),
     sensitive_action: SensitiveActionContext = Depends(
@@ -904,6 +1199,8 @@ def reject_registration_request(
     req = db.query(RegistrationRequest).filter(RegistrationRequest.id == request_id).first()
     if not req:
         raise HTTPException(status_code=404, detail="Registration request not found")
+    if not reason.strip():
+        raise HTTPException(status_code=400, detail="Rejection reason is required")
     try:
         validate_registration_status_change(
             current_status=req.status,
@@ -915,6 +1212,8 @@ def reject_registration_request(
     before_status = req.status
     req.status = RegistrationRequestStatus.rejected
     req.reviewed_by_user_id = admin.id
+    req.reviewed_at = _utcnow()
+    req.rejection_reason = reason.strip()
     record_audit_log(
         db,
         actor=admin,
@@ -923,12 +1222,13 @@ def reject_registration_request(
         entity_id=str(req.id),
         description="Registration request rejected",
         before={"status": before_status.value},
-        after={"status": req.status.value},
+        after={"status": req.status.value, "rejection_reason": req.rejection_reason},
         metadata={
             "audit_category": "approval",
             "critical": True,
             "decision": "rejected",
             "username": req.username,
+            "rejection_reason": req.rejection_reason,
             "sensitive_action": sensitive_action.action,
             "confirmation_required": sensitive_action.confirmation_required,
             "confirmation_provided": sensitive_action.confirmation_provided,
@@ -952,7 +1252,7 @@ def reject_registration_request(
     )
     db.commit()
     db.refresh(req)
-    return req
+    return _serialize_registration_request(req, admin.username)
 
 
 @router.get("/sessions", response_model=list[SessionOut])

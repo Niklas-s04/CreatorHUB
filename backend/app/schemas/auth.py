@@ -26,6 +26,11 @@ class SessionOut(BaseModel):
     is_current: bool = False
 
 
+class AdminSessionOut(SessionOut):
+    revoked_at: datetime | None = None
+    revoked_reason: str | None = None
+
+
 class LoginHistoryOut(BaseModel):
     id: uuid.UUID
     username: str | None
@@ -74,6 +79,12 @@ class PasswordResetRequestOut(BaseModel):
     reset_token: str | None = None
 
 
+class PasswordResetOut(BaseModel):
+    ok: bool = True
+    reset_token: str
+    expires_at: datetime
+
+
 class PasswordResetConfirmIn(BaseModel):
     token: str
     new_password: str
@@ -97,6 +108,10 @@ class RegisterRequestOut(BaseModel):
     id: uuid.UUID
     username: str
     status: RegistrationRequestStatus
+    reviewed_at: datetime | None = None
+    reviewed_by_user_id: uuid.UUID | None = None
+    reviewed_by_username: str | None = None
+    rejection_reason: str | None = None
 
     class Config:
         from_attributes = True

@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import enum
 import uuid
+from datetime import datetime
 
 from sqlalchemy import Enum, ForeignKey, String
+from sqlalchemy import DateTime, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -29,3 +31,5 @@ class RegistrationRequest(Base, UUIDMixin, TimestampMixin):
         ForeignKey("users.id", ondelete="SET NULL"),
         nullable=True,
     )
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    rejection_reason: Mapped[str | None] = mapped_column(Text, nullable=True)

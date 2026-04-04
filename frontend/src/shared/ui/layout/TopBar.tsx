@@ -3,6 +3,15 @@ import { useNavigate } from 'react-router-dom'
 import { apiFetch } from '../../../api'
 import { useDebouncedValue } from '../../hooks/useDebouncedValue'
 
+type DashboardMetric = {
+  key: string
+  count: number
+}
+
+type DashboardSummary = {
+  metrics: DashboardMetric[]
+}
+
 type SearchHit = {
   id: string
   type: 'product' | 'asset' | 'content' | 'knowledge' | 'user'
@@ -111,6 +120,7 @@ export default function TopBar({ menuOpen = false, onToggleMenu }: { menuOpen?: 
   const [loading, setLoading] = useState(false)
   const [groups, setGroups] = useState<SearchGroup[]>([])
   const [activeKey, setActiveKey] = useState<string | null>(null)
+  const [pendingApprovalCount, setPendingApprovalCount] = useState(0)
   const debouncedQuery = useDebouncedValue(query, 220)
 
   useEffect(() => {
@@ -145,6 +155,24 @@ export default function TopBar({ menuOpen = false, onToggleMenu }: { menuOpen?: 
       active = false
     }
   }, [debouncedQuery])
+
+  useEffect(() => {
+    let active = true
+    ;(async () => {
+      try {
+        const summary = await apiFetch<DashboardSummary>('/dashboard/summary')
+        if (!active) return
+        const metric = summary.metrics.find(item => item.key === 'pending_registration_requests')
+        setPendingApprovalCount(metric?.count ?? 0)
+      } catch {
+        if (!active) return
+        setPendingApprovalCount(0)
+      }
+    })()
+    return () => {
+      active = false
+    }
+  }, [])
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
@@ -291,7 +319,7 @@ export default function TopBar({ menuOpen = false, onToggleMenu }: { menuOpen?: 
         <div className="topbar-right">
           <button type="button" className="topbar-icon-btn" aria-label="Benachrichtigungen">
             🔔
-            <span className="badge">3</span>
+            {pendingApprovalCount > 0 && <span className="badge">{pendingApprovalCount}</span>}
           </button>
           <button type="button" className="topbar-icon-btn" aria-label="Nachrichten">
             ✉

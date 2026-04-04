@@ -24,6 +24,11 @@ export type AuthSession = {
   is_current: boolean
 }
 
+export type AdminSession = AuthSession & {
+  revoked_at: string | null
+  revoked_reason: string | null
+}
+
 export type LoginHistoryEntry = {
   id: string
   username: string | null
@@ -42,6 +47,8 @@ export type UserSummary = {
   is_active: boolean
   needs_password_setup: boolean
   mfa_enabled: boolean
+  locked_until: string | null
+  last_activity_at: string | null
   active_sessions: number
   permissions: Permission[]
 }
@@ -83,6 +90,10 @@ export type RegistrationRequest = {
   id: string
   username: string
   status: 'pending' | 'approved' | 'rejected'
+  reviewed_at: string | null
+  reviewed_by_user_id: string | null
+  reviewed_by_username: string | null
+  rejection_reason: string | null
 }
 
 export function getToken(): string | null {
@@ -184,6 +195,19 @@ export async function requestRegistration(username: string, password: string): P
   return res.json()
 }
 
+export async function getRegistrationRequests(statusFilter?: 'pending' | 'approved' | 'rejected'): Promise<RegistrationRequest[]> {
+  const query = statusFilter ? `?status_filter=${encodeURIComponent(statusFilter)}` : ''
+  return apiFetch(`/auth/registration-requests${query}`)
+}
+
+export async function approveRegistrationRequest(requestId: string): Promise<RegistrationRequest> {
+  return apiFetch(`/auth/registration-requests/${requestId}/approve`, { method: 'POST' })
+}
+
+export async function rejectRegistrationRequest(requestId: string, reason: string): Promise<RegistrationRequest> {
+  return apiFetch(`/auth/registration-requests/${requestId}/reject?reason=${encodeURIComponent(reason)}`, { method: 'POST' })
+}
+
 export async function logout(): Promise<void> {
   try {
     await apiFetch('/auth/logout', { method: 'POST' })
@@ -230,6 +254,23 @@ export async function getLoginHistory(limit = 30): Promise<LoginHistoryEntry[]> 
 
 export async function getUsers(): Promise<UserSummary[]> {
   return apiFetch('/auth/users')
+}
+
+export async function getUserSessions(userId: string): Promise<AdminSession[]> {
+  return apiFetch(`/auth/users/${userId}/sessions`)
+}
+
+export async function requestAdminPasswordReset(userId: string): Promise<{ ok: boolean; reset_token: string | null }> {
+  return apiFetch(`/auth/users/${userId}/password-reset`, { method: 'POST' })
+}
+
+export async function lockUser(userId: string, minutes?: number): Promise<UserSummary> {
+  const query = typeof minutes === 'number' ? `?minutes=${encodeURIComponent(String(minutes))}` : ''
+  return apiFetch(`/auth/users/${userId}/lock${query}`, { method: 'POST' })
+}
+
+export async function unlockUser(userId: string): Promise<UserSummary> {
+  return apiFetch(`/auth/users/${userId}/unlock`, { method: 'POST' })
 }
 
 export async function getMfaStatus(): Promise<{ enabled: boolean }> {

@@ -7,9 +7,13 @@ vi.mock('../api', () => ({
   apiFetch: vi.fn(),
   getUsers: vi.fn(),
   getMe: vi.fn(),
+  getUserSessions: vi.fn(),
+  lockUser: vi.fn(),
+  unlockUser: vi.fn(),
+  requestAdminPasswordReset: vi.fn(),
 }))
 
-import { apiFetch, getMe, getUsers } from '../api'
+import { apiFetch, getMe, getUsers, getUserSessions } from '../api'
 
 describe('AdminPage', () => {
   beforeEach(() => {
@@ -23,6 +27,8 @@ describe('AdminPage', () => {
       role: 'viewer',
       is_active: true,
       needs_password_setup: false,
+      locked_until: null,
+      last_activity_at: null,
       permissions: [],
     })
 
@@ -40,11 +46,15 @@ describe('AdminPage', () => {
         role: 'admin',
         is_active: true,
         needs_password_setup: false,
+        locked_until: null,
+        last_activity_at: null,
         permissions: ['user.read', 'user.approve_registration'],
       })
     ;(apiFetch as unknown as ReturnType<typeof vi.fn>)
       .mockResolvedValueOnce([])
+      .mockResolvedValueOnce({ items: [], meta: { total: 0 } })
     ;(getUsers as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce([])
+    ;(getUserSessions as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce([])
 
     renderWithRouter(<AdminPage />)
 
@@ -71,6 +81,8 @@ describe('AdminPage', () => {
         role: 'viewer',
         is_active: true,
         needs_password_setup: false,
+        locked_until: null,
+        last_activity_at: null,
         permissions: [],
       })
       await Promise.resolve()
@@ -93,15 +105,34 @@ describe('AdminPage', () => {
         role: 'admin',
         is_active: true,
         needs_password_setup: false,
+        locked_until: null,
+        last_activity_at: null,
         permissions: ['user.read', 'user.approve_registration'],
       })
     ;(apiFetch as unknown as ReturnType<typeof vi.fn>)
       .mockResolvedValueOnce([{ id: 'r1', username: 'new-user', status: 'pending' }])
+      .mockResolvedValueOnce([{ id: 'h1', username: 'old-user', status: 'approved', reviewed_at: '2026-04-04T10:00:00Z', reviewed_by_user_id: 'a1', reviewed_by_username: 'admin', rejection_reason: null }])
+      .mockResolvedValueOnce({ items: [], meta: { total: 0 } })
       .mockResolvedValueOnce({})
       .mockResolvedValueOnce([])
     ;(getUsers as unknown as ReturnType<typeof vi.fn>)
-      .mockResolvedValueOnce([{ id: 'u2', username: 'editor', role: 'editor', is_active: true, needs_password_setup: false, mfa_enabled: false, active_sessions: 1 }])
+      .mockResolvedValueOnce([
+        {
+          id: 'u2',
+          username: 'editor',
+          role: 'editor',
+          is_active: true,
+          needs_password_setup: false,
+          locked_until: null,
+          last_activity_at: null,
+          mfa_enabled: false,
+          active_sessions: 1,
+          permissions: ['content.read'],
+        },
+      ])
       .mockResolvedValueOnce([])
+    ;(getUserSessions as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce([])
+    ;(apiFetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce([])
 
     renderWithRouter(<AdminPage />)
 

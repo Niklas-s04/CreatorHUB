@@ -103,6 +103,10 @@ def get_current_auth_context(
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="User inactive or not found"
         )
+    if user.locked_until and user.locked_until > _utcnow():
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Account temporarily locked"
+        )
 
     try:
         session_id = uuid.UUID(str(sid))
