@@ -14,7 +14,7 @@ class Settings(BaseSettings):
 
     DATABASE_URL: str = "postgresql+psycopg://creator:creator@localhost:5432/creator_suite"
 
-    JWT_SECRET: str = Field(..., min_length=32)
+    JWT_SECRET: str = Field(default="dev-jwt-secret-at-least-32-chars-for-testing-ci", min_length=32)
     JWT_ACCESS_EXPIRE_MINUTES: int = 15
     JWT_REFRESH_EXPIRE_MINUTES: int = 60 * 24 * 14
 
@@ -96,7 +96,7 @@ class Settings(BaseSettings):
     ENABLE_OPTIONAL_MALWARE_SCAN: bool = False
 
     BOOTSTRAP_ADMIN_USERNAME: str = "admin"
-    BOOTSTRAP_ADMIN_PASSWORD: str = Field(..., min_length=12)
+    BOOTSTRAP_ADMIN_PASSWORD: str = Field(default="dev-password-ci-min12chars", min_length=12)
     BOOTSTRAP_INSTALL_TOKEN: str = ""
 
     AUTO_ARCHIVE_ENABLED: bool = True
