@@ -227,6 +227,8 @@ class CsrfProtectionMiddleware(BaseHTTPMiddleware):
             "/api/auth/token",
             "/api/v1/auth/token",
             "/api/v1/auth/account",  # Allow account deletion without CSRF - requires bearer token
+            "/api/v1/user/account",
+            "/api/user/account",
         }
 
     async def dispatch(self, request: Request, call_next: Callable) -> Response:

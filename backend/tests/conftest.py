@@ -8,10 +8,12 @@ from pathlib import Path
 
 import pytest
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
+from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -19,6 +21,7 @@ if str(ROOT) not in sys.path:
 
 os.environ.setdefault("ENV", "test")
 os.environ.setdefault("JWT_SECRET", "test_secret_please_change_1234567890")
+os.environ.setdefault("BOOTSTRAP_ADMIN_PASSWORD", "test-bootstrap-admin-pass")
 os.environ.setdefault(
     "DATABASE_URL", "postgresql+psycopg://creator:creator@localhost:5432/creator_suite_test"
 )
@@ -33,9 +36,9 @@ os.environ.setdefault("SECURITY_SENSITIVE_ACTION_CONFIRMATION_REQUIRED", "false"
 os.environ.setdefault("SECURITY_SENSITIVE_ACTION_REQUIRE_STEP_UP_MFA", "false")
 
 from app.api import deps
-from app.api.routers import assets, auth, products
+from app.api.routers import audit, assets, auth, content, deals, email, health, images, knowledge, operations, products, search
 from app.core.config import settings
-from app.core.web_security import CsrfProtectionMiddleware
+from app.core.web_security import CsrfProtectionMiddleware, RequestSizeLimitMiddleware, SecurityHeadersMiddleware
 from app.models.asset import Asset
 from app.models.audit import AuditLog
 from app.models.auth_session import AuthSession, LoginHistory, PasswordResetToken, RevokedToken
@@ -106,14 +109,57 @@ def db_session() -> Generator[Session, None, None]:
 @pytest.fixture()
 def app(db_session: Session) -> FastAPI:
     api = FastAPI()
+    trusted_hosts = [host.strip() for host in settings.TRUSTED_HOSTS.split(",") if host.strip()]
+    if trusted_hosts:
+        api.add_middleware(TrustedHostMiddleware, allowed_hosts=trusted_hosts)
+    api.add_middleware(RequestSizeLimitMiddleware, max_body_size=settings.MAX_REQUEST_BODY_BYTES)
     api.add_middleware(
         CsrfProtectionMiddleware,
         auth_cookie_name=settings.AUTH_ACCESS_COOKIE_NAME,
         csrf_cookie_name=settings.CSRF_COOKIE_NAME,
     )
-    api.include_router(auth.router, prefix="/api/v1/auth")
-    api.include_router(assets.router, prefix="/api/v1/assets")
-    api.include_router(products.router, prefix="/api/v1/products")
+    api.add_middleware(
+        SecurityHeadersMiddleware,
+        hsts_seconds=settings.SECURITY_HSTS_SECONDS,
+        trust_proxy_headers=settings.TRUST_PROXY_HEADERS,
+        env=settings.ENV,
+    )
+    origins = [origin.strip() for origin in settings.CORS_ORIGINS.split(",") if origin.strip()]
+    if origins:
+        api.add_middleware(
+            CORSMiddleware,
+            allow_origins=origins,
+            allow_credentials=True,
+            allow_methods=["*"],
+            allow_headers=["*"],
+        )
+
+    api.include_router(health.router, tags=["health"])
+    api.include_router(auth.router, prefix="/api/v1/auth", tags=["auth"])
+    api.include_router(auth.user_router, prefix="/api/v1", tags=["auth"])
+    api.include_router(products.router, prefix="/api/v1/products", tags=["products"])
+    api.include_router(assets.router, prefix="/api/v1/assets", tags=["assets"])
+    api.include_router(content.router, prefix="/api/v1/content", tags=["content"])
+    api.include_router(email.router, prefix="/api/v1/email", tags=["email"])
+    api.include_router(images.router, prefix="/api/v1/images", tags=["images"])
+    api.include_router(knowledge.router, prefix="/api/v1/knowledge", tags=["knowledge"])
+    api.include_router(deals.router, prefix="/api/v1/deals", tags=["deals"])
+    api.include_router(audit.router, prefix="/api/v1/audit", tags=["audit"])
+    api.include_router(operations.router, prefix="/api/v1/operations", tags=["operations"])
+    api.include_router(search.router, prefix="/api/v1/search", tags=["search"])
+
+    api.include_router(auth.router, prefix="/api/auth", tags=["auth"], deprecated=True)
+    api.include_router(auth.user_router, prefix="/api", tags=["auth"], deprecated=True)
+    api.include_router(products.router, prefix="/api/products", tags=["products"], deprecated=True)
+    api.include_router(assets.router, prefix="/api/assets", tags=["assets"], deprecated=True)
+    api.include_router(content.router, prefix="/api/content", tags=["content"], deprecated=True)
+    api.include_router(email.router, prefix="/api/email", tags=["email"], deprecated=True)
+    api.include_router(images.router, prefix="/api/images", tags=["images"], deprecated=True)
+    api.include_router(knowledge.router, prefix="/api/knowledge", tags=["knowledge"], deprecated=True)
+    api.include_router(deals.router, prefix="/api/deals", tags=["deals"], deprecated=True)
+    api.include_router(audit.router, prefix="/api/audit", tags=["audit"], deprecated=True)
+    api.include_router(operations.router, prefix="/api/operations", tags=["operations"], deprecated=True)
+    api.include_router(search.router, prefix="/api/search", tags=["search"], deprecated=True)
 
     def _get_db_override() -> Generator[Session, None, None]:
         yield db_session

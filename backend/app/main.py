@@ -311,6 +311,7 @@ def create_app() -> FastAPI:
     app.include_router(health.router, tags=["health"])
 
     app.include_router(auth.router, prefix=f"{API_BASE_PREFIX}/auth", tags=["auth"])
+    app.include_router(auth.user_router, prefix=f"{API_BASE_PREFIX}", tags=["auth"])
     app.include_router(products.router, prefix=f"{API_BASE_PREFIX}/products", tags=["products"])
     app.include_router(assets.router, prefix=f"{API_BASE_PREFIX}/assets", tags=["assets"])
     app.include_router(content.router, prefix=f"{API_BASE_PREFIX}/content", tags=["content"])
@@ -333,6 +334,9 @@ def create_app() -> FastAPI:
 
     app.include_router(
         auth.router, prefix=f"{LEGACY_API_PREFIX}/auth", tags=["auth"], deprecated=True
+    )
+    app.include_router(
+        auth.user_router, prefix=f"{LEGACY_API_PREFIX}", tags=["auth"], deprecated=True
     )
     app.include_router(
         products.router,

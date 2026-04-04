@@ -87,6 +87,7 @@ from app.services.domain_rules import validate_registration_status_change
 from app.services.errors import BusinessRuleViolation
 
 router = APIRouter()
+user_router = APIRouter()
 USERNAME_RE = re.compile(r"^[A-Za-z0-9_.-]{3,64}$")
 
 
@@ -559,6 +560,7 @@ def logout(request: Request, response: Response, db: Session = Depends(get_db)) 
     return {"ok": "true"}
 
 
+@user_router.delete("/user/account")
 @router.delete("/account")
 def delete_account(
     response: Response,

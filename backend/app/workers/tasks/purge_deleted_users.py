@@ -22,13 +22,18 @@ def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
-def purge_deleted_users(grace_period_days: int = 30) -> dict[str, int]:
+def purge_deleted_users(
+    grace_period_days: int = 30,
+    db: Session | None = None,
+) -> dict[str, int]:
     """
     Permanently delete users who requested deletion more than grace_period_days ago.
 
     Returns statistics about the purge operation.
     """
-    db = SessionLocal()
+    own_session = db is None
+    if db is None:
+        db = SessionLocal()
     try:
         stats = {
             "users_purged": 0,
@@ -57,18 +62,25 @@ def purge_deleted_users(grace_period_days: int = 30) -> dict[str, int]:
                 user_id = user.id
                 username = user.username
 
-                # Delete all auth sessions for this user
+                # Delete all auth sessions for this user and collect their token JTIs
                 sessions = db.query(AuthSession).filter(
                     AuthSession.user_id == user_id
                 ).all()
+                revoked_jtis: set[str] = set()
                 for session in sessions:
+                    if session.refresh_jti:
+                        revoked_jtis.add(session.refresh_jti)
+                    if session.last_access_jti:
+                        revoked_jtis.add(session.last_access_jti)
                     db.delete(session)
                 stats["sessions_deleted"] += len(sessions)
 
-                # Revoke and cleanup all revoked tokens for this user
-                revoked_tokens = db.query(RevokedToken).filter(
-                    RevokedToken.user_id == user_id
-                ).all()
+                # Remove revoked tokens that belong to the deleted sessions
+                revoked_tokens = []
+                if revoked_jtis:
+                    revoked_tokens = db.query(RevokedToken).filter(
+                        RevokedToken.jti.in_(list(revoked_jtis))
+                    ).all()
                 for token in revoked_tokens:
                     db.delete(token)
                 stats["tokens_revoked"] += len(revoked_tokens)
@@ -127,7 +139,8 @@ def purge_deleted_users(grace_period_days: int = 30) -> dict[str, int]:
         return stats
 
     finally:
-        db.close()
+        if own_session:
+            db.close()
 
 
 if __name__ == "__main__":

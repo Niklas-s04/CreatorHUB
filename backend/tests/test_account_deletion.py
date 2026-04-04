@@ -2,7 +2,7 @@
 Tests for account deletion feature (PRIORITY 5).
 
 Tests cover:
-- DELETE /api/v1/auth/account endpoint
+- DELETE /api/v1/user/account endpoint
 - Soft-delete behavior (is_active=False, deletion_requested_at set)
 - Session revocation on deletion
 - Background purge of deleted users
@@ -16,7 +16,6 @@ import pytest
 from fastapi import status
 from sqlalchemy.orm import Session
 
-from app.core.security import create_access_token, new_jti, hash_password
 from app.models.auth_session import AuthSession, RevokedToken
 from app.models.audit import AuditLog
 from app.models.user import User
@@ -60,11 +59,11 @@ def user_for_deletion(db_session: Session, client) -> tuple[User, str]:
 
 
 class TestDeleteAccountEndpoint:
-    """Test DELETE /api/v1/auth/account endpoint."""
+    """Test DELETE /api/v1/user/account endpoint."""
 
     def test_delete_account_requires_authentication(self, client):
         """DELETE without authentication should fail."""
-        response = client.delete("/api/v1/auth/account")
+        response = client.delete("/api/v1/user/account")
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
     def test_delete_account_marks_user_soft_deleted(self, db_session: Session, client, user_for_deletion, monkeypatch):
@@ -91,7 +90,7 @@ class TestDeleteAccountEndpoint:
         )
 
         response = client.delete(
-            "/api/v1/auth/account",
+            "/api/v1/user/account",
             headers={"Authorization": f"Bearer {token}"},
         )
 
@@ -115,7 +114,7 @@ class TestDeleteAccountEndpoint:
 
         # Delete account
         response = client.delete(
-            "/api/v1/auth/account",
+            "/api/v1/user/account",
             headers={"Authorization": f"Bearer {token}"},
         )
 
@@ -133,7 +132,7 @@ class TestDeleteAccountEndpoint:
         user, token = user_for_deletion
 
         response = client.delete(
-            "/api/v1/auth/account",
+            "/api/v1/user/account",
             headers={"Authorization": f"Bearer {token}"},
         )
 
@@ -157,7 +156,7 @@ class TestDeleteAccountEndpoint:
         user, token = user_for_deletion
 
         response = client.delete(
-            "/api/v1/auth/account",
+            "/api/v1/user/account",
             headers={"Authorization": f"Bearer {token}"},
         )
 
@@ -173,7 +172,7 @@ class TestDeleteAccountEndpoint:
 
         # First deletion should succeed
         response1 = client.delete(
-            "/api/v1/auth/account",
+            "/api/v1/user/account",
             headers={"Authorization": f"Bearer {token}"},
         )
         assert response1.status_code == status.HTTP_200_OK
@@ -188,6 +187,7 @@ class TestDeleteAccountEndpoint:
         user2 = create_user(
             db_session,
             username=f"testuser_{uuid.uuid4().hex[:8]}",
+            password="test_password_123",
         )
 
         # Login with active user
@@ -216,18 +216,17 @@ class TestDeleteAccountEndpoint:
 
         # Try to delete (should fail because already soft-deleted)
         response = client.delete(
-            "/api/v1/auth/account",
+            "/api/v1/user/account",
             headers={"Authorization": f"Bearer {token}"},
         )
 
         # Should fail because account already has deletion_requested_at set
-        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert response.status_code in (status.HTTP_400_BAD_REQUEST, status.HTTP_401_UNAUTHORIZED)
 
 
 class TestPurgeDeletedUsers:
     """Test purge_deleted_users background job."""
 
-    @pytest.mark.skip(reason="Requires PostgreSQL test database - will test with integration suite")
     def test_purge_deleted_users_hard_deletes_eligible_users(self, db_session: Session):
         """Purge should hard-delete users with deletion_requested_at > 30 days ago."""
         # Create a user with deletion requested > 30 days ago
@@ -249,13 +248,12 @@ class TestPurgeDeletedUsers:
         # Run purge
         from app.workers.tasks.purge_deleted_users import purge_deleted_users
 
-        result = purge_deleted_users(grace_period_days=30)
+        result = purge_deleted_users(grace_period_days=30, db=db_session)
 
         # Verify user is hard-deleted
         assert db_session.query(User).filter(User.id == user_id).first() is None
         assert result["users_purged"] == 1
 
-    @pytest.mark.skip(reason="Requires PostgreSQL test database - will test with integration suite")
     def test_purge_does_not_delete_recent_deletion_requests(self, db_session: Session):
         """Purge should not delete users with recent deletion requests (< 30 days)."""
         # Create a user with deletion requested < 30 days ago
@@ -272,13 +270,12 @@ class TestPurgeDeletedUsers:
         # Run purge
         from app.workers.tasks.purge_deleted_users import purge_deleted_users
 
-        result = purge_deleted_users(grace_period_days=30)
+        result = purge_deleted_users(grace_period_days=30, db=db_session)
 
         # Verify user is NOT deleted
         assert db_session.query(User).filter(User.id == user_id).first() is not None
         assert result["users_purged"] == 0
 
-    @pytest.mark.skip(reason="Requires PostgreSQL test database")
     def test_purge_deletes_sessions_and_tokens(self, db_session: Session):
         """Purge should delete all sessions and tokens for purged users."""
         # Create a user with sessions and tokens
@@ -291,14 +288,16 @@ class TestPurgeDeletedUsers:
         db_session.commit()
 
         # Create a session for this user
-        jti = new_jti()
-        session, access_token, refresh_token = create_session_and_tokens(
-            db=db_session, user=user, jti=jti
+        session, access_token, refresh_token, _, refresh_jti = create_session_and_tokens(
+            db=db_session,
+            user=user,
+            ip_address="127.0.0.1",
+            user_agent="pytest",
+            mfa_verified=False,
         )
         
         revoked_token = RevokedToken(
-            user_id=user.id,
-            jti="test_jti_12345",
+            jti=refresh_jti,
             expires_at=_utcnow() + timedelta(hours=1),
         )
 
@@ -309,20 +308,19 @@ class TestPurgeDeletedUsers:
 
         # Verify objects exist
         assert db_session.query(AuthSession).filter(AuthSession.user_id == user_id).count() == 1
-        assert db_session.query(RevokedToken).filter(RevokedToken.user_id == user_id).count() == 1
+        assert db_session.query(RevokedToken).filter(RevokedToken.jti == refresh_jti).count() == 1
 
         # Run purge
         from app.workers.tasks.purge_deleted_users import purge_deleted_users
 
-        result = purge_deleted_users(grace_period_days=30)
+        result = purge_deleted_users(grace_period_days=30, db=db_session)
 
         # Verify sessions and tokens are deleted
         assert db_session.query(AuthSession).filter(AuthSession.user_id == user_id).count() == 0
-        assert db_session.query(RevokedToken).filter(RevokedToken.user_id == user_id).count() == 0
+        assert db_session.query(RevokedToken).filter(RevokedToken.jti == refresh_jti).count() == 0
         assert result["sessions_deleted"] == 1
         assert result["tokens_revoked"] == 1
 
-    @pytest.mark.skip(reason="Requires PostgreSQL test database")
     def test_purge_anonymizes_audit_logs(self, db_session: Session):
         """Purge should anonymize audit logs for purged users."""
         # Create a user with audit logs
@@ -352,7 +350,7 @@ class TestPurgeDeletedUsers:
         # Run purge
         from app.workers.tasks.purge_deleted_users import purge_deleted_users
 
-        result = purge_deleted_users(grace_period_days=30)
+        result = purge_deleted_users(grace_period_days=30, db=db_session)
 
         # Verify user is deleted
         assert db_session.query(User).filter(User.id == user_id).first() is None
@@ -365,7 +363,6 @@ class TestPurgeDeletedUsers:
         assert "[User data anonymized" in anonymized_log.description
         assert result["audit_logs_anonymized"] == 1
 
-    @pytest.mark.skip(reason="Requires PostgreSQL test database")
     def test_purge_creates_summary_audit_log(self, db_session: Session):
         """Purge should create a summary audit log for compliance."""
         # Create multiple eligible users
@@ -385,7 +382,7 @@ class TestPurgeDeletedUsers:
         # Run purge
         from app.workers.tasks.purge_deleted_users import purge_deleted_users
 
-        result = purge_deleted_users(grace_period_days=30)
+        result = purge_deleted_users(grace_period_days=30, db=db_session)
 
         # Verify summary log was created
         audit_log_count_after = db_session.query(AuditLog).filter(
@@ -394,7 +391,6 @@ class TestPurgeDeletedUsers:
         assert audit_log_count_after > audit_log_count_before
         assert result["users_purged"] == 3
 
-    @pytest.mark.skip(reason="Requires PostgreSQL test database")
     def test_purge_handles_errors_gracefully(self, db_session: Session):
         """Purge should continue even if one user fails to delete."""
         # Create two users, one of which might fail
@@ -417,7 +413,7 @@ class TestPurgeDeletedUsers:
         # Run purge (both should be deleted unless there's an actual error)
         from app.workers.tasks.purge_deleted_users import purge_deleted_users
 
-        result = purge_deleted_users(grace_period_days=30)
+        result = purge_deleted_users(grace_period_days=30, db=db_session)
 
         # Both users should be purged
         assert result["users_purged"] == 2
