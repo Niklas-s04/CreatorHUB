@@ -31,3 +31,6 @@ class User(Base, UUIDMixin, TimestampMixin):
     mfa_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
     mfa_secret: Mapped[str | None] = mapped_column(String(128), nullable=True)
     mfa_recovery_codes: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
+    deletion_requested_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True
+    )

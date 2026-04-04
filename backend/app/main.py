@@ -47,6 +47,7 @@ from app.db.session import engine
 from app.schemas.common import ErrorResponse
 from app.seed import bootstrap_if_needed
 from app.services.auto_archive import auto_archive_daemon
+from app.services.purge_deleted_users_daemon import purge_deleted_users_daemon
 
 logger = logging.getLogger(__name__)
 
@@ -76,6 +77,7 @@ def _initialize_runtime_resources(app: FastAPI) -> None:
     app.state.startup_complete = False
     app.state.bootstrap_complete = False
     app.state.auto_archive_task = None
+    app.state.purge_deleted_users_task = None
     app.state.observability_task = None
     app.state.redis_client = None
 
@@ -98,6 +100,10 @@ def _initialize_runtime_resources(app: FastAPI) -> None:
         loop = asyncio.get_running_loop()
         app.state.auto_archive_task = loop.create_task(auto_archive_daemon())
 
+    # Always enable purge_deleted_users daemon (no config flag needed for compliance)
+    loop = asyncio.get_running_loop()
+    app.state.purge_deleted_users_task = loop.create_task(purge_deleted_users_daemon())
+
     if settings.OBSERVABILITY_MONITOR_ENABLED:
         loop = asyncio.get_running_loop()
         app.state.observability_task = loop.create_task(observability_monitor_daemon(app, settings))
@@ -111,6 +117,12 @@ async def _shutdown_runtime_resources(app: FastAPI) -> None:
         task.cancel()
         with suppress(asyncio.CancelledError):
             await task
+
+    purge_task = getattr(app.state, "purge_deleted_users_task", None)
+    if purge_task:
+        purge_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await purge_task
 
     obs_task = getattr(app.state, "observability_task", None)
     if obs_task:

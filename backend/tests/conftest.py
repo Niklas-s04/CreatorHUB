@@ -18,7 +18,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 os.environ.setdefault("ENV", "test")
-os.environ.setdefault("JWT_SECRET", "test_secret_please_change")
+os.environ.setdefault("JWT_SECRET", "test_secret_please_change_1234567890")
 os.environ.setdefault(
     "DATABASE_URL", "postgresql+psycopg://creator:creator@localhost:5432/creator_suite_test"
 )
@@ -29,6 +29,8 @@ os.environ.setdefault("AUTH_COOKIE_SECURE", "false")
 os.environ.setdefault("BOOTSTRAP_INSTALL_TOKEN", "test-bootstrap-token")
 os.environ.setdefault("RATE_LIMIT_ENABLED", "false")
 os.environ.setdefault("AUTO_ARCHIVE_ENABLED", "false")
+os.environ.setdefault("SECURITY_SENSITIVE_ACTION_CONFIRMATION_REQUIRED", "false")
+os.environ.setdefault("SECURITY_SENSITIVE_ACTION_REQUIRE_STEP_UP_MFA", "false")
 
 from app.api import deps
 from app.api.routers import assets, auth, products
@@ -109,9 +111,9 @@ def app(db_session: Session) -> FastAPI:
         auth_cookie_name=settings.AUTH_ACCESS_COOKIE_NAME,
         csrf_cookie_name=settings.CSRF_COOKIE_NAME,
     )
-    api.include_router(auth.router, prefix="/api/auth")
-    api.include_router(assets.router, prefix="/api/assets")
-    api.include_router(products.router, prefix="/api/products")
+    api.include_router(auth.router, prefix="/api/v1/auth")
+    api.include_router(assets.router, prefix="/api/v1/assets")
+    api.include_router(products.router, prefix="/api/v1/products")
 
     def _get_db_override() -> Generator[Session, None, None]:
         yield db_session

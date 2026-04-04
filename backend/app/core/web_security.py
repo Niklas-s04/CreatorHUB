@@ -223,7 +223,11 @@ class CsrfProtectionMiddleware(BaseHTTPMiddleware):
         self.auth_cookie_name = auth_cookie_name
         self.csrf_cookie_name = csrf_cookie_name
         self.unsafe_methods = {"POST", "PUT", "PATCH", "DELETE"}
-        self.exempt_paths = {"/api/auth/token"}
+        self.exempt_paths = {
+            "/api/auth/token",
+            "/api/v1/auth/token",
+            "/api/v1/auth/account",  # Allow account deletion without CSRF - requires bearer token
+        }
 
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
         if request.method not in self.unsafe_methods:

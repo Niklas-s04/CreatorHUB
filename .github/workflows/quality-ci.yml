@@ -29,6 +29,9 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt -r requirements-dev.txt
 
+      - name: Validate deployment secrets
+        run: cd .. && python scripts/validate-secrets.py
+
       - name: Lint backend (ruff)
         run: ruff check app tests
 

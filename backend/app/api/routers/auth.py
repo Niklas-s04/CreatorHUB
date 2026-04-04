@@ -559,6 +559,73 @@ def logout(request: Request, response: Response, db: Session = Depends(get_db)) 
     return {"ok": "true"}
 
 
+@router.delete("/account")
+def delete_account(
+    response: Response,
+    current_user: User = Depends(get_current_user),
+    sensitive_action: SensitiveActionContext = Depends(require_sensitive_action("delete_account")),
+    db: Session = Depends(get_db),
+) -> dict[str, str]:
+    """
+    Request account deletion for the current user.
+    Schedules account for deletion after 30-day grace period.
+    Requires sensitive action confirmation (MFA step-up if enabled).
+    """
+    if not current_user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Account is already inactive",
+        )
+
+    if current_user.deletion_requested_at is not None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Account deletion already requested",
+        )
+
+    # Soft-delete: mark for deletion and deactivate
+    current_user.is_active = False
+    current_user.deletion_requested_at = _utcnow()
+    db.add(current_user)
+
+    # Revoke all active sessions
+    active_sessions = (
+        db.query(AuthSession)
+        .filter(
+            AuthSession.user_id == current_user.id,
+            AuthSession.revoked_at.is_(None),
+        )
+        .all()
+    )
+    for session in active_sessions:
+        revoke_session(db, session=session, reason="account_deletion_requested")
+
+    # Create audit log
+    record_audit_log(
+        db=db,
+        actor=current_user,
+        action="auth.user.deletion_requested",
+        entity_type="User",
+        entity_id=str(current_user.id),
+        description=f"User {current_user.username} requested account deletion. Account will be permanently purged after 30 days.",
+        metadata={
+            "request_id": sensitive_action.request_id,
+            "mfa_verified": sensitive_action.step_up_satisfied,
+            "confirmation_provided": sensitive_action.confirmation_provided,
+        },
+    )
+
+    db.commit()
+
+    # Clear auth cookies
+    _clear_auth_cookies(response)
+
+    return {
+        "ok": "true",
+        "message": "Account scheduled for deletion. Permanent removal will occur after 30 days.",
+    }
+
+
 @router.post("/register-request", response_model=RegisterRequestOut)
 def register_request(
     payload: RegisterRequestIn, db: Session = Depends(get_db)
