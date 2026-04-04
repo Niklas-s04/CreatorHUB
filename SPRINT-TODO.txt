@@ -1,0 +1,318 @@
+CREATORHUB - SPRINT TODO LISTE (IMMEDIATELY ACTIONABLE)
+
+Startdatum: 4. April 2026
+Fokus: Phase 1 - Security Foundation (Week 1-2)
+Status: Ready to Go
+
+---
+
+PRIORITY 1: SECRETS & ENVIRONMENT (TAG 1)
+
+TASK 1.1: ENTFERNE HARDCODED DEFAULTS
+
+[ ] File: backend/app/core/config.py
+    - Aendere JWT_SECRET: str = "change_me" zu JWT_SECRET: str = Field(..., min_length=32)
+    - Aendere BOOTSTRAP_ADMIN_PASSWORD: str = "admin" zu BOOTSTRAP_ADMIN_PASSWORD: str = Field(..., min_length=12)
+    - Setze AUTH_COOKIE_SECURE: bool = True
+    - Setze AUTH_COOKIE_SAMESITE: Literal["lax", "strict", "none"] = "strict"
+
+[ ] File: docker-compose.yml
+    - Entferne POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-creator}
+    - Aendere zu: POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?}
+
+[ ] File: .env.example
+    - Erstelle Template mit leeren sensitiven Vars
+    - Keine Defaults für Secrets
+
+Test: python -c "from app.core.config import settings; print(len(settings.JWT_SECRET))"
+
+---
+
+TASK 1.2: IMPLEMENTIERE PRE-DEPLOY SECRET-VALIDATOR
+
+[ ] Neuer File: scripts/validate-secrets.sh
+    - Check JWT_SECRET mindestens 32 Chars
+    - Check POSTGRES_PASSWORD existiert
+    - Check JSON_SECRET != "change_me"
+    - Exit 1 bei Fehler
+
+[ ] Integriere in .github/workflows/ci.yml
+    - name: Validate Secrets
+      run: bash scripts/validate-secrets.sh
+
+---
+
+TASK 1.3: TESTE SECRETS SETUP
+
+[ ] Kopiere .env.example zu .env.test
+[ ] Fülle mit Test-Werten
+[ ] Starte App: docker-compose up
+[ ] Prüfe: App startet ohne Fehler
+
+---
+
+PRIORITY 2: AUTH & COOKIES (TAG 2)
+
+TASK 2.1: AKTIVIERE COOKIE-HAERTUNG
+
+[ ] Prüfe backend/app/api/routers/auth.py - _set_auth_cookies()
+    - httponly=True vorhanden?
+    - secure=settings.AUTH_COOKIE_SECURE?
+    - samesite=settings.AUTH_COOKIE_SAMESITE?
+    - domain=settings.AUTH_COOKIE_DOMAIN?
+
+[ ] Test ablaufen
+    - Login durchführen
+    - Browser DevTools -> Application -> Cookies
+    - Prüfe: Secure, HttpOnly, SameSite=Strict Flags
+
+---
+
+TASK 2.2: IMPLEMENTIERE CSRF-TOKEN-ROTATION AUF LOGOUT
+
+[ ] Fundstelle: backend/app/api/routers/auth.py - logout() Endpoint
+
+[ ] Ergänze:
+    - revoke_session(db, auth.session.id)
+    - response.delete_cookie(AUTH_ACCESS_COOKIE_NAME, ...)
+    - response.delete_cookie(AUTH_REFRESH_COOKIE_NAME, ...)
+    - response.delete_cookie(CSRF_COOKIE_NAME, ...)
+    - Return Response()
+
+[ ] Schreibe Test: backend/tests/test_auth_csrf_rotation.py
+    - Login -> Get CSRF Token
+    - Logout
+    - Versuche mit altem CSRF -> 403 erwartet
+
+[ ] Run: pytest backend/tests/test_auth_csrf_rotation.py -v
+
+---
+
+PRIORITY 3: CSP & SECURITY HEADERS (TAG 3)
+
+TASK 3.1: VERSCHAERFE CSP
+
+[ ] Fundstelle: backend/app/core/web_security.py#L73
+
+[ ] Ersetze CSP Header mit:
+    default-src 'none';
+    script-src 'self';
+    style-src 'self';
+    img-src 'self';
+    font-src 'self';
+    connect-src 'self';
+    base-uri 'self';
+    frame-ancestors 'none';
+    object-src 'none';
+    form-action 'self';
+    upgrade-insecure-requests;
+    require-trusted-types-for 'script'
+
+    Hinweis: Entfernt data: blob: aus img-src
+
+[ ] Browser Test
+    - Öffne App in Browser
+    - DevTools Console
+    - Prüfe auf CSP-Violations
+    - Sollte keine mehr geben
+
+---
+
+TASK 3.2: AKTIVIERE HSTS-PRELOAD
+
+[ ] Fundstelle: backend/app/core/web_security.py#L68
+
+[ ] Aendere zu:
+    Strict-Transport-Security: max-age=31536000; includeSubDomains; preload
+
+---
+
+TASK 3.3: SCHREIBE HEADER-VALIDIERUNG-TESTS
+
+[ ] Neuer File: backend/tests/test_security_headers.py
+
+[ ] Tests schreiben:
+    - test_x_content_type_options_nosniff
+    - test_x_frame_options_deny
+    - test_csp_no_unsafe_inline
+    - test_hsts_preload_present
+    - test_cors_config_valid
+
+[ ] Run: pytest backend/tests/test_security_headers.py -v
+
+---
+
+PRIORITY 4: SSRF & UPLOAD-SECURITY (TAG 4)
+
+TASK 4.1: CENTRALISIERE OUTBOUND-REQUESTS
+
+[ ] Neuer File: backend/app/services/outbound.py
+
+[ ] Implementiere fetch_external() mit:
+    - URL Parse + HTTPS-Check
+    - Allowlist-Check
+    - DNS-Resolution
+    - Private IP Block
+    - Size-Limit
+    - Timeout-Limit
+
+[ ] Ersetze alle requests.get() Calls:
+    - Search: grep -r "requests.get" backend/app/services/
+    - Ersetze mit: from app.services.outbound import fetch_external
+
+[ ] Tests: backend/tests/test_ssrf_protection.py
+    - test_ssrf_localhost_blocked
+    - test_ssrf_private_ip_blocked
+    - test_ssrf_oversized_response_rejected
+
+[ ] Run: pytest backend/tests/test_ssrf_protection.py -v
+
+---
+
+TASK 4.2: IMPLEMENTIERE UPLOAD-MAGIC-BYTE-VALIDATION
+
+[ ] Install: pip install python-magic
+
+[ ] File: backend/app/services/storage.py
+
+[ ] Ergänze validate_upload_file():
+    - import magic
+    - detected_mime = magic.from_buffer(file_bytes, mime=True)
+    - Prüfe gegen ALLOWED_MIMES
+    - Raise ValueError bei Mismatch
+
+[ ] Ergänze Bild-Dimension-Check:
+    - from PIL import Image
+    - img = Image.open(io.BytesIO(file_bytes))
+    - Check: width <= 8000, height <= 8000
+    - Check: pixels <= 30_000_000 (Bomb-Protection)
+
+[ ] Tests: backend/tests/test_upload_validation.py
+    - test_magic_byte_validation
+    - test_image_dimension_limit
+    - test_image_bomb_rejected
+
+[ ] Run: pytest backend/tests/test_upload_validation.py -v
+
+---
+
+PRIORITY 5: ACCOUNT-DELETION (CRITICAL - TAG 5)
+
+TASK 5.1: IMPLEMENTIERE DELETE ACCOUNT ENDPOINT
+
+[ ] Neuer Endpoint: backend/app/api/routers/auth.py
+    DELETE /api/v1/user/account
+
+[ ] Implementation:
+    - @router.delete("/api/v1/user/account")
+    - Require Sensitive Action
+    - Audit-Log: "USER_REQUESTED_DELETION"
+    - user.deletion_requested_at = now()
+    - user.is_active = False
+    - Revoke all AuthSessions
+    - Response: 200 "Account scheduled for deletion"
+
+---
+
+TASK 5.2: IMPLEMENTIERE HARD-DELETE BACKGROUND-JOB
+
+[ ] Neuer File: backend/app/workers/tasks/purge_deleted_users.py
+
+[ ] Implementation:
+    - Query Users mit deletion_requested_at < now() - 30 days
+    - Hard-Delete: User, AuthSessions, RevokedTokens
+    - Anonymize: AuditLogs (set user_id to NULL)
+    - Log: "USER_PERMANENTLY_DELETED"
+
+[ ] Integration in run_worker:
+    - import schedule
+    - schedule.every().day.at("02:00").do(purge_deleted_users)
+
+---
+
+TASK 5.3: SCHREIBE DELETION-TEST-SUITE
+
+[ ] Neuer File: backend/tests/test_account_deletion.py
+
+[ ] Tests:
+    - test_delete_account_requires_auth
+    - test_delete_account_schedules_deletion
+    - test_deletion_requested_at_set
+    - test_user_soft_deleted_is_inactive
+    - test_hard_delete_purges_user_record
+    - test_audit_logs_anonymized_after_purge
+
+[ ] Run: pytest backend/tests/test_account_deletion.py -v
+
+---
+
+END-OF-DAY CHECKLIST
+
+TAG 1:
+[ ] Secrets aktualisiert
+[ ] .env.example erstellt
+[ ] Pre-Deploy-Validator funktioniert
+[ ] App startet mit Test-.env
+Status: Ready for TAG 2
+
+TAG 2:
+[ ] Cookie-Haertung aktiv
+[ ] CSRF-Rotation implementiert
+[ ] CSRF-Test grün
+[ ] Browser Test nicht fehlgeschlagen
+Status: Ready for TAG 3
+
+TAG 3:
+[ ] CSP verschaerft
+[ ] HSTS-Preload aktiv
+[ ] Security-Header-Tests schreiben + grün
+[ ] Browser DevTools: Keine CSP-Violations
+Status: Ready for TAG 4
+
+TAG 4:
+[ ] Outbound-Service erstellt
+[ ] Upload-Validierung aktiv
+[ ] SSRF-Tests grün
+[ ] Upload-Tests grün
+Status: Ready for TAG 5
+
+TAG 5:
+[ ] Account-Deletion-Endpoint functional
+[ ] Purge-Job läuft
+[ ] Deletion-Tests grün
+[ ] Alle 5 Priority-Checks fertig
+Status: Phase 1 COMPLETE
+
+---
+
+QUICK COMMANDS
+
+Run all new tests:
+pytest backend/tests/test_security_headers.py -v
+pytest backend/tests/test_auth_csrf_rotation.py -v
+pytest backend/tests/test_ssrf_protection.py -v
+pytest backend/tests/test_upload_validation.py -v
+pytest backend/tests/test_account_deletion.py -v
+
+Run full coverage:
+pytest backend/tests --cov --cov-fail-under=70
+
+Validate secrets:
+bash scripts/validate-secrets.sh
+
+Set permissions on validator:
+chmod +x scripts/validate-secrets.sh
+
+---
+
+FINAL NOTES
+
+- Alle Tasks sind independent und können parallel sein
+- Tests sollten nach jedem Task grün sein
+- Gitcommits nach jedem Task: git commit -m "Task X.Y: Description"
+- Am Freitag: Review & Merge zu main
+- Nächste Phase 2 startet Montag: Privacy & Compliance
+
+Status: Ready to Go
+Complexity: Medium (40-50 Hours)
+Target: Friday EOD (Tag 5)

@@ -51,12 +51,12 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers.setdefault("Cross-Origin-Resource-Policy", "same-origin")
         response.headers.setdefault(
             "Content-Security-Policy",
-            "default-src 'self'; base-uri 'self'; frame-ancestors 'none'; object-src 'none'; form-action 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; connect-src 'self'; font-src 'self'; upgrade-insecure-requests",
+            "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; font-src 'self'; connect-src 'self'; base-uri 'self'; frame-ancestors 'none'; object-src 'none'; form-action 'self'; upgrade-insecure-requests; require-trusted-types-for 'script'",
         )
 
         if self.env == "prod" and self._is_https(request) and self.hsts_seconds > 0:
             response.headers.setdefault(
-                "Strict-Transport-Security", f"max-age={self.hsts_seconds}; includeSubDomains"
+                "Strict-Transport-Security", f"max-age={self.hsts_seconds}; includeSubDomains; preload"
             )
 
         return response

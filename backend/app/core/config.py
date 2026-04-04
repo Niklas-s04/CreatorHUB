@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Literal
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -13,7 +14,7 @@ class Settings(BaseSettings):
 
     DATABASE_URL: str = "postgresql+psycopg://creator:creator@localhost:5432/creator_suite"
 
-    JWT_SECRET: str = "change_me"
+    JWT_SECRET: str = Field(..., min_length=32)
     JWT_ACCESS_EXPIRE_MINUTES: int = 15
     JWT_REFRESH_EXPIRE_MINUTES: int = 60 * 24 * 14
 
@@ -48,7 +49,7 @@ class Settings(BaseSettings):
     AUTH_ACCESS_COOKIE_NAME: str = "creatorhub_access"
     AUTH_REFRESH_COOKIE_NAME: str = "creatorhub_refresh"
     AUTH_COOKIE_SECURE: bool = True
-    AUTH_COOKIE_SAMESITE: Literal["lax", "strict", "none"] = "lax"
+    AUTH_COOKIE_SAMESITE: Literal["lax", "strict", "none"] = "strict"
     AUTH_COOKIE_DOMAIN: str | None = None
     AUTH_ACCESS_COOKIE_MAX_AGE_SECONDS: int = 60 * 15
     AUTH_REFRESH_COOKIE_MAX_AGE_SECONDS: int = 60 * 60 * 24 * 14
@@ -95,7 +96,7 @@ class Settings(BaseSettings):
     ENABLE_OPTIONAL_MALWARE_SCAN: bool = False
 
     BOOTSTRAP_ADMIN_USERNAME: str = "admin"
-    BOOTSTRAP_ADMIN_PASSWORD: str = "admin"
+    BOOTSTRAP_ADMIN_PASSWORD: str = Field(..., min_length=12)
     BOOTSTRAP_INSTALL_TOKEN: str = ""
 
     AUTO_ARCHIVE_ENABLED: bool = True

@@ -1,0 +1,38 @@
+============================= test session starts =============================
+platform win32 -- Python 3.11.9, pytest-8.3.5, pluggy-1.5.0
+rootdir: C:\Users\nikla\Nextcloud\Projekte\CreatorHUB\Projekt\backend
+configfile: pytest.ini
+plugins: anyio-4.9.0, cov-6.0.0
+collected 10 items
+
+backend\tests\test_security_headers.py ......F.F.                        [100%]
+
+================================== FAILURES ===================================
+__________________________ test_referrer_policy_set ___________________________
+backend\tests\test_security_headers.py:78: in test_referrer_policy_set
+    assert referrer == "strict-origin-when-cross-origin" or referrer is not None
+E   AssertionError: assert (None == 'strict-origin-when-cross-origin' or None is not None)
+________________________ test_cross_origin_headers_set ________________________
+backend\tests\test_security_headers.py:94: in test_cross_origin_headers_set
+    assert response.headers.get("Cross-Origin-Opener-Policy") == "same-origin"
+E   AssertionError: assert None == 'same-origin'
+E    +  where None = get('Cross-Origin-Opener-Policy')
+E    +    where get = Headers({'content-length': '22', 'content-type': 'application/json'}).get
+E    +      where Headers({'content-length': '22', 'content-type': 'application/json'}) = <Response [404 Not Found]>.headers
+============================== warnings summary ===============================
+..\..\..\..\AppData\Local\Programs\Python\Python311\Lib\site-packages\pydantic\_internal\_config.py:291
+..\..\..\..\AppData\Local\Programs\Python\Python311\Lib\site-packages\pydantic\_internal\_config.py:291
+..\..\..\..\AppData\Local\Programs\Python\Python311\Lib\site-packages\pydantic\_internal\_config.py:291
+..\..\..\..\AppData\Local\Programs\Python\Python311\Lib\site-packages\pydantic\_internal\_config.py:291
+..\..\..\..\AppData\Local\Programs\Python\Python311\Lib\site-packages\pydantic\_internal\_config.py:291
+..\..\..\..\AppData\Local\Programs\Python\Python311\Lib\site-packages\pydantic\_internal\_config.py:291
+  C:\Users\nikla\AppData\Local\Programs\Python\Python311\Lib\site-packages\pydantic\_internal\_config.py:291: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.8/migration/
+    warnings.warn(DEPRECATION_MESSAGE, DeprecationWarning)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ===========================
+FAILED backend\tests\test_security_headers.py::test_referrer_policy_set - Ass...
+FAILED backend\tests\test_security_headers.py::test_cross_origin_headers_set
+=================== 2 failed, 8 passed, 6 warnings in 2.33s ===================
+Environment loaded from .env.test
+JWT_SECRET length in env: 65

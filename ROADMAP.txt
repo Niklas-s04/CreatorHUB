@@ -1,0 +1,806 @@
+CREATORHUB ROADMAP - DETAILLIERTE ENTWICKLUNGSLISTE
+
+Projekt-Status: ~60% Production-Ready
+Letztes Update: 4. April 2026
+Ziel: Production-Ready Release mit vollständiger Security, Privacy & Quality
+
+---
+
+PRIORITAETS-MATRIX
+
+BLOCKING - Muss vor Production-Release gelöst sein (Security/Privacy/Legal)
+HIGH - Stark empfohlen vor Release (Risk/Quality/UX)
+MEDIUM - Wichtig, aber kann in nächsten Sprints kommen
+LOW - Nice-to-have, technische Schulden
+
+---
+
+PHASE 1: SECURITY & FOUNDATION (WEEK 1-2) - BLOCKING
+
+1.1 SECRETS & ENVIRONMENT HARDENING
+
+1.1.1 Entferne alle Hardcoded-Defaults
+Status: not-started
+Fundstelle: backend/app/core/config.py, docker-compose.yml, .env.example
+Task: Ersetze JWT_SECRET: "change_me", POSTGRES_PASSWORD: "creator", BOOTSTRAP_ADMIN_PASSWORD: "admin"
+Implementation: 
+  - Change: JWT_SECRET: str = Field(..., min_length=32)
+  - Change: BOOTSTRAP_ADMIN_PASSWORD: str = Field(..., min_length=12)
+  - Change: AUTH_COOKIE_SECURE: bool = True (Production Default)
+  - Change: AUTH_COOKIE_SAMESITE = "strict"
+  - Docker-Compose: ${POSTGRES_PASSWORD:?} statt ${POSTGRES_PASSWORD:-creator}
+Success Criteria:
+  - Keine "change_me", "default", "test" in Prod-Konfiguration
+  - App startet nicht ohne gültige Secrets
+  - Environment-Variablen müssen explizit gesetzt sein
+
+1.1.2 Implementiere Pre-Deployment-Validierung von Secrets
+Status: not-started
+Task: Script scripts/validate-secrets.sh erstellen
+Check: JWT_SECRET mindestens 32 Zeichen, kryptographisch random
+Check: POSTGRES_PASSWORD mindestens 16 Zeichen
+Check: AUTH_COOKIE_DOMAIN explizit gesetzt (nicht None in prod)
+Integration: CI/CD pre-deploy
+Success Criteria:
+  - Script läuft vor Deployment
+  - CI-Pipeline schlägt fehl, wenn Secrets ungültig
+  - Klare Fehlermeldungen für fehlende Variablen
+
+1.1.3 Erzwinge Secrets-Management per .env-Validierung
+Status: not-started
+Implementation:
+  - Config.py: Alle sensitiven Vars mit :? suffix
+  - Pydantic Field() mit min_length Validation
+  - Startup-Check vor App-Start
+Success Criteria:
+  - App-Startup schlägt fehl ohne gültige Secrets
+  - Test: python -c "from app.core.config import settings; print(len(settings.JWT_SECRET))"
+  - Keine Defaults für Production-Secrets
+
+---
+
+1.2 AUTH & COOKIE-HAERTUNG - CRITICAL
+
+1.2.1 Setze AUTH_COOKIE_SECURE=true als Production-Default
+Status: not-started
+Fundstelle: backend/app/core/config.py#L52
+Change: AUTH_COOKIE_SECURE: bool = True
+Implementation: Alle Auth-Cookies nur über HTTPS
+Test: Auth-Flow mit Secure-Cookie testen
+Success Criteria:
+  - Cookies nur über HTTPS
+  - Browser sendet Cookies nicht über HTTP
+
+1.2.2 Erzwinge explizites AUTH_COOKIE_DOMAIN in Production
+Status: not-started
+Fundstelle: backend/app/core/config.py#L53, backend/app/api/routers/auth.py
+Implementation:
+  In main.py oder startup:
+  if not settings.AUTH_COOKIE_DOMAIN and settings.ENV == "prod":
+      raise StartupError("AUTH_COOKIE_DOMAIN must be explicitly set in production")
+Success Criteria:
+  - Startup schlägt fehl ohne Domain in prod
+  - Cookie-Domain-Leaks unmöglich
+
+1.2.3 Aendere SameSite zu "strict" (Production)
+Status: not-started
+Fundstelle: backend/app/core/config.py#L51
+Change: AUTH_COOKIE_SAMESITE: Literal["lax", "strict", "none"] = "strict"
+Rationale: Schützt vor Cross-Site-Request CSRF
+Success Criteria:
+  - Auth-Cookie nur Same-Site
+  - CSRF-Attacken über Cookie-Borders unmöglich
+
+1.2.4 CSRF-Token-Rotation beim Logout implementieren
+Status: not-started
+Fundstelle: backend/app/api/routers/auth.py - Logout-Endpoint
+Implementation:
+  - Alte Session + CSRF revokieren
+  - Neue leere Session mit neuem CSRF erzeugen (optional)
+  - Alle Cookies löschen
+Test: test_csrf_rotation_on_logout
+Success Criteria:
+  - Alter CSRF-Token gilt nach Logout nicht mehr
+  - Keine CSRF-Token-Reuse möglich
+
+---
+
+1.3 CSP & SECURITY HEADERS - CRITICAL
+
+1.3.1 Verschaerfe Content-Security-Policy
+Status: not-started
+Fundstelle: backend/app/core/web_security.py#L73
+Change zu:
+  "Content-Security-Policy",
+  "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; "
+  "font-src 'self'; connect-src 'self'; base-uri 'self'; frame-ancestors 'none'; "
+  "object-src 'none'; form-action 'self'; upgrade-insecure-requests; "
+  "require-trusted-types-for 'script'"
+Entfernung: data: blob: aus img-src
+Zusatz: report-uri /api/v1/security/csp-violations (optional)
+Test: CSP-Violations in Browser DevTools testen
+Success Criteria:
+  - CSP strict, keine unsafe-inline
+  - Keine data: Bilder mehr erlaubt
+  - Browser-Reports für Violations
+
+1.3.2 Aktiviere HSTS-Preload
+Status: not-started
+Fundstelle: backend/app/core/web_security.py#L68
+Change: 
+  "Strict-Transport-Security", 
+  "max-age=31536000; includeSubDomains; preload"
+Success Criteria:
+  - HSTS mit Preload-Flag
+  - HTTPS erzwungen auch bei erstem Besuch
+
+1.3.3 Validiere alle Security-Header in Tests
+Status: not-started
+Task: Test-Suite backend/tests/test_security_headers.py
+Checks:
+  - X-Content-Type-Options: nosniff
+  - X-Frame-Options: DENY
+  - Referrer-Policy: strict-origin-when-cross-origin
+  - COOP, COEP, CORP present
+  - CSP strict
+Success Criteria:
+  - Alle Header-Tests grün
+  - CI/CD läuft diese Tests automatisch
+
+---
+
+1.4 SSRF & OUTBOUND-REQUESTS HAERTEN - CRITICAL
+
+1.4.1 Centralisiere externe Request-Funktion
+Status: not-started
+Fundstelle: Services überall (Image-Downloads, Ollama, Openverse, etc.)
+Task: backend/app/services/outbound.py erstellen
+Implementation:
+  def fetch_external(
+      url: str,
+      timeout: tuple = (5, 20),
+      max_size: int = 8 * 1024 * 1024,
+      allow_private_ips: bool = False
+  ) -> bytes:
+    1. URL-Parse
+    2. Schema: nur HTTPS
+    3. Allowlist-Check
+    4. DNS-Resolution + IP-Validierung
+    5. Private-Range-Block
+    6. DNS-Rebinding-Resistenz
+    7. Redirect-Limit
+    8. Fetch + Size-Limit
+Test:
+  - test_ssrf_localhost_blocked
+  - test_ssrf_private_ip_blocked
+  - test_ssrf_dns_rebinding
+Success Criteria:
+  - Centralized, alle SSRF-Cases protected
+  - Kein direktes requests.get() mehr ohne Validierung
+
+1.4.2 Konfiguriere SSRF-Kontrollen
+Status: not-started
+Fundstelle: backend/app/core/config.py#L82-90
+Korrektur: OUTBOUND_ALLOWLIST_HOSTS mit echten Werten füllen
+Beispiel:
+  OUTBOUND_ALLOWLIST_HOSTS: str = "api.openverse.engineering,commons.wikimedia.org"
+  OUTBOUND_BLOCK_PRIVATE_RANGES: bool = True
+  OUTBOUND_ALLOWED_PORTS: str = "443"
+  OUTBOUND_MAX_REDIRECTS: int = 2
+Success Criteria:
+  - Allowlist aktiv, nur sichere Hosts
+  - Private IPs blocked
+  - Port-Restriction aktiv
+
+1.4.3 Audiere alle externe Request-Stellen
+Status: not-started
+Task: Grep nach requests.get, httpx.get, etc.
+Locations:
+  - cache_download() für Asset-Bilder
+  - OpenGraph-Metadaten
+  - Manufacturer-URLs
+  - Ollama-Calls
+  - Openverse/Wikimedia-API
+Action: Alle durch fetch_external() leiten
+Success Criteria:
+  - Kein direktester requests.get() ohne Validierung
+  - Alle externen Requests zentral kontrolliert
+
+---
+
+1.5 UPLOAD-VALIDIERUNG HAERTEN - CRITICAL
+
+1.5.1 Implementiere Magic-Byte-Validierung
+Status: not-started
+Fundstelle: backend/app/services/storage.py (Upload-Handler)
+Dependencies: python-magic package
+Implementation:
+  import magic
+  def validate_file_type(file_bytes: bytes, expected_mime: str) -> bool:
+      detected = magic.from_buffer(file_bytes, mime=True)
+      Prüfe: detected vs. expected vs. extension
+      if detected not in ALLOWED_MIMES[expected_mime]:
+          raise ValueError("MIME-Type mismatch")
+Test: Upload mit gefälschtem MIME-Type -> rejected
+Success Criteria:
+  - Magic-Bytes validiert, nicht nur Extension/MIME-Header
+  - Keine manipulierte Dateitypen möglich
+
+1.5.2 Implementiere Bild-Dimensions- und Pixel-Limits
+Status: not-started
+Fundstelle: backend/app/services/storage.py
+Implementation:
+  from PIL import Image
+  img = Image.open(io.BytesIO(file_bytes))
+  if img.size[0] > settings.UPLOAD_MAX_IMAGE_WIDTH:
+      raise ValueError("Image too wide")
+  if img.size[0] * img.size[1] > settings.UPLOAD_MAX_IMAGE_PIXELS:
+      raise ValueError("Image has too many pixels (bomb protection)")
+Config: UPLOAD_MAX_IMAGE_WIDTH=8000, UPLOAD_MAX_IMAGE_HEIGHT=8000, UPLOAD_MAX_IMAGE_PIXELS=30_000_000
+Test: Upload mit Bildbombe -> rejected
+Success Criteria:
+  - Imagebot-Protection aktiv
+  - Keine Decompression-Bombs möglich
+
+1.5.3 Neutralisiere Dateinamen
+Status: not-started
+Fundstelle: backend/app/services/storage.py
+Implementation:
+  import secrets, uuid
+  original_filename = secure_filename(file.filename)
+  storage_key = f"{uuid.uuid4().hex}.{file.filename.split('.')[-1]}"
+Success Criteria:
+  - Storage-Keys unpredictable
+  - Pfad-Traversal unmöglich
+  - Originalnamen für Display separat gespeichert
+
+1.5.4 Implementiere Quarantine-Status für Uploads
+Status: not-started
+Fundstelle: backend/app/models/asset.py
+DB-Change: Asset-Status "quarantine" vor "pending_review"
+Implementation:
+  - Upload -> Asset mit status=quarantine
+  - Optionale Malware-Scan (wenn ENABLE_OPTIONAL_MALWARE_SCAN=true)
+  - Admin-Review -> Status wechsel auf pending_review oder approved
+Success Criteria:
+  - Uploads werden nicht sofort sichtbar
+  - Review-Prozess vor Freigabe erzwungen
+
+---
+
+PHASE 2: AUTH, PRIVACY & COMPLIANCE (WEEK 2-3) - BLOCKING
+
+2.1 ACCOUNT-DELETION - CRITICAL GDPR
+
+2.1.1 Implementiere Account-Deletion-Endpoint
+Status: not-started
+Fundstelle: Neuer Endpoint DELETE /api/v1/user/account
+Dependencies: require_sensitive_action, Step-up MFA optional
+Implementation:
+  @router.delete("/api/v1/user/account", dependencies=[Depends(require_sensitive_action)])
+  def delete_account_permanently(
+      user: User = Depends(get_current_user),
+      db: Session = Depends(get_db),
+  ):
+      1. Audit-Log: "USER_REQUESTED_DELETION"
+      2. user.deletion_requested_at = now()
+      3. Soft-Delete mit Hard-Purge nach 30 Tagen (configurable)
+      4. Response: 200 OK, "Account scheduled for deletion in 30 days"
+Success Criteria:
+  - Endpoint vorhanden + Tests grün
+  - GDPR-Conformity gegeben
+
+2.1.2 Implementiere Hard-Delete nach Aufbewahrungsfrist
+Status: not-started
+Task: Background-Job workers/tasks/purge_deleted_users.py
+Implementation:
+  - Query: User mit deletion_requested_at < now() - 30 days
+  - Action: Hard-delete User, AuthSessions, RevokedTokens, AuditLogs
+  - Andere Records: Anonymisieren (user_id -> NULL)
+  - Audit: Log "USER_PERMANENTLY_DELETED" mit timestamp
+Test: Fake user erstellen, deletion starten, Purge-Job ausführen, User weg
+Success Criteria:
+  - Purge-Job läuft täglich
+  - Echte Löschung 30 Tage später
+  - Audit-Trail vorhanden
+
+2.1.3 Test-Suite für Account-Deletion
+Status: not-started
+File: backend/tests/test_account_deletion.py
+Tests:
+  - test_delete_account_requires_auth
+  - test_delete_account_schedules_deletion
+  - test_deletion_requested_at_set
+  - test_hard_delete_purges_all_user_data
+  - test_audit_logs_anonymized_after_purge
+  - test_other_records_anonymized_user_id_null
+Success Criteria:
+  - Alle Tests grün
+  - Coverage >= 80%
+
+---
+
+2.2 DATA PRIVACY & AUDIT POLICY
+
+2.2.1 Definiere klare Audit-Policy
+Status: not-started
+File: Neues Dokument docs/audit-data-policy.md
+Content:
+  State-Changing Only: Create, Update, Delete, Export, Admin-Action -> Log
+  No Read Audit: product.read, asset.view nicht geloggt
+  Sensitive Actions: user_manage, approve_registration, delete_account -> Mandatory
+  Retention:
+    - Audit-Logs: 90 Tage
+    - Security-Events: 90 Tage
+    - App-Logs: 30 Tage
+    - Deleted User Records: ASAP nach Hard-Delete
+Success Criteria:
+  - Policy dokumentiert + in Code umgesetzt
+  - Alle Entwickler kennen die Regeln
+
+2.2.2 Implementiere Audit-Log-Redaction für Sensitive-Fields
+Status: not-started
+Fundstelle: backend/app/services/audit.py
+Task: Wenn Audit-Log password, token, secret, card enthält -> mask
+Implementation:
+  SENSITIVE_FIELDS = {'password', 'token', 'secret', 'cvv', 'ssn', 'mfa_secret'}
+  def redact_audit_data(data: dict) -> dict:
+      for key, value in data.items():
+          if key.lower() in SENSITIVE_FIELDS:
+              data[key] = "***REDACTED***"
+      return data
+Test: test_audit_log_redacts_sensitive_fields
+Success Criteria:
+  - Keine Secrets in Audit-Logs
+  - Redaction automatisch bei jedem Log
+
+2.2.3 Erstelle Privacy-Policy-Technical Dokumentation
+Status: not-started
+File: docs/privacy-policy-technical.md
+Sections:
+  Data Inventory: Welche Daten, wo gesammelt, wie lange retention
+  Account Data: User-Profile, Preferences
+  Audit Data: 90 Tage, dann gelöscht, außer bei Active Investigation
+  Email AI: Prompts nicht geloggt, nur Event "email_generated", keine Retention
+  Image Search: Query & Result gepostet zu Openverse (deren Privacy Policy), kuratiert 7 Tage lokal
+  Observability: OTEL disabled by default, wenn enabled dann PII-filtered
+  Deletion: Hard-Delete nach 30 Tagen ab Anfrage, keine Backups enthalten alte PII
+Success Criteria:
+  - Doku vollständig
+  - Mit Links zu Quellen (Openverse Privacy Policy, etc.)
+  - Mit Team kommuniziert
+
+2.2.4 Implementiere Cookie-Consent-Banner (Frontend)
+Status: not-started
+File: frontend/src/components/CookieConsentBanner.tsx
+Content:
+  Banner zeigt: "Wir setzen Cookies für Auth & CSRF-Schutz (notwendig, ohne Abschaltung)"
+  Banner zeigt: "Optional: Analytics aktivieren? [Ablehnen|Akzeptieren]"
+  Speichere in localStorage: consent_level = "necessary" | "all"
+  Nutze für: Analytics & Telemetry-SDK aktivierung
+Integration: Zeige Banner beim First-Visit, oder Link in Footer
+Success Criteria:
+  - Banner sichtbar
+  - Consent-State persistiert
+  - GDPR-Conformity gegeben
+
+---
+
+2.3 SESSION & MFA HAERTUNG
+
+2.3.1 Reduziere Session-Timeout-Defaults
+Status: not-started
+Fundstelle: backend/app/core/config.py#L58-61
+Changes:
+  SESSION_IDLE_TIMEOUT_MINUTES: int = 30  (War: 60)
+  SESSION_ABSOLUTE_TIMEOUT_MINUTES: int = 60 * 24 * 7  (War: 30 Tage)
+  JWT_REFRESH_EXPIRE_MINUTES: int = 60 * 24 * 7  (Align mit Session)
+Success Criteria:
+  - Kürzere Timeouts
+  - Alignment zwischen Tokens und Sessions
+
+2.3.2 Aktiviere Step-up MFA für Sensitive-Actions
+Status: not-started
+Fundstelle: backend/app/core/config.py#L74
+Change: SECURITY_SENSITIVE_ACTION_REQUIRE_STEP_UP_MFA: bool = True (prod)
+Sensitive Actions: user_delete_account, user_manage, approve_registration
+Implementation: Nutze require_sensitive_action() Dependency in Routern
+Success Criteria:
+  - Sensitive Actions brauchen zusätzliche MFA
+  - Unauthorized-Änderungen unmöglich
+
+2.3.3 Implementiere IP-gebundene Password-Reset-Tokens
+Status: not-started
+Fundstelle: backend/app/services/auth_security.py
+Implementation:
+  def create_password_reset_token(user_id: UUID, ip_hash: str, user_agent_hash: str) -> str:
+      token = secrets.token_urlsafe(32)
+      token_hash = hash_token(token)
+      Speichere: token_hash + ip_hash + user_agent_hash
+      Beim Verify: Prüfe aktuelle IP & UA gegen gespeichert (mit Toleranz)
+Test: test_reset_token_ip_mismatch_rejected
+Success Criteria:
+  - Reset-Tokens IP-gebunden
+  - Token-Reuse unmöglich
+
+---
+
+PHASE 3: TESTING & QUALITY (WEEK 3-4) - HIGH
+
+3.1 BACKEND TEST-COVERAGE
+
+3.1.1 Erhoehe Backend-Test-Coverage auf >= 70%
+Status: not-started
+Command: pytest backend/tests --cov --cov-report=html
+Target: Aktuell ?, Ziel: >= 70% (Lines)
+Priority: Auth, Permissions, Upload, CSV-Import, Audit
+Success Criteria:
+  - Coverage Report zeigt >= 70%
+  - Kritische Paths abgedeckt
+
+3.1.2 Schreibe kritische Business-Logic-Tests
+Status: not-started
+Files:
+  - backend/tests/test_auth_comprehensive.py - Login, MFA, Recovery, Lockout
+  - backend/tests/test_permissions_rbac.py - Alle Permission-Szenarien
+  - backend/tests/test_account_deletion.py - Deletion + Hard-Purge
+  - backend/tests/test_csv_validation.py - Import-Error-Cases
+  - backend/tests/test_upload_security.py - File-Type, Size, Dimensions
+Success Criteria:
+  - Alle Files haben >= 80% Coverage
+  - Kritische Flows testbar
+
+3.1.3 Schreibe Regression-Tests für Security-Fixes
+Status: not-started
+File: backend/tests/test_security_regressions.py
+Tests:
+  - test_ssrf_localhost_blocked
+  - test_csrf_rotation_on_logout
+  - test_upload_image_bomb_rejected
+  - test_cookie_secure_flag_set
+  - test_csp_header_strict
+  - test_audit_log_sensitives_redacted
+Success Criteria:
+  - 10+ Regression-Tests
+  - Keine Regression nachher möglich
+
+---
+
+3.2 FRONTEND TEST-COVERAGE
+
+3.2.1 Erhoehe Frontend-Coverage-Threshold
+Status: not-started
+Fundstelle: frontend/vite.config.ts#L40
+Change:
+  thresholds: {
+      lines: 70,
+      functions: 70,
+      branches: 60,
+      statements: 70,
+  }
+Command: npm run test:coverage
+Success Criteria:
+  - Coverage Report >= 70%
+  - Build schlägt fehl wenn darunter
+
+3.2.2 Schreibe kritische UI-Component-Tests
+Status: not-started
+Files:
+  - frontend/src/components/LoginForm.test.tsx - Auth-Flow
+  - frontend/src/components/UploadWidget.test.tsx - File-Validation, Error-States
+  - frontend/src/components/PermissionGate.test.tsx - Role-Based Visibility
+  - frontend/src/features/products/ProductForm.test.tsx - Form-Submission
+Success Criteria:
+  - Unit-Tests für kritische Components
+  - Coverage >= 80%
+
+---
+
+3.3 END-TO-END TESTS
+
+3.3.1 Erweitere E2E-Test-Suite
+Status: not-started
+Files:
+  - frontend/e2e/csv-import-with-errors.spec.ts - CSV mit korrupten Zeilen
+  - frontend/e2e/permissions-escalation.spec.ts - Viewer kann Edit-Feature nicht nutzen
+  - frontend/e2e/concurrent-edit.spec.ts - Zwei User editieren gleichzeitig
+  - frontend/e2e/account-deletion.spec.ts - Deletion-Flow bis zum Purge
+Success Criteria:
+  - E2E-Tests laufen grün
+  - Coverage kritischer Flows
+
+3.3.2 Schreibe Accessibility-Tests
+Status: not-started
+File: frontend/e2e/accessibility.spec.ts
+Tests:
+  - test('page meets WCAG 2.2 AA')
+  - test('keyboard navigation works')
+  - test('screen reader announces status')
+Dependency: axe-playwright
+Success Criteria:
+  - A11y-Tests für kritische Pages
+  - WCAG 2.2 AA konform
+
+---
+
+3.4 CI/CD PIPELINE
+
+3.4.1 Erstelle GitHub Actions CI-Pipeline
+Status: not-started
+File: .github/workflows/ci.yml
+Jobs:
+  Backend:
+    - pip install -r backend/requirements.txt
+    - pytest backend/tests --cov --cov-fail-under=70
+    - mypy backend/app --strict
+    - ruff check backend/app
+  Frontend:
+    - npm ci
+    - npm run typecheck
+    - npm run lint --max-warnings=0
+    - npm run test:coverage
+    - npm run build
+  Security:
+    - Dependency-Audit (pip audit, npm audit)
+    - Secret-Scan (trufflehog oder detect-secrets)
+Trigger: Push zu main, PRs zu main
+Success Criteria:
+  - CI-Pipeline läuft
+  - Alle Checks grün
+
+---
+
+PHASE 4: RELEASE & DEPLOYMENT (WEEK 4) - HIGH
+
+4.1 DOCKER & CONTAINER HAERTUNG
+
+4.1.1 Multi-Stage Backend-Dockerfile
+Status: not-started
+Fundstelle: backend/Dockerfile
+Changes:
+  FROM python:3.11-slim as builder
+  WORKDIR /app
+  COPY requirements.txt .
+  RUN pip install --no-cache --target /app/lib -r requirements.txt
+
+  FROM python:3.11-slim
+  RUN useradd -m -u 1000 appuser
+  WORKDIR /app
+  COPY --from=builder --chown=appuser /app/lib /app/lib
+  COPY --chown=appuser app/ ./app
+  USER appuser
+  ENV PYTHONPATH=/app/lib
+  CMD ["python", "-m", "app.main"]
+Success Criteria:
+  - Multi-stage, Non-root User
+  - Kleinere Image-Größe
+
+4.1.2 Multi-Stage Frontend-Dockerfile
+Status: not-started
+Fundstelle: frontend/Dockerfile
+Changes:
+  FROM node:20-alpine as builder
+  WORKDIR /app
+  COPY package*.json .
+  RUN npm ci
+  COPY . .
+  RUN npm run build
+
+  FROM nginx:alpine
+  RUN addgroup -g 101 -S www-data && adduser -S www-data -G www-data
+  COPY nginx.conf /etc/nginx/nginx.conf
+  COPY --from=builder --chown=www-data /app/dist /usr/share/nginx/html
+  USER www-data
+  HEALTHCHECK CMD wget -q -O - http://localhost/ || exit 1
+Success Criteria:
+  - Multi-stage, Non-root User
+  - Health-Checks definiert
+
+4.1.3 Scan Container-Images mit Trivy/Snyk
+Status: not-started
+Task: CI-Step "trivy image creatorhub-backend:latest"
+Fail-Threshold: CRITICAL = Exit 1
+Success Criteria:
+  - No critical vulnerabilities
+  - Image-Scan vor Push
+
+---
+
+4.2 DEPLOYMENT & ROLLBACK-PLAN
+
+4.2.1 Schreibe Deployment-Runbook
+Status: not-started
+File: docs/deployment-runbook.md
+Sections:
+  Pre-Deployment:
+    - All CI-Checks grün
+    - All Tests >= 70% coverage
+    - Security Review done
+    - Alembic downgrade tested
+    - Staging-Smoke-Test passed
+  Deployment (Blue-Green):
+    1. Build neue Images
+    2. Deploy "Green" Environment neben "Blue"
+    3. Run Alembic Migrations auf Green-DB
+    4. Test Green-Instance (Smoke Tests)
+    5. Switch Load-Balancer: Blue -> Green
+    6. Monitor 15 Min, Error-Rate < 0.1%
+  Rollback:
+    docker-compose down -v
+    git checkout v1.2.3
+    docker-compose up -d
+    alembic downgrade -1
+Success Criteria:
+  - Runbook komplette + in Team verfügbar
+  - Alle Schritte dokumentiert
+
+4.2.2 Teste Alembic Downgrade für alle Versionen
+Status: not-started
+Task: Für jede Migration (0001-0019):
+  - alembic upgrade <version>
+  - alembic downgrade <version-1>
+  - Prüfe: Keine Fehler, Schema konsistent
+Success Criteria:
+  - Alle Migrations reversibel
+  - Rollback möglich
+
+4.2.3 Dokumentiere Backup- und Restore-Prozess
+Status: not-started
+File: docs/backup-and-recovery.md
+Content:
+  Database:
+    - Daily-Backup um 2 Uhr UTC
+    - pg_dump -Fc creator_suite | gzip > backup.sql.gz
+    - Ziel: S3-kompatibel (MinIO/AWS)
+    - Retention: 30 Tage
+  Assets:
+    - S3-Replication aktiv
+    - Retention: 30 Tage
+  Recovery-Test:
+    - Monatlich: Restore aus Backup-File ausführen
+    - Prüfe: Datenbankintegrität, App startet
+  RTO/RPO:
+    - RTO: 30 Min (Restore + Start)
+    - RPO: 1 Tag (ein Backup pro Tag)
+Success Criteria:
+  - Doku komplette + Restore-Test geplant
+  - Recovery procedures tested
+
+---
+
+4.3 MONITORING & ALERTING
+
+4.3.1 Setze Up Metrics & Observability
+Status: not-started
+Dependencies: Prometheus, Grafana (optional, lokal für Dev)
+Metrics:
+  - HTTP Request-Rate, Latency, Error-Rate
+  - DB-Connection-Pool-Usage
+  - Redis-Memory-Usage
+  - Worker-Queue-Length
+  - Failed-Jobs-Count
+Success Criteria:
+  - Metrics erfasst + Dashboard vorhanden
+  - Production-sichtbar
+
+4.3.2 Definiere Alert-Rules
+Status: not-started
+Alerts:
+  - http_error_rate > 5% -> Page
+  - db_connection_pool_exhausted -> Page
+  - failed_jobs > 10 -> Warning
+  - response_time_p99 > 1s -> Warning
+Success Criteria:
+  - Alert-Rules konfiguriert
+  - On-Call weiß, was zu tun
+
+---
+
+PHASE 5: PRODUCTION RELEASE CHECKLIST (FINAL) - BLOCKING
+
+PRE-RELEASE VALIDATION
+
+Production-Mode Config:
+  JWT_SECRET mindestens 32 Zeichen, nicht "change_me"
+  DATABASE_URL auf production DB
+  REDIS_URL auf production Redis
+  AUTH_COOKIE_SECURE=true
+  AUTH_COOKIE_DOMAIN explizit gesetzt
+  ENV=prod
+  OTEL_ENABLED=false (für später)
+
+Security Checklist:
+  CSP strict mit require-trusted-types-for
+  HSTS mit Preload
+  CORS default-deny
+  SameSite=strict
+  SSRF-Controls aktiv
+  Upload-Validierung (Magic-Bytes, Dimensions)
+  CSRF-Rotation beim Logout
+  Rate-Limiting für Auth/API
+  Audit-Logging aktiv
+  No Secrets in Logs
+
+Auth Checklist:
+  MFA optional für Admins
+  Step-up MFA für sensitive Actions
+  Session-Idle-Timeout: 30 Min
+  Session-Absolute-Timeout: 7 Tage
+  Account-Deletion Endpoint vorhanden
+  Hard-Delete nach 30 Tagen vorhanden
+  Recovery-Codes für MFA vorhanden
+
+Privacy Checklist:
+  Privacy-Policy-Technical dokumentiert
+  Cookie-Consent aktiv
+  Account-Deletion-Flow vorhanden
+  Audit-Policy definiert + umgesetzt
+  PII-Redaction in Logs
+  Retention-Rules für Logs (30-90 Tage)
+
+Testing Checklist:
+  Backend Coverage >= 70%
+  Frontend Coverage >= 70%
+  E2E-Tests für kritische Flows
+  Security Regression-Tests
+  A11y-Tests für kritische Pages
+  All CI/CD-Checks grün
+
+Ops Checklist:
+  Multi-Stage Docker-Builds
+  Non-Root User in Containers
+  Health-Checks definiert
+  Alembic Downgrade getestet
+  Backup-Strategie dokumentiert
+  Restore-Test erfolgreich
+  Deployment-Runbook verfügbar
+  Monitoring & Alerts konfiguriert
+
+Documentation Checklist:
+  docs/privacy-policy-technical.md
+  docs/audit-data-policy.md
+  docs/deployment-runbook.md
+  docs/backup-and-recovery.md
+  README.md updated
+  .env.example updated
+
+---
+
+COMPLETION STATUS
+
+Phase | Name | Status | ETA | Blocker
+------|------|--------|-----|----------
+1 | Security & Foundation | not-started | Week 1-2 | Secrets, SSRF, Upload, CSP
+2 | Auth, Privacy & Compliance | not-started | Week 2-3 | Account-Deletion, Cookie-Consent
+3 | Testing & Quality | not-started | Week 3-4 | Coverage >= 70%, E2E-Tests
+4 | Release & Deployment | not-started | Week 4 | Docker, Alembic, Backup
+5 | Production Release | not-started | Week 5 | All Pre-Release-Checks
+
+---
+
+SUCCESS METRICS (POST-RELEASE)
+
+Metrik | Target | Status
+-------|--------|--------
+Security Issues (Critical) | 0 | not-started
+Coverage Backend | >= 70% | not-started
+Coverage Frontend | >= 70% | not-started
+E2E-Tests (Critical Flows) | >= 8 | not-started
+HSTS Preload | Yes | not-started
+CSP Violations | 0 | not-started
+Account-Deletion Flow | Yes | not-started
+Privacy Policy Aligned | Yes | not-started
+Deployment Runbook | Yes | not-started
+Backup-Test Passed | Yes | not-started
+
+---
+
+NOTES & DEPENDENCIES
+
+Phase 1 muss vor Phase 2 abgeschlossen sein (Security Foundation)
+Phase 2 + 3 können parallel (Privacy vs. Testing)
+Phase 4 + 5 sind Voraussetzung für Production
+Jede Phase hat einen Gate-Check vor dem nächsten Sprint
+
+Stand: 4. April 2026
+Nächste Aktualisierung: Nach Sprint-Completion
