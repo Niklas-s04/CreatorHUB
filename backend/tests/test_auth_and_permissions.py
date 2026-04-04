@@ -256,7 +256,10 @@ def test_reject_registration_stores_reason_and_history(client, db_session: Sessi
     history = client.get("/api/auth/registration-requests", headers=_auth_header(token))
     assert history.status_code == 200
     rows = history.json()
-    assert any(row["username"] == req.username and row["rejection_reason"] == "Unklare Angaben" for row in rows)
+    assert any(
+        row["username"] == req.username and row["rejection_reason"] == "Unklare Angaben"
+        for row in rows
+    )
 
 
 def test_update_user_blocks_self_role_or_status_change(client, db_session: Session) -> None:

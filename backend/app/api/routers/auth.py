@@ -946,7 +946,9 @@ def lock_user(
         "failed_login_attempts": int(user.failed_login_attempts or 0),
     }
     user.locked_until = _utcnow() + timedelta(minutes=minutes)
-    user.failed_login_attempts = max(int(user.failed_login_attempts or 0), settings.AUTH_MAX_FAILED_ATTEMPTS)
+    user.failed_login_attempts = max(
+        int(user.failed_login_attempts or 0), settings.AUTH_MAX_FAILED_ATTEMPTS
+    )
 
     revoked_sessions = (
         db.query(AuthSession)
