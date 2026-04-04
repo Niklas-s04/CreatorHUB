@@ -4,20 +4,34 @@ import AdminPage from './AdminPage'
 import { renderWithRouter } from '../test/render'
 
 vi.mock('../api', () => ({
+  approveRegistrationRequest: vi.fn(),
   apiFetch: vi.fn(),
-  getUsers: vi.fn(),
   getMe: vi.fn(),
+  getRegistrationRequests: vi.fn(),
+  getUsers: vi.fn(),
   getUserSessions: vi.fn(),
   lockUser: vi.fn(),
   unlockUser: vi.fn(),
   requestAdminPasswordReset: vi.fn(),
 }))
 
-import { apiFetch, getMe, getUsers, getUserSessions } from '../api'
+import { approveRegistrationRequest, apiFetch, getMe, getRegistrationRequests, getUsers, getUserSessions } from '../api'
 
 describe('AdminPage', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    ;(apiFetch as unknown as ReturnType<typeof vi.fn>).mockImplementation(async (url: string) => {
+      if (url === '/dashboard/summary') {
+        return { metrics: [] }
+      }
+      if (url.startsWith('/audit?')) {
+        return { items: [], meta: { total: 0 } }
+      }
+      return {}
+    })
+    ;(getRegistrationRequests as unknown as ReturnType<typeof vi.fn>).mockResolvedValue([])
+    ;(getUsers as unknown as ReturnType<typeof vi.fn>).mockResolvedValue([])
+    ;(getUserSessions as unknown as ReturnType<typeof vi.fn>).mockResolvedValue([])
   })
 
   it('zeigt rollenabhängige Sichtbarkeit für Nicht-Admin', async () => {
@@ -98,48 +112,64 @@ describe('AdminPage', () => {
   })
 
   it('führt rollenabhängige Aktion Freigeben aus', async () => {
-    ;(getMe as unknown as ReturnType<typeof vi.fn>)
-      .mockResolvedValueOnce({
-        id: 'a1',
-        username: 'admin',
-        role: 'admin',
+    ;(getMe as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      id: 'a1',
+      username: 'admin',
+      role: 'admin',
+      is_active: true,
+      needs_password_setup: false,
+      locked_until: null,
+      last_activity_at: null,
+      permissions: ['user.read', 'user.approve_registration'],
+    })
+    ;(getRegistrationRequests as unknown as ReturnType<typeof vi.fn>).mockImplementation(async (statusFilter?: string) => {
+      if (statusFilter === 'pending') {
+        return [{ id: 'r1', username: 'new-user', status: 'pending', reviewed_at: null, reviewed_by_user_id: null, reviewed_by_username: null, rejection_reason: null }]
+      }
+      return [{ id: 'h1', username: 'old-user', status: 'approved', reviewed_at: '2026-04-04T10:00:00Z', reviewed_by_user_id: 'a1', reviewed_by_username: 'admin', rejection_reason: null }]
+    })
+    ;(getUsers as unknown as ReturnType<typeof vi.fn>).mockResolvedValue([
+      {
+        id: 'u2',
+        username: 'editor',
+        role: 'editor',
         is_active: true,
         needs_password_setup: false,
         locked_until: null,
         last_activity_at: null,
-        permissions: ['user.read', 'user.approve_registration'],
-      })
-    ;(apiFetch as unknown as ReturnType<typeof vi.fn>)
-      .mockResolvedValueOnce([{ id: 'r1', username: 'new-user', status: 'pending' }])
-      .mockResolvedValueOnce([{ id: 'h1', username: 'old-user', status: 'approved', reviewed_at: '2026-04-04T10:00:00Z', reviewed_by_user_id: 'a1', reviewed_by_username: 'admin', rejection_reason: null }])
-      .mockResolvedValueOnce({ items: [], meta: { total: 0 } })
-      .mockResolvedValueOnce({})
-      .mockResolvedValueOnce([])
-    ;(getUsers as unknown as ReturnType<typeof vi.fn>)
-      .mockResolvedValueOnce([
-        {
-          id: 'u2',
-          username: 'editor',
-          role: 'editor',
-          is_active: true,
-          needs_password_setup: false,
-          locked_until: null,
-          last_activity_at: null,
-          mfa_enabled: false,
-          active_sessions: 1,
-          permissions: ['content.read'],
-        },
-      ])
-      .mockResolvedValueOnce([])
-    ;(getUserSessions as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce([])
-    ;(apiFetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce([])
+        mfa_enabled: false,
+        active_sessions: 1,
+        permissions: ['content.read'],
+      },
+    ])
+    ;(getUserSessions as unknown as ReturnType<typeof vi.fn>).mockResolvedValue([])
+    ;(apiFetch as unknown as ReturnType<typeof vi.fn>).mockImplementation(async (url: string) => {
+      if (url === '/dashboard/summary') {
+        return { metrics: [] }
+      }
+      if (url.startsWith('/audit?')) {
+        return { items: [], meta: { total: 0 } }
+      }
+      if (url === '/auth/registration-requests/r1/approve') {
+        return {
+          id: 'r1',
+          username: 'new-user',
+          status: 'approved',
+          reviewed_at: '2026-04-04T12:00:00Z',
+          reviewed_by_user_id: 'a1',
+          reviewed_by_username: 'admin',
+          rejection_reason: null,
+        }
+      }
+      return {}
+    })
 
     renderWithRouter(<AdminPage />)
 
     fireEvent.click(await screen.findByRole('button', { name: 'Freigeben' }))
 
     await waitFor(() => {
-      expect(apiFetch).toHaveBeenCalledWith('/auth/registration-requests/r1/approve', { method: 'POST' })
+      expect(approveRegistrationRequest).toHaveBeenCalledWith('r1')
     })
   })
 })

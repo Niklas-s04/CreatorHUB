@@ -44,8 +44,8 @@ from app.models.registration_request import RegistrationRequest, RegistrationReq
 from app.models.user import User, UserRole
 from app.schemas.auth import (
     AdminBootstrapStatusOut,
-    AdminSessionOut,
     AdminPasswordSetupIn,
+    AdminSessionOut,
     ChangePasswordIn,
     LoginHistoryOut,
     MfaDisableIn,
