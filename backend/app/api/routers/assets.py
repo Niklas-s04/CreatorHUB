@@ -237,7 +237,7 @@ async def upload_asset(
         size_bytes=stored.size_bytes,
         hash=stored.sha256,
         perceptual_hash=stored.perceptual_hash,
-        review_state=AssetReviewState.pending_review,
+        review_state=AssetReviewState.quarantine,
         workflow_status=WorkflowStatus.draft,
         is_primary=False,
     )

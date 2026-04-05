@@ -47,25 +47,26 @@ def purge_deleted_users(
         cutoff_date = _utcnow() - timedelta(days=grace_period_days)
 
         # Find users scheduled for deletion (is_active=False, deletion_requested_at < cutoff_date)
-        users_to_purge = db.execute(
-            select(User).where(
-                and_(
-                    User.is_active == False,  # noqa: E712
-                    User.deletion_requested_at.isnot(None),
-                    User.deletion_requested_at < cutoff_date,
+        users_to_purge = (
+            db.execute(
+                select(User).where(
+                    and_(
+                        User.is_active == False,  # noqa: E712
+                        User.deletion_requested_at.isnot(None),
+                        User.deletion_requested_at < cutoff_date,
+                    )
                 )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
 
         for user in users_to_purge:
             try:
                 user_id = user.id
-                username = user.username
 
                 # Delete all auth sessions for this user and collect their token JTIs
-                sessions = db.query(AuthSession).filter(
-                    AuthSession.user_id == user_id
-                ).all()
+                sessions = db.query(AuthSession).filter(AuthSession.user_id == user_id).all()
                 revoked_jtis: set[str] = set()
                 for session in sessions:
                     if session.refresh_jti:
@@ -78,17 +79,17 @@ def purge_deleted_users(
                 # Remove revoked tokens that belong to the deleted sessions
                 revoked_tokens = []
                 if revoked_jtis:
-                    revoked_tokens = db.query(RevokedToken).filter(
-                        RevokedToken.jti.in_(list(revoked_jtis))
-                    ).all()
+                    revoked_tokens = (
+                        db.query(RevokedToken)
+                        .filter(RevokedToken.jti.in_(list(revoked_jtis)))
+                        .all()
+                    )
                 for token in revoked_tokens:
                     db.delete(token)
                 stats["tokens_revoked"] += len(revoked_tokens)
 
                 # Anonymize audit logs: set user_id to None, keep action but remove personally identifying details
-                affected_logs = db.query(AuditLog).filter(
-                    AuditLog.actor_id == user_id
-                ).all()
+                affected_logs = db.query(AuditLog).filter(AuditLog.actor_id == user_id).all()
                 for audit_log in affected_logs:
                     audit_log.actor_id = None
                     audit_log.actor_name = f"[deleted-user-{user_id}]"

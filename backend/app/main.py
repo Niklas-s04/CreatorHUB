@@ -164,6 +164,8 @@ def _validate_security_settings() -> None:
     if settings.ENV.lower() == "prod":
         if not settings.AUTH_COOKIE_SECURE:
             raise RuntimeError("AUTH_COOKIE_SECURE must be true in production")
+        if not (settings.AUTH_COOKIE_DOMAIN or "").strip():
+            raise RuntimeError("AUTH_COOKIE_DOMAIN must be explicitly set in production")
         origins = [o.strip() for o in settings.CORS_ORIGINS.split(",") if o.strip()]
         if any(o == "*" for o in origins):
             raise RuntimeError("CORS wildcard is not allowed in production")

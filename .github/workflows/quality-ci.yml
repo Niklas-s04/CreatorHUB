@@ -30,6 +30,11 @@ jobs:
           pip install -r requirements.txt -r requirements-dev.txt
 
       - name: Validate deployment secrets
+        env:
+          ENV: dev
+          JWT_SECRET: ci_validation_jwt_secret_value_1234567890
+          POSTGRES_PASSWORD: ci_validation_db_password_1234567890
+          BOOTSTRAP_ADMIN_PASSWORD: ci_validation_admin_password_1234567890
         run: cd .. && bash scripts/validate-secrets.sh
 
       - name: Lint backend (ruff)

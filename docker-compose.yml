@@ -35,7 +35,7 @@ services:
       REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
       TRUSTED_HOSTS: ${TRUSTED_HOSTS:-localhost,127.0.0.1}
-      AUTH_COOKIE_SECURE: ${AUTH_COOKIE_SECURE:-false}
+      AUTH_COOKIE_SECURE: ${AUTH_COOKIE_SECURE:-true}
     depends_on:
       db:
         condition: service_healthy

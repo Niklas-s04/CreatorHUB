@@ -56,7 +56,8 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
         if self.env == "prod" and self._is_https(request) and self.hsts_seconds > 0:
             response.headers.setdefault(
-                "Strict-Transport-Security", f"max-age={self.hsts_seconds}; includeSubDomains; preload"
+                "Strict-Transport-Security",
+                f"max-age={self.hsts_seconds}; includeSubDomains; preload",
             )
 
         return response

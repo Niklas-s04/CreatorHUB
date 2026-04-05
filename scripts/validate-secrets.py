@@ -77,7 +77,7 @@ class SecretValidator:
 
         print("Checking required secrets...")
         self.check_secret("JWT_SECRET", 32, "JWT signing key")
-        self.check_secret("POSTGRES_PASSWORD", 1, "Database password")
+        self.check_secret("POSTGRES_PASSWORD", 16, "Database password")
         self.check_secret("BOOTSTRAP_ADMIN_PASSWORD", 12, "Admin password")
 
         print()
@@ -86,6 +86,13 @@ class SecretValidator:
         self.check_not_placeholder(
             "BOOTSTRAP_ADMIN_PASSWORD", "admin", "Admin password placeholder"
         )
+
+        if os.environ.get("ENV", "dev").strip().lower() == "prod":
+            self.check_secret(
+                "AUTH_COOKIE_DOMAIN",
+                1,
+                "AUTH_COOKIE_DOMAIN must be set in production",
+            )
 
         print()
         print("Checking database configuration...")

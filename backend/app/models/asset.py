@@ -69,7 +69,7 @@ class Asset(Base, UUIDMixin, TimestampMixin):
     perceptual_hash: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
 
     review_state: Mapped[AssetReviewState] = mapped_column(
-        Enum(AssetReviewState), default=AssetReviewState.pending_review
+        Enum(AssetReviewState), default=AssetReviewState.quarantine
     )
     workflow_status: Mapped[WorkflowStatus] = mapped_column(
         Enum(WorkflowStatus), default=WorkflowStatus.draft

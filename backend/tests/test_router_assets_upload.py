@@ -82,3 +82,21 @@ def test_upload_deduplicates_by_hash(client, app, db_session: Session) -> None:
     )
     assert second.status_code == 200
     assert first.json()["id"] == second.json()["id"]
+
+
+def test_upload_starts_in_quarantine_state(client, app, db_session: Session) -> None:
+    admin = create_user(db_session, username="assets_admin_quarantine", role=UserRole.admin)
+    app.dependency_overrides[deps.get_current_user] = lambda: admin
+
+    response = client.post(
+        "/api/assets/upload",
+        data={
+            "owner_type": "product",
+            "owner_id": str(uuid.uuid4()),
+            "kind": "image",
+        },
+        files={"file": ("item.png", _png_bytes(), "image/png")},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["review_state"] == "quarantine"

@@ -66,16 +66,20 @@ echo ""
 echo "Checking required secrets..."
 
 check_secret "JWT_SECRET" 32 "JWT signing key must be at least 32 characters"
-check_secret "POSTGRES_PASSWORD" 1 "Database password must be set"
+check_secret "POSTGRES_PASSWORD" 16 "Database password must be at least 16 characters"
 check_secret "BOOTSTRAP_ADMIN_PASSWORD" 12 "Admin password must be at least 12 characters"
-check_secret "JSON_SECRET" 1 "JSON secret must be set"
 
 echo ""
 echo "Checking for placeholder values..."
 
 check_not_placeholder "JWT_SECRET" "change_me" "JWT_SECRET must not be placeholder value"
 check_not_placeholder "BOOTSTRAP_ADMIN_PASSWORD" "admin" "BOOTSTRAP_ADMIN_PASSWORD must not use default value"
-check_not_placeholder "JSON_SECRET" "change_me" "JSON_SECRET must not be placeholder value"
+
+if [[ "${ENV:-dev}" == "prod" ]]; then
+    echo ""
+    echo "Checking production cookie settings..."
+    check_secret "AUTH_COOKIE_DOMAIN" 1 "AUTH_COOKIE_DOMAIN must be set in production"
+fi
 
 echo ""
 echo "Checking database configuration..."

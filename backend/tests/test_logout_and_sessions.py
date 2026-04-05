@@ -62,3 +62,17 @@ def test_csrf_required_for_logout_when_authenticated(client, db_session: Session
     response = client.post("/api/auth/logout")
     assert response.status_code == 403
     assert response.json()["detail"] == "CSRF validation failed"
+
+
+def test_logout_rotates_csrf_cookie(client, db_session: Session) -> None:
+    user = create_user(db_session, username="logout_rotate_user", role=UserRole.editor)
+    login_state = login(client, username=user.username, password=DEFAULT_PASSWORD)
+
+    response = client.post(
+        "/api/auth/logout",
+        headers={"x-csrf-token": login_state["csrf"]},
+    )
+
+    assert response.status_code == 200
+    set_cookie_values = response.headers.get_list("set-cookie")
+    assert any(value.startswith("creatorhub_csrf=") for value in set_cookie_values)

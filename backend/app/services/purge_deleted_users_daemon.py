@@ -6,7 +6,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import datetime, timezone
 
 from app.core.config import settings
 from app.workers.tasks.purge_deleted_users import purge_deleted_users
@@ -22,9 +21,7 @@ async def purge_deleted_users_daemon() -> None:
     interval_hours = getattr(settings, "PURGE_DELETED_USERS_INTERVAL_HOURS", 6)
     interval_seconds = interval_hours * 3600
 
-    logger.info(
-        f"Starting purge_deleted_users_daemon. Will run every {interval_hours} hours."
-    )
+    logger.info(f"Starting purge_deleted_users_daemon. Will run every {interval_hours} hours.")
 
     while True:
         try:
@@ -33,9 +30,7 @@ async def purge_deleted_users_daemon() -> None:
             logger.info("Starting scheduled purge of deleted users...")
             try:
                 result = purge_deleted_users(grace_period_days=30)
-                logger.info(
-                    f"Purge completed. Stats: {result}"
-                )
+                logger.info(f"Purge completed. Stats: {result}")
             except Exception as e:
                 logger.error(f"Error running purge_deleted_users: {e}", exc_info=True)
 

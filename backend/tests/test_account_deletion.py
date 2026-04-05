@@ -16,11 +16,11 @@ import pytest
 from fastapi import status
 from sqlalchemy.orm import Session
 
-from app.models.auth_session import AuthSession, RevokedToken
 from app.models.audit import AuditLog
+from app.models.auth_session import AuthSession, RevokedToken
 from app.models.user import User
-from tests.factories import create_user
 from app.services.auth_security import create_session_and_tokens
+from tests.factories import create_user
 
 
 def _utcnow() -> datetime:
@@ -46,15 +46,18 @@ def user_for_deletion(db_session: Session, client) -> tuple[User, str]:
     )
     assert response.status_code == status.HTTP_200_OK
     token = response.json()["access_token"]
-    
+
     # Mark session as MFA verified for sensitive actions
-    session = db_session.query(AuthSession).filter(
-        AuthSession.user_id == user.id
-    ).order_by(AuthSession.created_at.desc()).first()
+    session = (
+        db_session.query(AuthSession)
+        .filter(AuthSession.user_id == user.id)
+        .order_by(AuthSession.created_at.desc())
+        .first()
+    )
     if session:
         session.mfa_verified = True
         db_session.commit()
-    
+
     return user, token
 
 
@@ -66,7 +69,9 @@ class TestDeleteAccountEndpoint:
         response = client.delete("/api/v1/user/account")
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
-    def test_delete_account_marks_user_soft_deleted(self, db_session: Session, client, user_for_deletion, monkeypatch):
+    def test_delete_account_marks_user_soft_deleted(
+        self, db_session: Session, client, user_for_deletion, monkeypatch
+    ):
         """DELETE should soft-delete user (is_active=False, deletion_requested_at set)."""
         user, token = user_for_deletion
 
@@ -74,6 +79,7 @@ class TestDeleteAccountEndpoint:
         def mock_sensitive_action(action: str):
             def _mock(*args, **kwargs):
                 from app.api.deps import SensitiveActionContext
+
                 return SensitiveActionContext(
                     action=action,
                     confirmation_required=False,
@@ -82,6 +88,7 @@ class TestDeleteAccountEndpoint:
                     step_up_satisfied=False,
                     request_id=None,
                 )
+
             return _mock
 
         monkeypatch.setattr(
@@ -93,7 +100,7 @@ class TestDeleteAccountEndpoint:
             "/api/v1/user/account",
             headers={"Authorization": f"Bearer {token}"},
         )
-
+        assert response.status_code == 200
 
         # Verify user is soft-deleted
         db_session.refresh(user)
@@ -101,15 +108,21 @@ class TestDeleteAccountEndpoint:
         assert user.deletion_requested_at is not None
         assert isinstance(user.deletion_requested_at, datetime)
 
-    def test_delete_account_revokes_all_sessions(self, db_session: Session, client, user_for_deletion):
+    def test_delete_account_revokes_all_sessions(
+        self, db_session: Session, client, user_for_deletion
+    ):
         """DELETE should revoke all active sessions for the user."""
         user, token = user_for_deletion
 
         # Verify user has active sessions before deletion
-        active_sessions_before = db_session.query(AuthSession).filter(
-            AuthSession.user_id == user.id,
-            AuthSession.revoked_at.is_(None),
-        ).count()
+        active_sessions_before = (
+            db_session.query(AuthSession)
+            .filter(
+                AuthSession.user_id == user.id,
+                AuthSession.revoked_at.is_(None),
+            )
+            .count()
+        )
         assert active_sessions_before > 0
 
         # Delete account
@@ -121,10 +134,14 @@ class TestDeleteAccountEndpoint:
         assert response.status_code == status.HTTP_200_OK
 
         # Verify all sessions are now revoked
-        active_sessions_after = db_session.query(AuthSession).filter(
-            AuthSession.user_id == user.id,
-            AuthSession.revoked_at.is_(None),
-        ).count()
+        active_sessions_after = (
+            db_session.query(AuthSession)
+            .filter(
+                AuthSession.user_id == user.id,
+                AuthSession.revoked_at.is_(None),
+            )
+            .count()
+        )
         assert active_sessions_after == 0
 
     def test_delete_account_creates_audit_log(self, db_session: Session, client, user_for_deletion):
@@ -139,17 +156,23 @@ class TestDeleteAccountEndpoint:
         assert response.status_code == status.HTTP_200_OK
 
         # Find the audit log
-        audit_log = db_session.query(AuditLog).filter(
-            AuditLog.actor_id == user.id,
-            AuditLog.action == "auth.user.deletion_requested",
-        ).first()
+        audit_log = (
+            db_session.query(AuditLog)
+            .filter(
+                AuditLog.actor_id == user.id,
+                AuditLog.action == "auth.user.deletion_requested",
+            )
+            .first()
+        )
 
         assert audit_log is not None
         assert audit_log.entity_type == "User"
         assert audit_log.entity_id == str(user.id)
-        assert ("scheduled for deletion" in (audit_log.description or "").lower() or 
-            "requested account deletion" in (audit_log.description or "").lower() or
-            "deletion" in (audit_log.description or "").lower())
+        assert (
+            "scheduled for deletion" in (audit_log.description or "").lower()
+            or "requested account deletion" in (audit_log.description or "").lower()
+            or "deletion" in (audit_log.description or "").lower()
+        )
 
     def test_delete_account_clears_cookies(self, db_session: Session, client, user_for_deletion):
         """DELETE should clear auth cookies."""
@@ -164,7 +187,9 @@ class TestDeleteAccountEndpoint:
 
         # Check that Set-Cookie headers are present (clearing cookies)
         # The response should have Set-Cookie headers to clear the auth cookies
-        assert "set-cookie" in response.headers or "Set-Cookie" in response.headers or True  # Flexible check
+        assert (
+            "set-cookie" in response.headers or "Set-Cookie" in response.headers or True
+        )  # Flexible check
 
     def test_delete_account_idempotence_check(self, db_session: Session, client, user_for_deletion):
         """Attempting to delete an already-deleted account should fail gracefully."""
@@ -177,9 +202,9 @@ class TestDeleteAccountEndpoint:
         )
         assert response1.status_code == status.HTTP_200_OK
 
-            # Second deletion attempt with the same token should fail (account inactive)
-            # or the token might already be revoked. Either way, should not succeed.
-            # Since the account is now inactive and sessions are revoked, the token won't work anyway.
+        # Second deletion attempt with the same token should fail (account inactive)
+        # or the token might already be revoked. Either way, should not succeed.
+        # Since the account is now inactive and sessions are revoked, the token won't work anyway.
 
     def test_delete_account_inactive_user_fails(self, db_session: Session, client):
         """Attempting to delete an already-inactive user should fail."""
@@ -206,7 +231,7 @@ class TestDeleteAccountEndpoint:
             db_session.commit()
             # Can't get a valid token, so skip rest of test
             pytest.skip("Login requires MFA in this config")
-        
+
         token = response.json()["access_token"]
 
         # Now deactivate user2
@@ -295,7 +320,7 @@ class TestPurgeDeletedUsers:
             user_agent="pytest",
             mfa_verified=False,
         )
-        
+
         revoked_token = RevokedToken(
             jti=refresh_jti,
             expires_at=_utcnow() + timedelta(hours=1),
@@ -375,9 +400,9 @@ class TestPurgeDeletedUsers:
             user.deletion_requested_at = _utcnow() - timedelta(days=31)
             db_session.commit()
 
-        audit_log_count_before = db_session.query(AuditLog).filter(
-            AuditLog.action == "auth.user.purged"
-        ).count()
+        audit_log_count_before = (
+            db_session.query(AuditLog).filter(AuditLog.action == "auth.user.purged").count()
+        )
 
         # Run purge
         from app.workers.tasks.purge_deleted_users import purge_deleted_users
@@ -385,9 +410,9 @@ class TestPurgeDeletedUsers:
         result = purge_deleted_users(grace_period_days=30, db=db_session)
 
         # Verify summary log was created
-        audit_log_count_after = db_session.query(AuditLog).filter(
-            AuditLog.action == "auth.user.purged"
-        ).count()
+        audit_log_count_after = (
+            db_session.query(AuditLog).filter(AuditLog.action == "auth.user.purged").count()
+        )
         assert audit_log_count_after > audit_log_count_before
         assert result["users_purged"] == 3
 

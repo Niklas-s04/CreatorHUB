@@ -36,9 +36,26 @@ os.environ.setdefault("SECURITY_SENSITIVE_ACTION_CONFIRMATION_REQUIRED", "false"
 os.environ.setdefault("SECURITY_SENSITIVE_ACTION_REQUIRE_STEP_UP_MFA", "false")
 
 from app.api import deps
-from app.api.routers import audit, assets, auth, content, deals, email, health, images, knowledge, operations, products, search
+from app.api.routers import (
+    assets,
+    audit,
+    auth,
+    content,
+    deals,
+    email,
+    health,
+    images,
+    knowledge,
+    operations,
+    products,
+    search,
+)
 from app.core.config import settings
-from app.core.web_security import CsrfProtectionMiddleware, RequestSizeLimitMiddleware, SecurityHeadersMiddleware
+from app.core.web_security import (
+    CsrfProtectionMiddleware,
+    RequestSizeLimitMiddleware,
+    SecurityHeadersMiddleware,
+)
 from app.models.asset import Asset
 from app.models.audit import AuditLog
 from app.models.auth_session import AuthSession, LoginHistory, PasswordResetToken, RevokedToken
@@ -155,10 +172,14 @@ def app(db_session: Session) -> FastAPI:
     api.include_router(content.router, prefix="/api/content", tags=["content"], deprecated=True)
     api.include_router(email.router, prefix="/api/email", tags=["email"], deprecated=True)
     api.include_router(images.router, prefix="/api/images", tags=["images"], deprecated=True)
-    api.include_router(knowledge.router, prefix="/api/knowledge", tags=["knowledge"], deprecated=True)
+    api.include_router(
+        knowledge.router, prefix="/api/knowledge", tags=["knowledge"], deprecated=True
+    )
     api.include_router(deals.router, prefix="/api/deals", tags=["deals"], deprecated=True)
     api.include_router(audit.router, prefix="/api/audit", tags=["audit"], deprecated=True)
-    api.include_router(operations.router, prefix="/api/operations", tags=["operations"], deprecated=True)
+    api.include_router(
+        operations.router, prefix="/api/operations", tags=["operations"], deprecated=True
+    )
     api.include_router(search.router, prefix="/api/search", tags=["search"], deprecated=True)
 
     def _get_db_override() -> Generator[Session, None, None]:

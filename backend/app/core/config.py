@@ -81,8 +81,8 @@ class Settings(BaseSettings):
     OUTBOUND_RETRIES: int = 1
     OUTBOUND_ALLOWED_PORTS: str = "443"
     OUTBOUND_REQUIRE_HTTPS: bool = True
-    OUTBOUND_ALLOWLIST_HOSTS: str = ""
-    OUTBOUND_SENSITIVE_ALLOWLIST_HOSTS: str = ""
+    OUTBOUND_ALLOWLIST_HOSTS: str = "api.openverse.engineering,commons.wikimedia.org"
+    OUTBOUND_SENSITIVE_ALLOWLIST_HOSTS: str = "api.openverse.engineering,commons.wikimedia.org"
     OUTBOUND_BLOCK_PRIVATE_RANGES: bool = True
 
     UPLOAD_ALLOWED_IMAGE_EXTENSIONS: str = ".jpg,.jpeg,.png,.webp,.gif"

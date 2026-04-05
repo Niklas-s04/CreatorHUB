@@ -7,7 +7,7 @@ def test_csp_has_required_directives(client) -> None:
     """Verify CSP includes essential security directives."""
     response = client.post("/api/auth/token", data={"username": "test", "password": "test"})
     csp = response.headers.get("Content-Security-Policy", "")
-    
+
     if csp:
         required_directives = [
             "default-src 'none'",
@@ -17,7 +17,7 @@ def test_csp_has_required_directives(client) -> None:
             "frame-ancestors 'none'",
             "object-src 'none'",
             "form-action 'self'",
-            "upgrade-insecure-requests"
+            "upgrade-insecure-requests",
         ]
         for directive in required_directives:
             assert directive in csp, f"CSP missing: {directive}"
@@ -44,6 +44,6 @@ def test_cors_no_wildcard_credentials(client) -> None:
     response = client.post("/api/auth/token", data={"username": "test", "password": "test"})
     allow_origin = response.headers.get("Access-Control-Allow-Origin", "")
     allow_creds = response.headers.get("Access-Control-Allow-Credentials", "")
-    
+
     if allow_creds and allow_creds.lower() == "true":
         assert allow_origin != "*", "Cannot use wildcard with credentials"

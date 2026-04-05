@@ -243,6 +243,21 @@ def _clear_auth_cookies(response: Response) -> None:
     response.delete_cookie(settings.CSRF_COOKIE_NAME, path="/", domain=domain)
 
 
+def _set_post_logout_csrf_cookie(response: Response) -> None:
+    domain = settings.AUTH_COOKIE_DOMAIN
+    anonymous_session_id = str(uuid.uuid4())
+    response.set_cookie(
+        key=settings.CSRF_COOKIE_NAME,
+        value=create_csrf_token(anonymous_session_id),
+        httponly=False,
+        secure=settings.AUTH_COOKIE_SECURE,
+        samesite=settings.AUTH_COOKIE_SAMESITE,
+        max_age=max(60, min(3600, settings.AUTH_ACCESS_COOKIE_MAX_AGE_SECONDS)),
+        path="/",
+        domain=domain,
+    )
+
+
 def _verify_mfa(user: User, code: str) -> bool:
     if not user.mfa_enabled:
         return True
@@ -557,6 +572,7 @@ def logout(request: Request, response: Response, db: Session = Depends(get_db)) 
     db.commit()
 
     _clear_auth_cookies(response)
+    _set_post_logout_csrf_cookie(response)
     return {"ok": "true"}
 
 
