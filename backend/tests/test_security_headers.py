@@ -37,6 +37,12 @@ def test_security_headers_present(client) -> None:
     response = client.post("/api/auth/token", data={"username": "test", "password": "test"})
     csp = response.headers.get("Content-Security-Policy", "")
     assert csp, "CSP header must be present"
+    assert response.headers.get("X-Content-Type-Options") == "nosniff"
+    assert response.headers.get("X-Frame-Options") == "DENY"
+    assert response.headers.get("Referrer-Policy") == "strict-origin-when-cross-origin"
+    assert response.headers.get("Cross-Origin-Opener-Policy") == "same-origin"
+    assert response.headers.get("Cross-Origin-Embedder-Policy") == "require-corp"
+    assert response.headers.get("Cross-Origin-Resource-Policy") == "same-origin"
 
 
 def test_cors_no_wildcard_credentials(client) -> None:

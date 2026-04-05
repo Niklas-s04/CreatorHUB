@@ -48,6 +48,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
             "Permissions-Policy", "camera=(), microphone=(), geolocation=(), browsing-topics=()"
         )
         response.headers.setdefault("Cross-Origin-Opener-Policy", "same-origin")
+        response.headers.setdefault("Cross-Origin-Embedder-Policy", "require-corp")
         response.headers.setdefault("Cross-Origin-Resource-Policy", "same-origin")
         response.headers.setdefault(
             "Content-Security-Policy",
