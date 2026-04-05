@@ -115,7 +115,8 @@ jobs:
       OLLAMA_URL: http://localhost:11434
       PROJECT_NAME: creator-suite
       CORS_ORIGINS: http://localhost:3000
-      JWT_SECRET: ci_jwt_secret_value
+      JWT_SECRET: ci_jwt_secret_value_1234567890
+      BOOTSTRAP_ADMIN_PASSWORD: ci_bootstrap_admin_password_1234567890
       ENV: dev
       BOOTSTRAP_INSTALL_TOKEN: ci_bootstrap_token
       AUTH_COOKIE_SECURE: "false"
