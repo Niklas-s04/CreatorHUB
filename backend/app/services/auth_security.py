@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ipaddress
 import secrets
 from datetime import datetime, timedelta, timezone
 
@@ -36,6 +37,58 @@ def _get_redis() -> Redis | None:
 
 def _redis_revoke_key(jti: str) -> str:
     return f"auth:deny:jti:{jti}"
+
+
+def _normalize_reset_ip(ip_address: str | None) -> str | None:
+    candidate = (ip_address or "").strip()
+    if not candidate:
+        return None
+
+    try:
+        address = ipaddress.ip_address(candidate)
+    except ValueError:
+        return candidate.lower()
+
+    if address.version == 4:
+        network = ipaddress.ip_network(f"{address}/24", strict=False)
+    else:
+        network = ipaddress.ip_network(f"{address}/64", strict=False)
+    return network.with_prefixlen
+
+
+def _normalize_reset_user_agent(user_agent: str | None) -> str | None:
+    candidate = (user_agent or "").strip()
+    if not candidate:
+        return None
+    return candidate.lower()
+
+
+def hash_password_reset_context(
+    ip_address: str | None, user_agent: str | None
+) -> tuple[str | None, str | None]:
+    normalized_ip = _normalize_reset_ip(ip_address)
+    normalized_user_agent = _normalize_reset_user_agent(user_agent)
+    return (
+        hash_token(f"ip:{normalized_ip}") if normalized_ip else None,
+        hash_token(f"ua:{normalized_user_agent}") if normalized_user_agent else None,
+    )
+
+
+def password_reset_context_matches(
+    stored_ip_hash: str | None,
+    stored_user_agent_hash: str | None,
+    current_ip: str | None,
+    current_user_agent: str | None,
+) -> bool:
+    current_ip_hash, current_user_agent_hash = hash_password_reset_context(
+        current_ip, current_user_agent
+    )
+
+    if stored_ip_hash and current_ip_hash != stored_ip_hash:
+        return False
+    if stored_user_agent_hash and current_user_agent_hash != stored_user_agent_hash:
+        return False
+    return True
 
 
 def revoke_token(db: Session, *, jti: str, expires_at: datetime) -> None:
@@ -119,6 +172,10 @@ def create_session_and_tokens(
         user_agent=(user_agent or "")[:512] or None,
         device_label=build_device_label(user_agent),
         mfa_verified=mfa_verified,
+        mfa_step_up_expires_at=now
+        + timedelta(seconds=settings.SECURITY_STEP_UP_MFA_MAX_AGE_SECONDS)
+        if mfa_verified
+        else None,
         last_activity_at=now,
         idle_expires_at=idle_expires,
         expires_at=session_expires,

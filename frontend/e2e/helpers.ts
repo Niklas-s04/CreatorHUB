@@ -1,3 +1,5 @@
+import crypto from 'node:crypto'
+
 import { expect, Page } from '@playwright/test'
 
 export const E2E_ADMIN_USER = process.env.E2E_ADMIN_USER || 'admin'
@@ -10,6 +12,39 @@ export function uniqueSuffix(prefix: string): string {
   return `${prefix}_${stamp}_${rnd}`
 }
 
+function decodeBase32(secret: string): Buffer {
+  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567'
+  const normalized = secret.replace(/=+$/g, '').replace(/\s+/g, '').toUpperCase()
+  let bits = ''
+
+  for (const char of normalized) {
+    const index = alphabet.indexOf(char)
+    if (index < 0) {
+      throw new Error(`Invalid base32 character: ${char}`)
+    }
+    bits += index.toString(2).padStart(5, '0')
+  }
+
+  const bytes: number[] = []
+  for (let offset = 0; offset + 8 <= bits.length; offset += 8) {
+    bytes.push(Number.parseInt(bits.slice(offset, offset + 8), 2))
+  }
+
+  return Buffer.from(bytes)
+}
+
+export function generateTotpCode(secret: string, time = Date.now()): string {
+  const counter = Math.floor(time / 30_000)
+  const counterBuffer = Buffer.alloc(8)
+  counterBuffer.writeBigUInt64BE(BigInt(counter))
+
+  const hmac = crypto.createHmac('sha1', decodeBase32(secret))
+  hmac.update(counterBuffer)
+  const digest = hmac.digest()
+  const offset = digest[digest.length - 1] & 0x0f
+  return ((digest.readUInt32BE(offset) & 0x7fffffff) % 1_000_000).toString().padStart(6, '0')
+}
+
 export async function gotoLogin(page: Page): Promise<void> {
   await page.goto('/login')
   await expect(page.getByRole('heading', { name: 'Login' })).toBeVisible()
@@ -17,9 +52,9 @@ export async function gotoLogin(page: Page): Promise<void> {
 
 async function submitLogin(page: Page, username: string, password: string): Promise<void> {
   const form = page.locator('form')
-  await form.locator('input').nth(0).fill(username)
-  await form.locator('input[type="password"]').first().fill(password)
-  await form.locator('button').last().click()
+  await form.getByLabel('Username').fill(username)
+  await form.getByLabel('Password').first().fill(password)
+  await form.getByRole('button').last().click()
 }
 
 async function setupAdminPassword(page: Page, password: string): Promise<void> {
@@ -27,30 +62,56 @@ async function setupAdminPassword(page: Page, password: string): Promise<void> {
     throw new Error('Admin password setup required, but E2E_BOOTSTRAP_TOKEN is not set.')
   }
 
-  await page.getByPlaceholder('Install-Token').fill(E2E_BOOTSTRAP_TOKEN)
-  await page.getByRole('button', { name: 'Erstsetup prüfen' }).click()
+  await page.getByPlaceholder(/Install-Token|Install token/i).fill(E2E_BOOTSTRAP_TOKEN)
+  await page.getByRole('button', { name: /Erstsetup prüfen|Check first setup/i }).click()
 
-  const pwInputs = page.locator('input[type="password"]')
-  await pwInputs.nth(0).fill(password)
-  await pwInputs.nth(1).fill(password)
+  const form = page.locator('form')
+  await form.getByLabel('Password').first().fill(password)
+  await form.getByLabel(/Password wiederholen|Repeat password/i).fill(password)
 
-  await page.getByRole('button', { name: 'Admin-Passwort setzen' }).click()
+  await page.getByRole('button', { name: /Admin-Passwort setzen|Set admin password/i }).click()
 }
 
 export async function login(page: Page, username: string, password: string): Promise<void> {
   await gotoLogin(page)
   await submitLogin(page, username, password)
 
-  if (
-    await page
-      .getByText('Admin password setup required')
-      .isVisible({ timeout: 1200 })
+  const onProtectedRoute = await page
+    .waitForURL(/\/(dashboard|admin|products|assets|content|email|settings)/, { timeout: 2500 })
+    .then(() => true)
+    .catch(() => false)
+
+  if (!onProtectedRoute) {
+    const setupVisible = await page
+      .getByRole('button', { name: /Admin-Passwort setzen|Set admin password/i })
+      .isVisible()
       .catch(() => false)
-  ) {
-    await setupAdminPassword(page, password)
+
+    if (setupVisible || E2E_BOOTSTRAP_TOKEN) {
+      await setupAdminPassword(page, password)
+    }
   }
 
-  await expect(page).toHaveURL(/\/(dashboard|admin|products|assets|content|email|settings)/)
+  const reachedProtected = await page
+    .waitForURL(/\/(dashboard|admin|products|assets|content|email|settings)/, { timeout: 10000 })
+    .then(() => true)
+    .catch(() => false)
+
+  if (!reachedProtected) {
+    const inlineError = await page
+      .locator('.error')
+      .first()
+      .textContent()
+      .catch(() => null)
+    const statusHint = await page
+      .locator('[role="status"]')
+      .first()
+      .textContent()
+      .catch(() => null)
+    throw new Error(
+      `E2E login failed and stayed on /login. Error: ${inlineError ?? 'unknown'}. Hint: ${statusHint ?? 'none'}`
+    )
+  }
 }
 
 export async function loginAsAdmin(page: Page): Promise<void> {

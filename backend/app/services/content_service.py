@@ -1,31 +1,42 @@
 from __future__ import annotations
 
 import uuid
-from datetime import date
+from datetime import date, timedelta
 
 from sqlalchemy.orm import Session
 
 from app.models.asset import Asset, AssetOwnerType, AssetReviewState
 from app.models.base import utcnow
 from app.models.content import (
+    ChecklistPhase,
+    ContentChecklistSnapshot,
+    ContentChecklistTemplate,
+    ContentChecklistTemplateItem,
     ContentItem,
     ContentItemRevision,
+    ContentPlatformProfile,
     ContentStatus,
     ContentTask,
     ContentTaskView,
     EditorialStatus,
     TaskStatus,
+    TaskType,
 )
 from app.models.product import Product, ProductStatus
 from app.models.user import User, UserRole
 from app.models.workflow import WorkflowStatus
 from app.schemas.content import (
+    ContentChecklistTemplateCreate,
+    ContentChecklistTemplateUpdate,
     ContentItemCreate,
     ContentItemUpdate,
+    ContentPlatformProfileCreate,
+    ContentPlatformProfileUpdate,
     ContentTaskCreate,
     ContentTaskFilterParams,
     ContentTaskUpdate,
     ContentTaskViewCreate,
+    ContentTemplateApplyRequest,
 )
 from app.services.audit import record_audit_log
 from app.services.content_task_defaults import ensure_default_tasks_for_item
@@ -72,6 +83,8 @@ CONTENT_STATUS_TO_EDITORIAL: dict[ContentStatus, EditorialStatus] = {
     ContentStatus.published: EditorialStatus.published,
 }
 
+VALID_TEMPLATE_MERGE_MODES: set[str] = {"replace", "append"}
+
 
 def _serialize_value(value):
     if hasattr(value, "value"):
@@ -88,6 +101,79 @@ def _normalize_optional_text(value: str | None) -> str | None:
         return None
     trimmed = value.strip()
     return trimmed or None
+
+
+def _active_platform_profile(
+    db: Session,
+    *,
+    platform,
+) -> ContentPlatformProfile | None:
+    return (
+        db.query(ContentPlatformProfile)
+        .filter(
+            ContentPlatformProfile.platform == platform,
+            ContentPlatformProfile.is_active.is_(True),
+        )
+        .order_by(ContentPlatformProfile.version.desc(), ContentPlatformProfile.updated_at.desc())
+        .first()
+    )
+
+
+def _validate_platform_meta(
+    db: Session,
+    *,
+    platform,
+    platform_meta_json: dict[str, str | int | bool | float | None] | None,
+) -> list[str]:
+    profile = _active_platform_profile(db, platform=platform)
+    payload = platform_meta_json or {}
+    if not isinstance(payload, dict):
+        raise BusinessRuleViolation("platform_meta_json must be an object")
+    if profile is None:
+        return []
+
+    schema = profile.schema_json if isinstance(profile.schema_json, dict) else {}
+    fields = schema.get("fields")
+    if not isinstance(fields, list):
+        return []
+
+    allowed_keys: set[str] = set()
+    required_keys: set[str] = set()
+    for field in fields:
+        if not isinstance(field, dict):
+            continue
+        key = field.get("key")
+        if not isinstance(key, str) or not key.strip():
+            continue
+        key = key.strip()
+        allowed_keys.add(key)
+        if bool(field.get("required")):
+            required_keys.add(key)
+
+    unknown = sorted(k for k in payload.keys() if k not in allowed_keys)
+    if unknown:
+        raise BusinessRuleViolation("Unknown platform fields: " + ", ".join(unknown))
+
+    missing_required = sorted(key for key in required_keys if payload.get(key) in {None, "", []})
+    return missing_required
+
+
+def _compute_readiness_score(
+    *,
+    missing_platform_fields: list[str],
+    open_required_tasks: int,
+    approved_assets: int,
+) -> int:
+    score = 100
+    if missing_platform_fields:
+        score -= min(40, len(missing_platform_fields) * 10)
+    if open_required_tasks > 0:
+        score -= min(40, open_required_tasks * 10)
+    if approved_assets <= 0:
+        score -= 20
+    if score < 0:
+        return 0
+    return score
 
 
 def _resolve_editorial_status(
@@ -222,6 +308,29 @@ def _ensure_publish_ready(item: ContentItem, db: Session) -> None:
     if open_tasks > 0:
         raise BusinessRuleViolation("All content tasks must be done before publishing")
 
+    blocking_tasks = (
+        db.query(ContentTask.id)
+        .filter(
+            ContentTask.content_item_id == item.id,
+            ContentTask.status != TaskStatus.done,
+            ContentTask.required_for_publish.is_(True),
+            ContentTask.can_block_publish.is_(True),
+        )
+        .count()
+    )
+    if blocking_tasks > 0:
+        raise BusinessRuleViolation("Required checklist tasks are still open")
+
+    missing_required_platform_fields = _validate_platform_meta(
+        db,
+        platform=item.platform,
+        platform_meta_json=item.platform_meta_json,
+    )
+    if missing_required_platform_fields:
+        raise BusinessRuleViolation(
+            "Missing required platform fields: " + ", ".join(missing_required_platform_fields)
+        )
+
     approved_assets = (
         db.query(Asset.id)
         .filter(
@@ -235,6 +344,37 @@ def _ensure_publish_ready(item: ContentItem, db: Session) -> None:
         raise BusinessRuleViolation(
             "At least one approved content asset is required for publishing"
         )
+
+
+def _refresh_item_readiness(db: Session, *, item: ContentItem) -> None:
+    missing_required_platform_fields = _validate_platform_meta(
+        db,
+        platform=item.platform,
+        platform_meta_json=item.platform_meta_json,
+    )
+    required_open_tasks = (
+        db.query(ContentTask.id)
+        .filter(
+            ContentTask.content_item_id == item.id,
+            ContentTask.status != TaskStatus.done,
+            ContentTask.required_for_publish.is_(True),
+        )
+        .count()
+    )
+    approved_assets = (
+        db.query(Asset.id)
+        .filter(
+            Asset.owner_type == AssetOwnerType.content,
+            Asset.owner_id == item.id,
+            Asset.review_state == AssetReviewState.approved,
+        )
+        .count()
+    )
+    item.readiness_score = _compute_readiness_score(
+        missing_platform_fields=missing_required_platform_fields,
+        open_required_tasks=required_open_tasks,
+        approved_assets=approved_assets,
+    )
 
 
 def list_items(db: Session, *, product_id: uuid.UUID | None = None) -> list[ContentItem]:
@@ -261,6 +401,12 @@ def create_item(db: Session, *, payload: ContentItemCreate, actor: User | None) 
     item_data["last_change_summary"] = _normalize_optional_text(
         item_data.get("last_change_summary")
     )
+    item_data["platform_meta_json"] = item_data.get("platform_meta_json") or {}
+    _validate_platform_meta(
+        db,
+        platform=item_data.get("platform"),
+        platform_meta_json=item_data.get("platform_meta_json"),
+    )
     item = ContentItem(**item_data)
     validate_content_status_change(
         current_status=item.status,
@@ -285,6 +431,7 @@ def create_item(db: Session, *, payload: ContentItemCreate, actor: User | None) 
             workflow_status=item.workflow_status,
             fallback=item.editorial_status,
         )
+        _refresh_item_readiness(db, item=item)
         created_tasks = ensure_default_tasks_for_item(db, item)
         _append_item_revision(
             db,
@@ -346,6 +493,14 @@ def update_item(
     }:
         if key in updates:
             updates[key] = _normalize_optional_text(updates.get(key))
+
+    if "platform_meta_json" in updates:
+        candidate_platform = updates.get("platform", item.platform)
+        _validate_platform_meta(
+            db,
+            platform=candidate_platform,
+            platform_meta_json=updates.get("platform_meta_json") or {},
+        )
 
     if "product_id" in updates:
         _ensure_product_link_valid(db, product_id=updates.get("product_id"))
@@ -440,6 +595,8 @@ def update_item(
             before["review_cycle"] = item.review_cycle
             item.review_cycle += 1
             after["review_cycle"] = item.review_cycle
+
+        _refresh_item_readiness(db, item=item)
 
         if target_status == ContentStatus.published and previous_status != ContentStatus.published:
             _ensure_publish_ready(item, db)
@@ -681,6 +838,9 @@ def create_task(db: Session, *, payload: ContentTaskCreate, actor: User | None) 
                 "content_item_id": str(task.content_item_id),
             },
         )
+        item = db.query(ContentItem).filter(ContentItem.id == task.content_item_id).first()
+        if item:
+            _refresh_item_readiness(db, item=item)
     db.refresh(task)
     return task
 
@@ -738,6 +898,10 @@ def update_task(
                 after=after,
             )
 
+        item = db.query(ContentItem).filter(ContentItem.id == task.content_item_id).first()
+        if item:
+            _refresh_item_readiness(db, item=item)
+
     db.refresh(task)
     return task
 
@@ -762,6 +926,9 @@ def delete_task(db: Session, *, task_id: uuid.UUID, actor: User | None) -> None:
             description=f"Deleted content task '{task.id}'",
             before=snapshot,
         )
+        item = db.query(ContentItem).filter(ContentItem.id == task.content_item_id).first()
+        if item:
+            _refresh_item_readiness(db, item=item)
         db.delete(task)
 
 
@@ -857,3 +1024,433 @@ def _apply_task_notification_and_escalation(
             },
             description="Task overdue escalation emitted",
         )
+
+
+def list_platform_profiles(
+    db: Session,
+    *,
+    platform=None,
+) -> list[ContentPlatformProfile]:
+    query = db.query(ContentPlatformProfile)
+    if platform is not None:
+        query = query.filter(ContentPlatformProfile.platform == platform)
+    return query.order_by(
+        ContentPlatformProfile.platform.asc(), ContentPlatformProfile.updated_at.desc()
+    ).all()
+
+
+def create_platform_profile(
+    db: Session,
+    *,
+    payload: ContentPlatformProfileCreate,
+    actor: User,
+) -> ContentPlatformProfile:
+    profile = ContentPlatformProfile(
+        platform=payload.platform,
+        name=payload.name.strip(),
+        schema_json=payload.schema_json,
+        is_active=payload.is_active,
+        is_system=payload.is_system,
+        owner_user_id=actor.id,
+    )
+    with transaction_boundary(db):
+        db.add(profile)
+        db.flush()
+        record_audit_log(
+            db,
+            actor=actor,
+            action="content.platform_profile.create",
+            entity_type="content_platform_profile",
+            entity_id=str(profile.id),
+            description=f"Created content platform profile '{profile.name}'",
+            after={
+                "platform": profile.platform.value,
+                "is_active": profile.is_active,
+                "version": profile.version,
+            },
+        )
+    db.refresh(profile)
+    return profile
+
+
+def update_platform_profile(
+    db: Session,
+    *,
+    profile_id: uuid.UUID,
+    payload: ContentPlatformProfileUpdate,
+    actor: User,
+) -> ContentPlatformProfile:
+    profile = (
+        db.query(ContentPlatformProfile).filter(ContentPlatformProfile.id == profile_id).first()
+    )
+    if not profile:
+        raise NotFoundError("Platform profile not found")
+
+    updates = payload.model_dump(exclude_unset=True)
+    before: dict[str, str | int | bool | None] = {}
+    after: dict[str, str | int | bool | None] = {}
+    with transaction_boundary(db):
+        for key, value in updates.items():
+            current = getattr(profile, key)
+            if current == value:
+                continue
+            before[key] = _serialize_value(current)
+            setattr(profile, key, value)
+            after[key] = _serialize_value(value)
+        if before:
+            before["version"] = profile.version
+            profile.version += 1
+            after["version"] = profile.version
+            record_audit_log(
+                db,
+                actor=actor,
+                action="content.platform_profile.update",
+                entity_type="content_platform_profile",
+                entity_id=str(profile.id),
+                description=f"Updated content platform profile '{profile.name}'",
+                before=before,
+                after=after,
+            )
+    db.refresh(profile)
+    return profile
+
+
+def delete_platform_profile(db: Session, *, profile_id: uuid.UUID, actor: User) -> None:
+    profile = (
+        db.query(ContentPlatformProfile).filter(ContentPlatformProfile.id == profile_id).first()
+    )
+    if not profile:
+        raise NotFoundError("Platform profile not found")
+    with transaction_boundary(db):
+        record_audit_log(
+            db,
+            actor=actor,
+            action="content.platform_profile.delete",
+            entity_type="content_platform_profile",
+            entity_id=str(profile.id),
+            description=f"Deleted content platform profile '{profile.name}'",
+            before={"platform": profile.platform.value, "name": profile.name},
+        )
+        db.delete(profile)
+
+
+def list_checklist_templates(
+    db: Session,
+    *,
+    platform=None,
+    content_type=None,
+) -> list[ContentChecklistTemplate]:
+    query = db.query(ContentChecklistTemplate)
+    if platform is not None:
+        query = query.filter(
+            (ContentChecklistTemplate.applies_to_platform == platform)
+            | (ContentChecklistTemplate.applies_to_platform.is_(None))
+        )
+    if content_type is not None:
+        query = query.filter(
+            (ContentChecklistTemplate.applies_to_type == content_type)
+            | (ContentChecklistTemplate.applies_to_type.is_(None))
+        )
+    return query.order_by(ContentChecklistTemplate.updated_at.desc()).all()
+
+
+def create_checklist_template(
+    db: Session,
+    *,
+    payload: ContentChecklistTemplateCreate,
+    actor: User,
+) -> ContentChecklistTemplate:
+    name = payload.name.strip()
+    if not name:
+        raise BusinessRuleViolation("Template name must not be empty")
+    template = ContentChecklistTemplate(
+        name=name,
+        description=_normalize_optional_text(payload.description),
+        applies_to_platform=payload.applies_to_platform,
+        applies_to_type=payload.applies_to_type,
+        is_shared=payload.is_shared,
+        is_system=payload.is_system,
+        owner_user_id=actor.id,
+    )
+    with transaction_boundary(db):
+        db.add(template)
+        db.flush()
+        for index, item in enumerate(payload.items):
+            db.add(
+                ContentChecklistTemplateItem(
+                    template_id=template.id,
+                    title=item.title.strip(),
+                    phase=item.phase,
+                    required=item.required,
+                    priority_default=item.priority_default,
+                    due_offset_days=item.due_offset_days,
+                    can_block_publish=item.can_block_publish,
+                    sort_order=item.sort_order if item.sort_order is not None else index,
+                )
+            )
+        db.flush()
+        record_audit_log(
+            db,
+            actor=actor,
+            action="content.checklist_template.create",
+            entity_type="content_checklist_template",
+            entity_id=str(template.id),
+            description=f"Created checklist template '{template.name}'",
+            after={
+                "item_count": len(payload.items),
+                "is_shared": template.is_shared,
+                "applies_to_platform": (
+                    template.applies_to_platform.value if template.applies_to_platform else None
+                ),
+                "applies_to_type": template.applies_to_type.value
+                if template.applies_to_type
+                else None,
+            },
+        )
+    db.refresh(template)
+    return template
+
+
+def update_checklist_template(
+    db: Session,
+    *,
+    template_id: uuid.UUID,
+    payload: ContentChecklistTemplateUpdate,
+    actor: User,
+) -> ContentChecklistTemplate:
+    template = (
+        db.query(ContentChecklistTemplate)
+        .filter(ContentChecklistTemplate.id == template_id)
+        .first()
+    )
+    if not template:
+        raise NotFoundError("Checklist template not found")
+
+    updates = payload.model_dump(exclude_unset=True)
+    before: dict[str, str | int | bool | None] = {}
+    after: dict[str, str | int | bool | None] = {}
+    with transaction_boundary(db):
+        items_payload = updates.pop("items", None)
+        if "name" in updates:
+            updates["name"] = updates["name"].strip() if updates["name"] else ""
+            if not updates["name"]:
+                raise BusinessRuleViolation("Template name must not be empty")
+        if "description" in updates:
+            updates["description"] = _normalize_optional_text(updates.get("description"))
+
+        for key, value in updates.items():
+            current = getattr(template, key)
+            if current == value:
+                continue
+            before[key] = _serialize_value(current)
+            setattr(template, key, value)
+            after[key] = _serialize_value(value)
+
+        if items_payload is not None:
+            before["item_count"] = len(template.items)
+            db.query(ContentChecklistTemplateItem).filter(
+                ContentChecklistTemplateItem.template_id == template.id
+            ).delete()
+            for index, item in enumerate(items_payload):
+                db.add(
+                    ContentChecklistTemplateItem(
+                        template_id=template.id,
+                        title=item["title"].strip(),
+                        phase=item["phase"],
+                        required=item["required"],
+                        priority_default=item["priority_default"],
+                        due_offset_days=item.get("due_offset_days"),
+                        can_block_publish=item["can_block_publish"],
+                        sort_order=item.get("sort_order", index),
+                    )
+                )
+            after["item_count"] = len(items_payload)
+
+        if before:
+            before["version"] = template.version
+            template.version += 1
+            after["version"] = template.version
+            record_audit_log(
+                db,
+                actor=actor,
+                action="content.checklist_template.update",
+                entity_type="content_checklist_template",
+                entity_id=str(template.id),
+                description=f"Updated checklist template '{template.name}'",
+                before=before,
+                after=after,
+            )
+    db.refresh(template)
+    return template
+
+
+def delete_checklist_template(db: Session, *, template_id: uuid.UUID, actor: User) -> None:
+    template = (
+        db.query(ContentChecklistTemplate)
+        .filter(ContentChecklistTemplate.id == template_id)
+        .first()
+    )
+    if not template:
+        raise NotFoundError("Checklist template not found")
+    with transaction_boundary(db):
+        record_audit_log(
+            db,
+            actor=actor,
+            action="content.checklist_template.delete",
+            entity_type="content_checklist_template",
+            entity_id=str(template.id),
+            description=f"Deleted checklist template '{template.name}'",
+            before={"name": template.name, "version": template.version},
+        )
+        db.delete(template)
+
+
+def apply_checklist_template(
+    db: Session,
+    *,
+    item_id: uuid.UUID,
+    payload: ContentTemplateApplyRequest,
+    actor: User,
+) -> tuple[ContentItem, int, list[str]]:
+    if payload.merge_mode not in VALID_TEMPLATE_MERGE_MODES:
+        raise BusinessRuleViolation("merge_mode must be one of: replace, append")
+
+    item = db.query(ContentItem).filter(ContentItem.id == item_id).first()
+    if not item:
+        raise NotFoundError("Content item not found")
+    template = (
+        db.query(ContentChecklistTemplate)
+        .filter(ContentChecklistTemplate.id == payload.template_id)
+        .first()
+    )
+    if not template:
+        raise NotFoundError("Checklist template not found")
+
+    warnings: list[str] = []
+    created_count = 0
+    template_items = (
+        db.query(ContentChecklistTemplateItem)
+        .filter(ContentChecklistTemplateItem.template_id == template.id)
+        .order_by(
+            ContentChecklistTemplateItem.sort_order.asc(),
+            ContentChecklistTemplateItem.created_at.asc(),
+        )
+        .all()
+    )
+    snapshot_payload: dict[str, str | int | bool | float | None] = {
+        "template_name": template.name,
+        "template_version": template.version,
+        "platform": template.applies_to_platform.value if template.applies_to_platform else "",
+        "content_type": template.applies_to_type.value if template.applies_to_type else "",
+        "item_count": len(template_items),
+    }
+
+    with transaction_boundary(db):
+        snapshot = ContentChecklistSnapshot(
+            content_item_id=item.id,
+            template_id=template.id,
+            template_version=template.version,
+            snapshot_json=snapshot_payload,
+            created_by_user_id=actor.id,
+        )
+        db.add(snapshot)
+        db.flush()
+
+        if payload.merge_mode == "replace":
+            existing_tasks = (
+                db.query(ContentTask).filter(ContentTask.content_item_id == item.id).all()
+            )
+            for existing in existing_tasks:
+                if payload.keep_done_tasks and existing.status == TaskStatus.done:
+                    continue
+                db.delete(existing)
+
+        base_date = item.publish_date or item.planned_date
+        for template_item in template_items:
+            due_date = None
+            if base_date is not None and template_item.due_offset_days is not None:
+                due_date = base_date + timedelta(days=template_item.due_offset_days)
+            db.add(
+                ContentTask(
+                    content_item_id=item.id,
+                    type=TaskType.publish
+                    if template_item.phase == ChecklistPhase.upload
+                    else TaskType.record,
+                    title=template_item.title,
+                    status=TaskStatus.todo,
+                    priority=template_item.priority_default,
+                    due_date=due_date,
+                    notes=f"Template: {template.name} ({template_item.phase.value})",
+                    required_for_publish=template_item.required,
+                    can_block_publish=template_item.can_block_publish,
+                    checklist_snapshot_id=snapshot.id,
+                )
+            )
+            created_count += 1
+
+        item.applied_template_snapshot_id = snapshot.id
+        _refresh_item_readiness(db, item=item)
+        record_audit_log(
+            db,
+            actor=actor,
+            action="content.checklist_template.apply",
+            entity_type="content_item",
+            entity_id=str(item.id),
+            description=f"Applied checklist template '{template.name}'",
+            after={
+                "template_id": str(template.id),
+                "template_version": template.version,
+                "created_tasks_count": created_count,
+                "merge_mode": payload.merge_mode,
+                "keep_done_tasks": payload.keep_done_tasks,
+            },
+        )
+
+    db.refresh(item)
+    return _enrich_content_item(item, db), created_count, warnings
+
+
+def get_planning_view(
+    db: Session, *, item_id: uuid.UUID
+) -> tuple[ContentItem, list[ContentTask], list[str], bool]:
+    item = db.query(ContentItem).filter(ContentItem.id == item_id).first()
+    if not item:
+        raise NotFoundError("Content item not found")
+    tasks = (
+        db.query(ContentTask)
+        .filter(ContentTask.content_item_id == item.id)
+        .order_by(ContentTask.due_date.asc().nulls_last(), ContentTask.created_at.asc())
+        .all()
+    )
+    missing_required_platform_fields = _validate_platform_meta(
+        db,
+        platform=item.platform,
+        platform_meta_json=item.platform_meta_json,
+    )
+    blockers: list[str] = []
+    if missing_required_platform_fields:
+        blockers.append(
+            "Missing required platform fields: " + ", ".join(missing_required_platform_fields)
+        )
+
+    required_open_tasks = [
+        task for task in tasks if task.required_for_publish and task.status != TaskStatus.done
+    ]
+    if required_open_tasks:
+        blockers.append("Required checklist tasks are open")
+
+    approved_assets = (
+        db.query(Asset.id)
+        .filter(
+            Asset.owner_type == AssetOwnerType.content,
+            Asset.owner_id == item.id,
+            Asset.review_state == AssetReviewState.approved,
+        )
+        .count()
+    )
+    if approved_assets <= 0:
+        blockers.append("No approved asset linked")
+
+    _refresh_item_readiness(db, item=item)
+    publish_ready = len(blockers) == 0
+    return _enrich_content_item(item, db), tasks, blockers, publish_ready

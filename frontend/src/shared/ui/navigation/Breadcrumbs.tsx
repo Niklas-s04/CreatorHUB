@@ -1,4 +1,5 @@
 import { Link, useLocation } from 'react-router-dom'
+import { useI18n } from '../../i18n/i18n'
 import { routeLabel } from '../../navigation/navConfig'
 
 type Crumb = {
@@ -6,24 +7,24 @@ type Crumb = {
   to?: string
 }
 
-function buildCrumbs(pathname: string): Crumb[] {
-  const crumbs: Crumb[] = [{ label: 'Dashboard', to: '/dashboard' }]
+function buildCrumbs(pathname: string, language: 'de' | 'en'): Crumb[] {
+  const crumbs: Crumb[] = [{ label: routeLabel('/dashboard', language), to: '/dashboard' }]
 
   if (pathname === '/dashboard') {
-    return [{ label: 'Dashboard' }]
+    return [{ label: routeLabel('/dashboard', language) }]
   }
 
   const segments = pathname.split('/').filter(Boolean)
-  if (!segments.length) return [{ label: 'Dashboard' }]
+  if (!segments.length) return [{ label: routeLabel('/dashboard', language) }]
 
   let currentPath = ''
   for (let i = 0; i < segments.length; i++) {
     currentPath += `/${segments[i]}`
     const isLast = i === segments.length - 1
 
-    let label = routeLabel(currentPath)
+    let label = routeLabel(currentPath, language)
     if (segments[0] === 'products' && i === 1) {
-      label = `Produkt ${segments[i]}`
+      label = `${routeLabel('/products', language)} ${segments[i]}`
     } else if (label === 'Bereich') {
       label = decodeURIComponent(segments[i])
     }
@@ -39,7 +40,8 @@ function buildCrumbs(pathname: string): Crumb[] {
 
 export function Breadcrumbs() {
   const location = useLocation()
-  const crumbs = buildCrumbs(location.pathname)
+  const { language } = useI18n()
+  const crumbs = buildCrumbs(location.pathname, language)
 
   return (
     <nav className="breadcrumbs" aria-label="Breadcrumb">

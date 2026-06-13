@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -12,11 +12,11 @@ class Settings(BaseSettings):
     PROJECT_NAME: str = "creator-suite"
     ENV: str = "prod"
 
-    DATABASE_URL: str = "postgresql+psycopg://creator:creator@localhost:5432/creator_suite"
+    DATABASE_URL: str = Field(...)
 
     JWT_SECRET: str = Field(..., min_length=32)
     JWT_ACCESS_EXPIRE_MINUTES: int = 15
-    JWT_REFRESH_EXPIRE_MINUTES: int = 60 * 24 * 14
+    JWT_REFRESH_EXPIRE_MINUTES: int = 60 * 24 * 7
 
     UPLOADS_DIR: str = "/data/uploads"
     CACHE_DIR: str = "/data/cache"
@@ -28,11 +28,11 @@ class Settings(BaseSettings):
     OLLAMA_TEXT_MODEL: str = "llama3.1:8b"
     OLLAMA_VISION_MODEL: str = "llava:latest"
 
-    # Standardquellen für die Bildsuche ohne API-Schlüssel.
-    # Kommagetrennte Liste für source="auto".
+    # Default image search sources without an API key.
+    # Comma-separated list used when source="auto".
     IMAGE_HUNT_DEFAULT_SOURCES: str = "wikimedia,openverse"
 
-    # Openverse-Basis-URL ohne API-Schlüssel.
+    # Openverse base URL without an API key.
     OPENVERSE_API_BASE: str = "https://api.openverse.engineering/v1"
 
     CORS_ORIGINS: str = "http://localhost:3000"
@@ -52,12 +52,14 @@ class Settings(BaseSettings):
     AUTH_COOKIE_SAMESITE: Literal["lax", "strict", "none"] = "strict"
     AUTH_COOKIE_DOMAIN: str | None = None
     AUTH_ACCESS_COOKIE_MAX_AGE_SECONDS: int = 60 * 15
-    AUTH_REFRESH_COOKIE_MAX_AGE_SECONDS: int = 60 * 60 * 24 * 14
-    AUTH_COOKIE_MAX_AGE_SECONDS: int = 60 * 60 * 24 * 14
+    AUTH_REFRESH_COOKIE_MAX_AGE_SECONDS: int = 60 * 60 * 24 * 7
+    AUTH_COOKIE_MAX_AGE_SECONDS: int = 60 * 60 * 24 * 7
     CSRF_COOKIE_NAME: str = "creatorhub_csrf"
 
-    SESSION_IDLE_TIMEOUT_MINUTES: int = 60
-    SESSION_ABSOLUTE_TIMEOUT_MINUTES: int = 60 * 24 * 30
+    SESSION_IDLE_TIMEOUT_MINUTES: int = 30
+    SESSION_ABSOLUTE_TIMEOUT_MINUTES: int = 60 * 24 * 7
+
+    ACCOUNT_DELETION_GRACE_PERIOD_DAYS: int = 30
 
     AUTH_MAX_FAILED_ATTEMPTS: int = 5
     AUTH_LOCK_MINUTES: int = 30
@@ -70,7 +72,8 @@ class Settings(BaseSettings):
     SECURITY_SENSITIVE_ACTION_CONFIRMATION_REQUIRED: bool = False
     SECURITY_SENSITIVE_ACTION_CONFIRMATION_HEADER: str = "x-action-confirm"
     SECURITY_SENSITIVE_ACTION_CONFIRMATION_VALUE: str = "CONFIRM"
-    SECURITY_SENSITIVE_ACTION_REQUIRE_STEP_UP_MFA: bool = False
+    SECURITY_SENSITIVE_ACTION_REQUIRE_STEP_UP_MFA: bool = True
+    SECURITY_STEP_UP_MFA_MAX_AGE_SECONDS: int = 300
 
     PASSWORD_RESET_TOKEN_TTL_MINUTES: int = 30
 
@@ -95,13 +98,14 @@ class Settings(BaseSettings):
     ASSET_MAX_DELIVERY_BYTES: int = 25 * 1024 * 1024
     ENABLE_OPTIONAL_MALWARE_SCAN: bool = False
 
-    BOOTSTRAP_ADMIN_USERNAME: str = "admin"
+    BOOTSTRAP_ADMIN_USERNAME: str = Field(...)
     BOOTSTRAP_ADMIN_PASSWORD: str = Field(..., min_length=12)
     BOOTSTRAP_INSTALL_TOKEN: str = ""
 
     AUTO_ARCHIVE_ENABLED: bool = True
-    AUTO_ARCHIVE_INTERVAL_MINUTES: int = 720  # Standard: zweimal täglich
+    AUTO_ARCHIVE_INTERVAL_MINUTES: int = 720  # Default: twice per day.
     AUTO_ARCHIVE_SOLD_AFTER_DAYS: int = 30
+    PURGE_DELETED_USERS_INTERVAL_HOURS: int = 6
 
     LOG_LEVEL: str = "INFO"
     UVICORN_LOG_LEVEL: str = "INFO"
@@ -136,6 +140,27 @@ class Settings(BaseSettings):
     OTEL_EXPORTER_OTLP_ENDPOINT: str = ""
     OTEL_EXPORTER_OTLP_INSECURE: bool = True
     OTEL_SAMPLE_RATIO: float = 0.2
+
+    @field_validator("AUTH_COOKIE_DOMAIN", mode="after")
+    @classmethod
+    def validate_cookie_domain_in_production(cls, v: str | None, info) -> str | None:
+        """Enforce AUTH_COOKIE_DOMAIN in production."""
+        env = info.data.get("ENV", "").lower()
+        if env == "prod" and not v:
+            raise ValueError(
+                "AUTH_COOKIE_DOMAIN must be explicitly set in production (e.g., '.creatorhub.com')"
+            )
+        return v
+
+    @field_validator("JWT_SECRET", mode="after")
+    @classmethod
+    def validate_jwt_secret_not_default(cls, v: str) -> str:
+        """Reject common insecure defaults for JWT_SECRET."""
+        if v in ("change_me", "default", "test", "secret"):
+            raise ValueError(
+                "JWT_SECRET cannot be a common placeholder. Use a strong, unique secret."
+            )
+        return v
 
 
 settings = Settings()

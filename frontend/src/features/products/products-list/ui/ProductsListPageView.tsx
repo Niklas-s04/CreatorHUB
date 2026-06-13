@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useSearchParams } from 'react-router-dom'
-import { apiFetch } from '../../../../api'
+import { apiFetch, apiUrl } from '../../../../api'
 import { toProductDetailVm } from '../../../../shared/api/mappers'
 import { queryKeys } from '../../../../shared/api/queryKeys'
 import { parseProductDto } from '../../../../shared/api/validators'
@@ -10,6 +10,7 @@ import type { ProductCreateFormValues } from '../../../../shared/forms/schemas'
 import { useDebouncedValue } from '../../../../shared/hooks/useDebouncedValue'
 import { getErrorMessage } from '../../../../shared/lib/errors'
 import { useAuthz } from '../../../../shared/hooks/useAuthz'
+import { useI18n } from '../../../../shared/i18n/i18n'
 import { PageHeader } from '../../../../shared/ui/page/PageHeader'
 import { ErrorState } from '../../../../shared/ui/states/ErrorState'
 import { ListSkeleton } from '../../../../shared/ui/states/ListSkeleton'
@@ -28,15 +29,6 @@ const DEFAULT_COLUMNS: ProductColumnKey[] = [
   'status',
   'currentValue',
   'currency',
-]
-
-const ALL_COLUMNS: { key: ProductColumnKey; label: string }[] = [
-  { key: 'title', label: 'Titel' },
-  { key: 'category', label: 'Kategorie' },
-  { key: 'condition', label: 'Zustand' },
-  { key: 'status', label: 'Status' },
-  { key: 'currentValue', label: 'Wert' },
-  { key: 'currency', label: 'Währung' },
 ]
 
 type SavedView = {
@@ -134,6 +126,7 @@ function persistSavedViews(views: SavedView[]) {
 
 export default function ProductsListPageView() {
   const { hasPermission } = useAuthz()
+  const { language } = useI18n()
   const toast = useToast()
   const [searchParams, setSearchParams] = useSearchParams()
   const urlQ = searchParams.get('q') || ''
@@ -164,6 +157,14 @@ export default function ProductsListPageView() {
   const [exportDataset, setExportDataset] = useState<'products' | 'transactions' | 'value_history'>('products')
   const [exportYears, setExportYears] = useState('')
   const queryClient = useQueryClient()
+  const allColumns: { key: ProductColumnKey; label: string }[] = [
+    { key: 'title', label: language === 'en' ? 'Title' : 'Titel' },
+    { key: 'category', label: language === 'en' ? 'Category' : 'Kategorie' },
+    { key: 'condition', label: language === 'en' ? 'Condition' : 'Zustand' },
+    { key: 'status', label: language === 'en' ? 'Status' : 'Status' },
+    { key: 'currentValue', label: language === 'en' ? 'Value' : 'Wert' },
+    { key: 'currency', label: language === 'en' ? 'Currency' : 'Währung' },
+  ]
 
   const listParams = useMemo(
     () => ({
@@ -317,7 +318,7 @@ export default function ProductsListPageView() {
       )
       setSelectedIds(new Set())
       await queryClient.invalidateQueries({ queryKey: ['products', 'list'] })
-      toast.success('Ausgewählte Produkte wurden archiviert')
+      toast.success(language === 'en' ? 'Selected products were archived' : 'Ausgewählte Produkte wurden archiviert')
     } catch (e: unknown) {
       const message = getErrorMessage(e)
       setErr(message)
@@ -342,7 +343,7 @@ export default function ProductsListPageView() {
     setSavedViews(next)
     persistSavedViews(next)
     setNewViewName('')
-    toast.success('Ansicht gespeichert')
+    toast.success(language === 'en' ? 'View saved' : 'Ansicht gespeichert')
   }
 
   function applyView(viewId: string) {
@@ -381,7 +382,7 @@ export default function ProductsListPageView() {
       await createMutation.mutateAsync(payload)
       setShowNew(false)
       await queryClient.invalidateQueries({ queryKey: queryKeys.products.list(listParams) })
-      toast.success('Produkt wurde gespeichert')
+      toast.success(language === 'en' ? 'Product saved' : 'Produkt wurde gespeichert')
     } catch (e: unknown) {
       const message = getErrorMessage(e)
       setErr(message)
@@ -410,47 +411,47 @@ export default function ProductsListPageView() {
       }
     })
     const qs = params.toString()
-    const url = `/api/products/export/csv${qs ? `?${qs}` : ''}`
+    const url = apiUrl(`/products/export/csv${qs ? `?${qs}` : ''}`)
     window.open(url, '_blank', 'noreferrer')
   }
 
   return (
     <div className="container">
       <PageHeader
-        title="Inventar"
-        subtitle="Produkte verwalten, filtern und exportieren."
+        title={language === 'en' ? 'Inventory' : 'Inventar'}
+        subtitle={language === 'en' ? 'Manage, filter and export products.' : 'Produkte verwalten, filtern und exportieren.'}
         right={(
           <>
             <button className="btn primary" onClick={() => setShowNew(v => !v)} disabled={!hasPermission('product.write')}>
-              {showNew ? 'Schließen' : '+ Produkt'}
+              {showNew ? (language === 'en' ? 'Close' : 'Schließen') : (language === 'en' ? '+ Product' : '+ Produkt')}
             </button>
             <div className="control-row">
-              <label className="sr-only" htmlFor="products-export-dataset">Export-Datensatz</label>
+              <label className="sr-only" htmlFor="products-export-dataset">{language === 'en' ? 'Export dataset' : 'Export-Datensatz'}</label>
               <select id="products-export-dataset" value={exportDataset} onChange={e => setExportDataset(e.target.value as typeof exportDataset)}>
-                <option value="products">Produkte</option>
-                <option value="transactions">Transaktionen</option>
-                <option value="value_history">Wert-Historie</option>
+                <option value="products">{language === 'en' ? 'Products' : 'Produkte'}</option>
+                <option value="transactions">{language === 'en' ? 'Transactions' : 'Transaktionen'}</option>
+                <option value="value_history">{language === 'en' ? 'Value history' : 'Wert-Historie'}</option>
               </select>
-              <label className="sr-only" htmlFor="products-export-years">Export-Jahre</label>
+              <label className="sr-only" htmlFor="products-export-years">{language === 'en' ? 'Export years' : 'Export-Jahre'}</label>
               <input
                 id="products-export-years"
                 className="w180"
-                placeholder="Jahre z.B. 2023,2024"
+                placeholder={language === 'en' ? 'Years e.g. 2023,2024' : 'Jahre z.B. 2023,2024'}
                 value={exportYears}
                 onChange={e => setExportYears(e.target.value)}
               />
               <button className="btn" onClick={handleExport} disabled={!hasPermission('product.export')}>
-                Export CSV
+                {language === 'en' ? 'Export CSV' : 'Export CSV'}
               </button>
             </div>
           </>
         )}
       />
 
-      {err && <ErrorState title="Aktion fehlgeschlagen" message={err} />}
+      {err && <ErrorState title={language === 'en' ? 'Action failed' : 'Aktion fehlgeschlagen'} message={err} />}
       {productsQuery.error && !err && (
         <ErrorState
-          title="Produkte konnten nicht geladen werden"
+          title={language === 'en' ? 'Products could not be loaded' : 'Produkte konnten nicht geladen werden'}
           message={getErrorMessage(productsQuery.error)}
           onRetry={() => {
             void productsQuery.refetch()
@@ -482,26 +483,26 @@ export default function ProductsListPageView() {
           onReset={resetFilters}
           extraActions={(
             <div className="control-row">
-              <label className="sr-only" htmlFor="products-view-name">Name für gespeicherte Ansicht</label>
+              <label className="sr-only" htmlFor="products-view-name">{language === 'en' ? 'Saved view name' : 'Name für gespeicherte Ansicht'}</label>
               <input
                 id="products-view-name"
                 className="w180"
-                placeholder="Ansicht speichern…"
+                placeholder={language === 'en' ? 'Save view…' : 'Ansicht speichern…'}
                 value={newViewName}
                 onChange={e => setNewViewName(e.target.value)}
               />
-              <button className="btn" onClick={saveView}>View speichern</button>
-              <label className="sr-only" htmlFor="products-saved-views">Gespeicherte Ansichten</label>
+              <button className="btn" onClick={saveView}>{language === 'en' ? 'Save view' : 'View speichern'}</button>
+              <label className="sr-only" htmlFor="products-saved-views">{language === 'en' ? 'Saved views' : 'Gespeicherte Ansichten'}</label>
               <select id="products-saved-views" onChange={e => applyView(e.target.value)} value="">
-                <option value="">Gespeicherte Ansichten…</option>
+                <option value="">{language === 'en' ? 'Saved views…' : 'Gespeicherte Ansichten…'}</option>
                 {savedViews.map(view => (
                   <option key={view.id} value={view.id}>{view.name}</option>
                 ))}
               </select>
               <details>
-                <summary className="btn ghost" aria-label="Spaltenauswahl öffnen">Spalten</summary>
+                <summary className="btn ghost" aria-label={language === 'en' ? 'Open column selection' : 'Spaltenauswahl öffnen'}>{language === 'en' ? 'Columns' : 'Spalten'}</summary>
                 <div className="card stack">
-                  {ALL_COLUMNS.map(column => (
+                  {allColumns.map(column => (
                     <label key={column.key} className="small">
                       <input
                         type="checkbox"
@@ -518,12 +519,12 @@ export default function ProductsListPageView() {
         />
         {!!selectedIds.size && (
           <div className="row between section-gap">
-            <span className="muted small">{selectedIds.size} ausgewählt</span>
+            <span className="muted small">{selectedIds.size} {language === 'en' ? 'selected' : 'ausgewählt'}</span>
             <div className="control-row">
               <button className="btn danger" onClick={() => void bulkArchiveSelection()} disabled={!hasPermission('product.write')}>
-                Bulk: Archivieren
+                {language === 'en' ? 'Bulk: Archive' : 'Bulk: Archivieren'}
               </button>
-              <button className="btn ghost" onClick={() => setSelectedIds(new Set())}>Auswahl löschen</button>
+              <button className="btn ghost" onClick={() => setSelectedIds(new Set())}>{language === 'en' ? 'Clear selection' : 'Auswahl löschen'}</button>
             </div>
           </div>
         )}
@@ -543,21 +544,21 @@ export default function ProductsListPageView() {
           />
         )}
         <div className="row between mt8">
-          <button className="btn" onClick={() => changePage('prev')} disabled={meta.offset <= 0}>← Zurück</button>
-          <span className="muted small">Offset {meta.offset} · Limit {meta.limit} · Gesamt {meta.total}</span>
+          <button className="btn" onClick={() => changePage('prev')} disabled={meta.offset <= 0}>{language === 'en' ? '← Back' : '← Zurück'}</button>
+          <span className="muted small">{language === 'en' ? 'Offset' : 'Offset'} {meta.offset} · {language === 'en' ? 'Limit' : 'Limit'} {meta.limit} · {language === 'en' ? 'Total' : 'Gesamt'} {meta.total}</span>
           <button
             className="btn"
             onClick={() => changePage('next')}
             disabled={meta.offset + meta.limit >= meta.total}
           >
-            Weiter →
+            {language === 'en' ? 'Next →' : 'Weiter →'}
           </button>
         </div>
         {!!savedViews.length && (
           <div className="control-row mt8">
             {savedViews.map(view => (
               <button key={view.id} className="btn ghost" onClick={() => deleteView(view.id)}>
-                View löschen: {view.name}
+                {language === 'en' ? 'Delete view:' : 'View löschen:'} {view.name}
               </button>
             ))}
           </div>

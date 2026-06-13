@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import { apiFetch } from '../../../../api'
+import { apiFetch, apiUrl } from '../../../../api'
+import { useI18n } from '../../../../shared/i18n/i18n'
 import { useAuthz } from '../../../../shared/hooks/useAuthz'
 import { getErrorMessage } from '../../../../shared/lib/errors'
 import { ErrorState } from '../../../../shared/ui/states/ErrorState'
@@ -94,6 +95,8 @@ function formatDate(value: string): string {
 }
 
 export default function AuditLogsPageView() {
+  const { language } = useI18n()
+  const isEnglish = language === 'en'
   const { hasPermission, loading: authzLoading } = useAuthz()
   const canViewAudit = hasPermission('audit.view')
 
@@ -183,7 +186,7 @@ export default function AuditLogsPageView() {
     if (categoryFilter) params.set('category', categoryFilter)
     if (criticalOnly) params.set('critical_only', 'true')
     const query = params.toString()
-    const url = `/api/audit/export/csv${query ? `?${query}` : ''}`
+    const url = apiUrl(`/audit/export/csv${query ? `?${query}` : ''}`)
     window.open(url, '_blank', 'noopener,noreferrer')
   }
 
@@ -194,8 +197,8 @@ export default function AuditLogsPageView() {
   if (!canViewAudit) {
     return (
       <div className="card">
-        <h2>Audit</h2>
-        <div className="muted">Keine Berechtigung für Audit-Logs.</div>
+        <h2>{isEnglish ? 'Audit' : 'Audit'}</h2>
+        <div className="muted">{isEnglish ? 'No permission for audit logs.' : 'Keine Berechtigung für Audit-Logs.'}</div>
       </div>
     )
   }
@@ -203,7 +206,7 @@ export default function AuditLogsPageView() {
   if (err) {
     return (
       <ErrorState
-        title="Audit-Logs konnten nicht geladen werden"
+        title={isEnglish ? 'Audit logs could not be loaded' : 'Audit-Logs konnten nicht geladen werden'}
         message={err}
         onRetry={() => {
           void load()
@@ -216,34 +219,34 @@ export default function AuditLogsPageView() {
     <div className="container stack">
       <div className="card">
         <div className="card-head">
-          <h2>Audit-Logs</h2>
+          <h2>{isEnglish ? 'Audit logs' : 'Audit-Logs'}</h2>
           <div className="control-row">
             <select value={String(limit)} onChange={event => {
               setLimit(Number(event.target.value))
               setOffset(0)
             }}>
-              <option value="25">25 / Seite</option>
-              <option value="50">50 / Seite</option>
+              <option value="25">25 {isEnglish ? '/ page' : '/ Seite'}</option>
+              <option value="50">50 {isEnglish ? '/ page' : '/ Seite'}</option>
             </select>
             <button className="btn" onClick={() => {
               void load()
             }}>
-              Refresh
+              {isEnglish ? 'Refresh' : 'Aktualisieren'}
             </button>
             <button className="btn" onClick={handleExportCsv}>
-              Export CSV
+              {isEnglish ? 'Export CSV' : 'CSV exportieren'}
             </button>
           </div>
         </div>
-        <div className="audit-filters" role="region" aria-label="Audit Filter">
+        <div className="audit-filters" role="region" aria-label={isEnglish ? 'Audit filters' : 'Audit Filter'}>
           <input
             value={actionFilter}
             onChange={event => {
               setActionFilter(event.target.value)
               setOffset(0)
             }}
-            placeholder="Aktion"
-            aria-label="Filter Aktion"
+            placeholder={isEnglish ? 'Action' : 'Aktion'}
+            aria-label={isEnglish ? 'Filter action' : 'Filter Aktion'}
           />
           <input
             value={entityTypeFilter}
@@ -251,8 +254,8 @@ export default function AuditLogsPageView() {
               setEntityTypeFilter(event.target.value)
               setOffset(0)
             }}
-            placeholder="Objekttyp"
-            aria-label="Filter Objekttyp"
+            placeholder={isEnglish ? 'Object type' : 'Objekttyp'}
+            aria-label={isEnglish ? 'Filter object type' : 'Filter Objekttyp'}
           />
           <input
             value={actorFilter}
@@ -260,8 +263,8 @@ export default function AuditLogsPageView() {
               setActorFilter(event.target.value)
               setOffset(0)
             }}
-            placeholder="Akteur"
-            aria-label="Filter Akteur"
+            placeholder={isEnglish ? 'Actor' : 'Akteur'}
+            aria-label={isEnglish ? 'Filter actor' : 'Filter Akteur'}
           />
           <input
             value={searchFilter}
@@ -269,8 +272,8 @@ export default function AuditLogsPageView() {
               setSearchFilter(event.target.value)
               setOffset(0)
             }}
-            placeholder="Suche"
-            aria-label="Audit Suche"
+            placeholder={isEnglish ? 'Search' : 'Suche'}
+            aria-label={isEnglish ? 'Audit search' : 'Audit Suche'}
           />
           <select
             value={categoryFilter}
@@ -278,13 +281,13 @@ export default function AuditLogsPageView() {
               setCategoryFilter(event.target.value)
               setOffset(0)
             }}
-            aria-label="Filter Kategorie"
+            aria-label={isEnglish ? 'Filter category' : 'Filter Kategorie'}
           >
-            <option value="">Alle Kategorien</option>
-            <option value="approval">Freigaben</option>
-            <option value="permission_change">Rechteänderungen</option>
+            <option value="">{isEnglish ? 'All categories' : 'Alle Kategorien'}</option>
+            <option value="approval">{isEnglish ? 'Approvals' : 'Freigaben'}</option>
+            <option value="permission_change">{isEnglish ? 'Permission changes' : 'Rechteänderungen'}</option>
             <option value="security">Security</option>
-            <option value="ai_action">AI-Aktionen</option>
+            <option value="ai_action">{isEnglish ? 'AI actions' : 'AI-Aktionen'}</option>
             <option value="domain">Domain</option>
           </select>
           <label className="audit-checkbox">
@@ -296,21 +299,21 @@ export default function AuditLogsPageView() {
                 setOffset(0)
               }}
             />
-            Nur kritisch
+            {isEnglish ? 'Critical only' : 'Nur kritisch'}
           </label>
-          <button className="btn" onClick={resetFilters}>Zurücksetzen</button>
+          <button className="btn" onClick={resetFilters}>{isEnglish ? 'Reset' : 'Zurücksetzen'}</button>
         </div>
         <table className="status-table">
-          <caption className="sr-only">Audit-Events</caption>
+          <caption className="sr-only">{isEnglish ? 'Audit events' : 'Audit-Events'}</caption>
           <thead>
             <tr>
-              <th scope="col">Zeit</th>
-              <th scope="col">Kategorie</th>
-              <th scope="col">Aktion</th>
-              <th scope="col">Objekt</th>
-              <th scope="col">Beschreibung</th>
-              <th scope="col">Akteur</th>
-              <th scope="col">Details</th>
+              <th scope="col">{isEnglish ? 'Time' : 'Zeit'}</th>
+              <th scope="col">{isEnglish ? 'Category' : 'Kategorie'}</th>
+              <th scope="col">{isEnglish ? 'Action' : 'Aktion'}</th>
+              <th scope="col">{isEnglish ? 'Object' : 'Objekt'}</th>
+              <th scope="col">{isEnglish ? 'Description' : 'Beschreibung'}</th>
+              <th scope="col">{isEnglish ? 'Actor' : 'Akteur'}</th>
+              <th scope="col">{isEnglish ? 'Details' : 'Details'}</th>
             </tr>
           </thead>
           <tbody>
@@ -328,14 +331,14 @@ export default function AuditLogsPageView() {
                 <td>{entry.actor_name || 'system'}</td>
                 <td>
                   <details>
-                    <summary className="audit-summary">Anzeigen</summary>
+                    <summary className="audit-summary">{isEnglish ? 'Show' : 'Anzeigen'}</summary>
                     <div className="audit-details-grid">
                       <div>
-                        <div className="muted small">Vorher</div>
+                        <div className="muted small">{isEnglish ? 'Before' : 'Vorher'}</div>
                         <pre className="audit-json">{prettyJson(entry.before)}</pre>
                       </div>
                       <div>
-                        <div className="muted small">Nachher</div>
+                        <div className="muted small">{isEnglish ? 'After' : 'Nachher'}</div>
                         <pre className="audit-json">{prettyJson(entry.after)}</pre>
                       </div>
                       <div>
@@ -349,15 +352,15 @@ export default function AuditLogsPageView() {
             ))}
             {entries.length === 0 && (
               <tr>
-                <td colSpan={7} className="muted">Keine Audit-Events vorhanden.</td>
+                <td colSpan={7} className="muted">{isEnglish ? 'No audit events available.' : 'Keine Audit-Events vorhanden.'}</td>
               </tr>
             )}
           </tbody>
         </table>
         <div className="row between mt8">
-          <button className="btn" onClick={() => setOffset(current => Math.max(0, current - limit))} disabled={offset <= 0}>← Zurück</button>
-          <span className="muted small">Offset {offset} · Limit {limit} · Gesamt {total}</span>
-          <button className="btn" onClick={() => setOffset(current => current + limit)} disabled={entries.length < limit || offset + limit >= total}>Weiter →</button>
+          <button className="btn" onClick={() => setOffset(current => Math.max(0, current - limit))} disabled={offset <= 0}>{isEnglish ? '← Back' : '← Zurück'}</button>
+          <span className="muted small">{isEnglish ? 'Offset' : 'Offset'} {offset} · {isEnglish ? 'Limit' : 'Limit'} {limit} · {isEnglish ? 'Total' : 'Gesamt'} {total}</span>
+          <button className="btn" onClick={() => setOffset(current => current + limit)} disabled={entries.length < limit || offset + limit >= total}>{isEnglish ? 'Next →' : 'Weiter →'}</button>
         </div>
       </div>
     </div>

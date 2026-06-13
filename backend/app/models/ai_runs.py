@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from sqlalchemy import String, Text
+from sqlalchemy import JSON, String, Text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -14,4 +14,6 @@ class AiRun(Base, UUIDMixin, TimestampMixin):
     model: Mapped[str] = mapped_column(String(128))
     input_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
     output_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
-    meta_json: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    meta_json: Mapped[dict | None] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"), nullable=True
+    )

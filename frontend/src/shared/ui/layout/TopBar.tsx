@@ -2,6 +2,7 @@ import { type FormEvent, Fragment, useEffect, useMemo, useRef, useState } from '
 import { useNavigate } from 'react-router-dom'
 import { apiFetch } from '../../../api'
 import { useDebouncedValue } from '../../hooks/useDebouncedValue'
+import { useI18n } from '../../i18n/i18n'
 
 type DashboardMetric = {
   key: string
@@ -114,6 +115,7 @@ function HighlightedText({ text, query }: { text: string; query: string }) {
 
 export default function TopBar({ menuOpen = false, onToggleMenu }: { menuOpen?: boolean; onToggleMenu: () => void }) {
   const navigate = useNavigate()
+  const { language, t } = useI18n()
   const inputRef = useRef<HTMLInputElement | null>(null)
   const [query, setQuery] = useState('')
   const [open, setOpen] = useState(false)
@@ -237,6 +239,20 @@ export default function TopBar({ menuOpen = false, onToggleMenu }: { menuOpen?: 
     }
   }
 
+  const liveRegionText = loading
+    ? language === 'en'
+      ? 'Searching'
+      : 'Suche läuft'
+    : groups.length
+      ? language === 'en'
+        ? `${flatHits.length} search results available`
+        : `${flatHits.length} Suchtreffer verfügbar`
+      : normalize(query)
+        ? language === 'en'
+          ? 'No search results'
+          : 'Keine Suchtreffer'
+        : ''
+
   return (
     <header className="topbar" role="banner">
       <div className="topbar-inner">
@@ -244,21 +260,21 @@ export default function TopBar({ menuOpen = false, onToggleMenu }: { menuOpen?: 
           type="button"
           className="topbar-menu-btn"
           onClick={onToggleMenu}
-          aria-label="Navigation öffnen"
+          aria-label={t('app.menuOpen')}
           aria-controls="mobile-navigation-drawer"
           aria-expanded={menuOpen}
         >
           ☰
         </button>
         <div className="topbar-search-wrap">
-          <form onSubmit={onSubmit} role="search" aria-label="Globale Suche">
-            <label htmlFor="global-search" className="sr-only">Globale Suche</label>
+          <form onSubmit={onSubmit} role="search" aria-label={t('common.search')}>
+            <label htmlFor="global-search" className="sr-only">{t('common.search')}</label>
             <input
               id="global-search"
               ref={inputRef}
               className="topbar-search"
-              placeholder="Global suchen: Produkte, Assets, Content, Knowledge, Benutzer …"
-              aria-label="Suchen"
+              placeholder={t('common.searchPlaceholder')}
+              aria-label={language === 'en' ? 'Search' : 'Suchen'}
               role="combobox"
               aria-autocomplete="list"
               aria-expanded={open && normalize(query).length > 0}
@@ -274,13 +290,20 @@ export default function TopBar({ menuOpen = false, onToggleMenu }: { menuOpen?: 
             />
           </form>
           <div className="sr-only" aria-live="polite" aria-atomic="true">
-            {loading ? 'Suche läuft' : groups.length ? `${flatHits.length} Suchtreffer verfügbar` : normalize(query) ? 'Keine Suchtreffer' : ''}
+            {liveRegionText}
           </div>
           {open && normalize(query) && (
-            <div id="global-search-results" className="topbar-search-results" role="listbox" aria-label="Suchergebnisse">
-              {loading && <div className="topbar-search-empty">Suche läuft…</div>}
+            <div
+              id="global-search-results"
+              className="topbar-search-results"
+              role="listbox"
+              aria-label={language === 'en' ? 'Search results' : 'Suchergebnisse'}
+            >
+              {loading && <div className="topbar-search-empty">{language === 'en' ? 'Searching…' : 'Suche läuft…'}</div>}
               {!loading && groups.length === 0 && (
-                <div className="topbar-search-empty">Keine Treffer. Enter öffnet Operations Inbox.</div>
+                <div className="topbar-search-empty">
+                  {language === 'en' ? 'No results. Enter opens the Operations Inbox.' : 'Keine Treffer. Enter öffnet Operations Inbox.'}
+                </div>
               )}
               {!loading &&
                 groups.map(group => (
@@ -317,17 +340,31 @@ export default function TopBar({ menuOpen = false, onToggleMenu }: { menuOpen?: 
           )}
         </div>
         <div className="topbar-right">
-          <button type="button" className="topbar-icon-btn" aria-label="Benachrichtigungen">
+          <button
+            type="button"
+            className="topbar-icon-btn"
+            aria-label={language === 'en' ? 'Notifications' : 'Benachrichtigungen'}
+          >
             🔔
             {pendingApprovalCount > 0 && <span className="badge">{pendingApprovalCount}</span>}
           </button>
-          <button type="button" className="topbar-icon-btn" aria-label="Nachrichten">
+          <button
+            type="button"
+            className="topbar-icon-btn"
+            aria-label={language === 'en' ? 'Messages' : 'Nachrichten'}
+          >
             ✉
             <span className="badge">7</span>
           </button>
-          <button type="button" className="topbar-profile" aria-label="Profil öffnen">NH</button>
+          <button
+            type="button"
+            className="topbar-profile"
+            aria-label={language === 'en' ? 'Open profile' : 'Profil öffnen'}
+          >
+            NH
+          </button>
         </div>
       </div>
     </header>
-  );
+  )
 }

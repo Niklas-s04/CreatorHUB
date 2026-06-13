@@ -33,11 +33,11 @@ def bootstrap_if_needed() -> None:
         print("SKIP_BOOTSTRAP is set - skipping bootstrap")
         return
 
-    # Tabellen für lokale Starts anlegen; produktiv über Alembic migrieren.
+    # Create tables for local starts; use Alembic in production.
     Base.metadata.create_all(bind=engine)
     db: Session = SessionLocal()
     try:
-        # Standard-Admin nur einmal anlegen.
+        # Create the default admin only once.
         admin = db.query(User).filter(User.username == settings.BOOTSTRAP_ADMIN_USERNAME).first()
         if not admin:
             db.add(
@@ -51,7 +51,7 @@ def bootstrap_if_needed() -> None:
             )
             db.commit()
 
-        # Standard-Wissensdokumente nur anlegen, wenn sie fehlen.
+        # Create default knowledge documents only when they are missing.
         has_brand = (
             db.query(KnowledgeDoc).filter(KnowledgeDoc.type == KnowledgeDocType.brand_voice).first()
         )

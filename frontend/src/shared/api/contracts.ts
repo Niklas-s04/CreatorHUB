@@ -1,7 +1,7 @@
 export type ProductStatusDto = 'active' | 'sold' | 'gifted' | 'returned' | 'broken' | 'archived'
 
 export type ProductDto = {
-  id: number
+  id: string
   title: string
   brand: string | null
   model: string | null
@@ -16,7 +16,7 @@ export type ProductDto = {
 }
 
 export type ProductAssetDto = {
-  id: number
+  id: string
   title: string | null
   source: string | null
   review_state: 'pending' | 'approved' | 'rejected'
@@ -28,7 +28,7 @@ export type ProductAssetDto = {
 }
 
 export type ProductTransactionDto = {
-  id: number
+  id: string
   tx_type: string
   tx_date: string | null
   amount: number | null
@@ -80,7 +80,7 @@ export type KnowledgeDocDraftLinkDto = {
 }
 
 export type ContentTaskDto = {
-  id: number
+  id: string
   title: string
   status: string
   updated_at: string | null
@@ -93,7 +93,7 @@ export type ImageSearchJobDto = {
 }
 
 export type ProductListItemVm = {
-  id: number
+  id: string
   title: string
   category: string
   condition: string
@@ -103,7 +103,7 @@ export type ProductListItemVm = {
 }
 
 export type ProductDetailVm = {
-  id: number
+  id: string
   title: string
   brand: string
   model: string
@@ -115,7 +115,7 @@ export type ProductDetailVm = {
 }
 
 export type ProductAssetVm = {
-  id: number
+  id: string
   title: string
   source: string
   reviewState: 'pending' | 'approved' | 'rejected'
@@ -127,7 +127,7 @@ export type ProductAssetVm = {
 }
 
 export type ProductTransactionVm = {
-  id: number
+  id: string
   txType: string
   txDate: string
   amount: number | null
@@ -179,7 +179,7 @@ export type KnowledgeDocDraftLinkVm = {
 }
 
 export type DashboardProductVm = {
-  id: number
+  id: string
   title: string
   status: ProductStatusDto
   quantity: number
@@ -188,7 +188,7 @@ export type DashboardProductVm = {
 }
 
 export type DashboardTaskVm = {
-  id: number
+  id: string
   title: string
   status: string
   updatedAt: string

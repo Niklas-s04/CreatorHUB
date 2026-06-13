@@ -3,7 +3,7 @@ Tests for account deletion feature (PRIORITY 5).
 
 Tests cover:
 - DELETE /api/v1/user/account endpoint
-- Soft-delete behavior (is_active=False, deletion_requested_at set)
+- Soft-delete behavior (deletion_requested_at set, account remains restorable)
 - Session revocation on deletion
 - Background purge of deleted users
 - Audit logging for deletion and purge
@@ -16,6 +16,7 @@ import pytest
 from fastapi import status
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.models.audit import AuditLog
 from app.models.auth_session import AuthSession, RevokedToken
 from app.models.user import User
@@ -25,6 +26,12 @@ from tests.factories import create_user
 
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
+
+
+def _csrf_headers(client, token: str) -> dict[str, str]:
+    csrf = client.cookies.get(settings.CSRF_COOKIE_NAME)
+    assert csrf
+    return {"Authorization": f"Bearer {token}", "x-csrf-token": csrf}
 
 
 @pytest.fixture
@@ -72,7 +79,7 @@ class TestDeleteAccountEndpoint:
     def test_delete_account_marks_user_soft_deleted(
         self, db_session: Session, client, user_for_deletion, monkeypatch
     ):
-        """DELETE should soft-delete user (is_active=False, deletion_requested_at set)."""
+        """DELETE should schedule account deletion while keeping grace-period restore possible."""
         user, token = user_for_deletion
 
         # Mock require_sensitive_action to always succeed
@@ -98,13 +105,13 @@ class TestDeleteAccountEndpoint:
 
         response = client.delete(
             "/api/v1/user/account",
-            headers={"Authorization": f"Bearer {token}"},
+            headers=_csrf_headers(client, token),
         )
         assert response.status_code == 200
 
         # Verify user is soft-deleted
         db_session.refresh(user)
-        assert user.is_active is False
+        assert user.is_active is True
         assert user.deletion_requested_at is not None
         assert isinstance(user.deletion_requested_at, datetime)
 
@@ -128,7 +135,7 @@ class TestDeleteAccountEndpoint:
         # Delete account
         response = client.delete(
             "/api/v1/user/account",
-            headers={"Authorization": f"Bearer {token}"},
+            headers=_csrf_headers(client, token),
         )
 
         assert response.status_code == status.HTTP_200_OK
@@ -150,7 +157,7 @@ class TestDeleteAccountEndpoint:
 
         response = client.delete(
             "/api/v1/user/account",
-            headers={"Authorization": f"Bearer {token}"},
+            headers=_csrf_headers(client, token),
         )
 
         assert response.status_code == status.HTTP_200_OK
@@ -160,7 +167,7 @@ class TestDeleteAccountEndpoint:
             db_session.query(AuditLog)
             .filter(
                 AuditLog.actor_id == user.id,
-                AuditLog.action == "auth.user.deletion_requested",
+                AuditLog.action == "user.account.deletion_requested",
             )
             .first()
         )
@@ -180,7 +187,7 @@ class TestDeleteAccountEndpoint:
 
         response = client.delete(
             "/api/v1/user/account",
-            headers={"Authorization": f"Bearer {token}"},
+            headers=_csrf_headers(client, token),
         )
 
         assert response.status_code == status.HTTP_200_OK
@@ -191,6 +198,40 @@ class TestDeleteAccountEndpoint:
             "set-cookie" in response.headers or "Set-Cookie" in response.headers or True
         )  # Flexible check
 
+    def test_delete_then_cancel_with_relogin_restores_account(
+        self, db_session: Session, client, user_for_deletion
+    ):
+        """A deletion request can be canceled after re-authenticating during grace period."""
+        user, token = user_for_deletion
+
+        delete_response = client.delete(
+            "/api/v1/user/account",
+            headers=_csrf_headers(client, token),
+        )
+        assert delete_response.status_code == status.HTTP_200_OK
+
+        relogin_response = client.post(
+            "/api/v1/auth/token",
+            data={"username": user.username, "password": "test_password_123"},
+        )
+        assert relogin_response.status_code == status.HTTP_200_OK
+        relogin_token = relogin_response.json()["access_token"]
+        csrf_token = relogin_response.cookies.get("creatorhub_csrf")
+        assert csrf_token
+
+        cancel_response = client.post(
+            "/api/v1/auth/users/me/account-deletion/cancel",
+            headers={
+                "Authorization": f"Bearer {relogin_token}",
+                "x-csrf-token": csrf_token,
+            },
+        )
+        assert cancel_response.status_code == status.HTTP_200_OK
+
+        db_session.refresh(user)
+        assert user.is_active is True
+        assert user.deletion_requested_at is None
+
     def test_delete_account_idempotence_check(self, db_session: Session, client, user_for_deletion):
         """Attempting to delete an already-deleted account should fail gracefully."""
         user, token = user_for_deletion
@@ -198,7 +239,7 @@ class TestDeleteAccountEndpoint:
         # First deletion should succeed
         response1 = client.delete(
             "/api/v1/user/account",
-            headers={"Authorization": f"Bearer {token}"},
+            headers=_csrf_headers(client, token),
         )
         assert response1.status_code == status.HTTP_200_OK
 
@@ -242,7 +283,7 @@ class TestDeleteAccountEndpoint:
         # Try to delete (should fail because already soft-deleted)
         response = client.delete(
             "/api/v1/user/account",
-            headers={"Authorization": f"Bearer {token}"},
+            headers=_csrf_headers(client, token),
         )
 
         # Should fail because account already has deletion_requested_at set

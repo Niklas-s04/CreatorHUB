@@ -94,7 +94,7 @@ ALL_ENUMS = [
 def upgrade() -> None:
     bind = op.get_bind()
 
-    # Enums genau einmal anlegen.
+    # Create enums exactly once.
     for enum in ALL_ENUMS:
         enum.create(bind, checkfirst=True)
 
@@ -320,7 +320,7 @@ def downgrade() -> None:
     op.drop_index("ix_users_username", table_name="users")
     op.drop_table("users")
 
-    # Enums in umgekehrter Reihenfolge entfernen.
+    # Drop enums in reverse order.
     bind = op.get_bind()
     for enum in reversed(ALL_ENUMS):
         enum.drop(bind, checkfirst=True)

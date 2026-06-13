@@ -58,6 +58,12 @@ def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def _step_up_satisfied(session: AuthSession) -> bool:
+    if not session.mfa_verified or session.mfa_step_up_expires_at is None:
+        return False
+    return session.mfa_step_up_expires_at > _utcnow()
+
+
 def _touch_session_if_needed(db: Session, session: AuthSession) -> None:
     now = _utcnow()
     if (now - session.last_activity_at) < timedelta(seconds=30):
@@ -198,7 +204,7 @@ def require_sensitive_action(action: str):
             )
 
         step_up_required = settings.SECURITY_SENSITIVE_ACTION_REQUIRE_STEP_UP_MFA
-        step_up_satisfied = bool(context.session.mfa_verified)
+        step_up_satisfied = _step_up_satisfied(context.session)
         if step_up_required and not step_up_satisfied:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,

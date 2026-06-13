@@ -253,10 +253,10 @@ async def upload_asset(
     except BusinessRuleViolation as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    # Duplikate per Hash vermeiden und vorhandenes Asset wiederverwenden.
+    # Avoid duplicates by hash and reuse the existing asset.
     existing = db.query(Asset).filter(Asset.hash == stored.sha256).first()
     if existing:
-        # Keine doppelte Datenbankzeile anlegen.
+        # Do not create a duplicate database row.
         return existing
 
     db.add(asset)
@@ -377,7 +377,7 @@ def update_asset(
     previous_workflow_status = asset.workflow_status
     previous_review_reason = asset.review_reason
 
-    # Primär-Flag nur bei Produktbildern exklusiv setzen.
+    # Set the primary flag exclusively for product images.
     if (
         data.get("is_primary") is True
         and asset.owner_type == AssetOwnerType.product

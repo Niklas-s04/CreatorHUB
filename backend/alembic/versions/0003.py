@@ -12,7 +12,7 @@ import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
 
-# Revisionsdaten für Alembic.
+# Alembic revision metadata.
 revision = "0003"
 down_revision = "0002"
 branch_labels = None

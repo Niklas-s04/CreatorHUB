@@ -5,8 +5,8 @@ import { useThumb } from './useThumb'
 type AssetCardProps = {
   asset: ProductAssetVm
   canReview: boolean
-  onReview: (id: number, state: 'approved' | 'rejected') => void
-  onPrimary: (id: number) => void
+  onReview: (id: string, state: 'approved' | 'rejected') => void
+  onPrimary: (id: string) => void
 }
 
 export function AssetCard({ asset, canReview, onReview, onPrimary }: AssetCardProps) {

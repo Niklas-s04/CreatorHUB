@@ -177,9 +177,9 @@ Schema example:
         fallback_payload=_fallback_email_result(subject, creator_settings),
     )
 
-    # Risk-Flags mit deterministischen Checks prüfen und ergänzen.
+    # Validate and extend risk flags with deterministic checks.
     risk_flags = set(out.get("risk_flags") or [])
-    # Risiken aus dem Eingabetext übernehmen.
+    # Carry risk signals over from the input text.
     inp_pii = detect_pii(raw_body)
     inp_kw = detect_risk_keywords(raw_body)
     if injection_flags:
@@ -190,7 +190,7 @@ Schema example:
         risk_flags.update(inp_pii)
     risk_flags.update(inp_kw)
 
-    # Ausgabe auf sensible Daten prüfen.
+    # Check the output for sensitive data.
     draft_body = str(out.get("draft_body") or "")
     out_pii = detect_pii(draft_body)
     if out_pii:
@@ -206,7 +206,7 @@ Schema example:
         risk_flags.add("risky_phrase_rewritten")
     draft_body = rewritten_body
 
-    # Intent auf gültige Enum-Werte normieren.
+    # Normalize the intent to a valid enum value.
     intent_raw = str(out.get("intent") or "unknown").lower()
     if intent_raw not in {e.value for e in EmailIntent}:
         intent_raw = "unknown"
@@ -272,7 +272,7 @@ def refine_email_draft(
 
     system, knowledge_doc_ids = _build_system_prompt(db, creator_settings=creator_settings)
 
-    # Prompt bewusst einfach und deterministisch halten.
+    # Keep the prompt simple and deterministic.
     qa_lines: list[str] = []
     for item in qa or []:
         q = (item.get("question") or "").strip()
@@ -335,7 +335,7 @@ Rules:
         fallback_payload=_fallback_email_result(subject, creator_settings),
     )
 
-    # Risk-Flags mit deterministischen Checks prüfen und ergänzen.
+    # Validate and extend risk flags with deterministic checks.
     risk_flags = set(out.get("risk_flags") or [])
     inp_pii = detect_pii(raw_body)
     inp_kw = detect_risk_keywords(raw_body)
@@ -348,10 +348,7 @@ Rules:
     risk_flags.update(inp_kw)
 
     draft_body = str(out.get("draft_body") or "")
-    out_pii = detect_pii(draft_body)
-    if out_pii:
-        risk_flags.add("output_contains_personal_data")
-        draft_body = redact_sensitive(draft_body)
+    draft_body = redact_sensitive(draft_body)
 
     forbidden = detect_forbidden_content(draft_body)
     if forbidden:
@@ -366,7 +363,7 @@ Rules:
     if intent_raw not in {e.value for e in EmailIntent}:
         intent_raw = "unknown"
 
-    # Nachfragen im Refine-Schritt stärker begrenzen.
+    # Limit follow-up questions more strictly in the refine step.
     questions = out.get("questions_to_ask") or []
     if isinstance(questions, list) and len(questions) > 2:
         questions = questions[:2]

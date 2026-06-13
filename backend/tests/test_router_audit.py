@@ -125,3 +125,40 @@ def test_audit_export_csv_respects_filters() -> None:
         for table in reversed(TEST_TABLES):
             table.drop(bind=engine, checkfirst=True)
         engine.dispose()
+
+
+def test_audit_log_redacts_sensitive_fields() -> None:
+    engine = create_engine(
+        "sqlite+pysqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    for table in TEST_TABLES:
+        table.create(bind=engine, checkfirst=True)
+
+    session_local = sessionmaker(bind=engine, autocommit=False, autoflush=False)
+    db = session_local()
+
+    try:
+        admin = create_user(db, username="audit_redact_admin")
+        log = record_audit_log(
+            db,
+            actor=admin,
+            action="auth.password.change",
+            entity_type="user",
+            entity_id=str(admin.id),
+            before={"password": "secret-value", "nested": {"token": "abc"}},
+            after={"profile": {"mfa_secret": "totp-secret"}},
+            metadata={"refresh_token": "refresh-value", "note": "safe"},
+        )
+        db.commit()
+
+        assert log.before == {"password": "***REDACTED***", "nested": {"token": "***REDACTED***"}}
+        assert log.after == {"profile": {"mfa_secret": "***REDACTED***"}}
+        assert log.meta["refresh_token"] == "***REDACTED***"
+        assert log.meta["note"] == "safe"
+    finally:
+        db.close()
+        for table in reversed(TEST_TABLES):
+            table.drop(bind=engine, checkfirst=True)
+        engine.dispose()

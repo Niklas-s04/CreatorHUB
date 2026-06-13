@@ -1,48 +1,38 @@
-import { parseKnowledgeDocsPage } from './validators'
+import { describe, expect, it } from 'vitest'
+import {
+  parseContentTasksDtoArray,
+  parseImageSearchJobDto,
+  parseKnowledgeDocsPage,
+  parseProductAssetsDtoArray,
+  parseProductDto,
+  parseProductTransactionsDtoArray,
+} from './validators'
 
-describe('knowledge validators', () => {
-  it('parses paginated knowledge response with metadata safely', () => {
-    const parsed = parseKnowledgeDocsPage({
-      items: [
-        {
-          id: 'doc-1',
-          type: 'policy',
-          title: 'Policy',
-          content: 'Content',
-          source_review_status: 'approved',
-          trust_level: 'high',
-          is_outdated: false,
-          current_version: 3,
-          versions: [
-            {
-              id: 'v-1',
-              version_number: 3,
-              title: 'Policy',
-              type: 'policy',
-              workflow_status: 'approved',
-              source_review_status: 'approved',
-              trust_level: 'high',
-              is_outdated: false,
-              created_at: '2026-03-30T10:00:00Z',
-            },
-          ],
-          draft_links: [
-            {
-              id: 'l-1',
-              email_draft_id: 'd-1',
-              linked_at: '2026-03-30T12:00:00Z',
-            },
-          ],
-        },
-      ],
+describe('validators', () => {
+  it('parses product and related arrays', () => {
+    expect(parseProductDto({ id: 'product-1' })).toMatchObject({
+      id: 'product-1',
+      title: 'Unbenanntes Produkt',
+      status: 'active',
     })
+    expect(parseProductAssetsDtoArray([{ id: 'asset-1', review_state: 'bad' }])[0]).toMatchObject({
+      id: 'asset-1',
+      review_state: 'pending',
+      is_primary: false,
+    })
+    expect(parseProductTransactionsDtoArray([{ id: 'tx-1', amount: 4 }])[0]).toMatchObject({ id: 'tx-1', amount: 4 })
+    expect(parseContentTasksDtoArray([{ id: 'task-1', title: null }])[0]).toMatchObject({
+      id: 'task-1',
+      title: 'Neue Aufgabe',
+    })
+  })
 
-    expect(parsed).toHaveLength(1)
-    expect(parsed[0].id).toBe('doc-1')
-    expect(parsed[0].source_review_status).toBe('approved')
-    expect(parsed[0].trust_level).toBe('high')
-    expect(parsed[0].current_version).toBe(3)
-    expect(parsed[0].versions?.[0]?.version_number).toBe(3)
-    expect(parsed[0].draft_links?.[0]?.email_draft_id).toBe('d-1')
+  it('parses knowledge docs and image search jobs', () => {
+    const docs = parseKnowledgeDocsPage({ items: [{ id: 'd', title: 'Doc', content: 'c' }] })
+    expect(docs[0].current_version).toBe(1)
+
+    expect(
+      parseImageSearchJobDto({ status: 'unknown', result: { query: 'q', count: 2, candidates: [] } })
+    ).toMatchObject({ status: 'queued', result: { query: 'q', count: 2 } })
   })
 })

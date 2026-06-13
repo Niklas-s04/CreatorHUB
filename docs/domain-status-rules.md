@@ -1,11 +1,18 @@
 # Domain Status Rules
 
-Dieses Dokument beschreibt die technisch erzwungenen Statusregeln im Backend.
+This document defines the workflow and status rules enforced by the backend.
 
-## Einheitliches Workflow-/Freigabemodell (moduleübergreifend)
+## Shared Workflow Model
 
-Für `products`, `content_items`, `deal_drafts`, `knowledge_docs` und `assets` gilt zusätzlich ein
-einheitlicher Workflow-Status:
+The following entities use a common workflow model:
+
+- `products`
+- `content_items`
+- `deal_drafts`
+- `knowledge_docs`
+- `assets`
+
+Shared workflow states:
 
 - `draft`
 - `in_review`
@@ -14,7 +21,7 @@ einheitlicher Workflow-Status:
 - `published`
 - `archived`
 
-Erlaubte Übergänge:
+Allowed transitions:
 
 - `draft` → `in_review`, `archived`
 - `in_review` → `approved`, `rejected`, `draft`
@@ -23,32 +30,32 @@ Erlaubte Übergänge:
 - `published` → `in_review`, `archived`
 - `archived` → `in_review`
 
-Zusätzliche Regeln:
+Additional rules:
 
-- Für `approved`, `rejected` und `published` ist `review_reason` verpflichtend.
-- Reviewer-Informationen werden pro Wechsel revisionssicher gespeichert (`reviewed_by_id`, `reviewed_by_name`, `reviewed_at`).
-- Änderungen an relevanten Fachfeldern erzwingen bei bereits `approved`/`published` Objekten automatisch `in_review` (Re-Review).
-- Jeder Workflowwechsel wird zusätzlich als Audit-Log und Domain-Event protokolliert.
+- `review_reason` is required for `approved`, `rejected`, and `published`.
+- Reviewer metadata is stored for each transition.
+- Changes to relevant fields move approved or published objects back to `in_review` for re-review.
+- Every workflow change is also recorded as an audit event and a domain event.
 
-## Produkte (`ProductStatus`)
+## Products (`ProductStatus`)
 
-Erlaubte Übergänge:
+Allowed transitions:
 
 - `active` → `sold`, `gifted`, `returned`, `broken`, `archived`
 - `sold` → `returned`, `archived`
 - `gifted` → `archived`
 - `returned` → `active`, `broken`, `archived`
 - `broken` → `returned`, `archived`
-- `archived` → _(keine)_
+- `archived` → none
 
-Zusätzliche Regeln:
+Additional rules:
 
-- `sold` erfordert `amount`.
-- Statuswechsel über `/api/products/{id}/status` erzeugen je nach Zielstatus automatisch eine `ProductTransaction`.
+- `sold` requires `amount`.
+- Status changes via `/api/products/{id}/status` create a `ProductTransaction` when appropriate.
 
 ## Assets (`AssetReviewState`)
 
-Erlaubte Übergänge:
+Allowed transitions:
 
 - `quarantine` → `pending_review`, `rejected`
 - `pending_review` → `needs_review`, `pending`, `approved`, `rejected`, `quarantine`
@@ -57,99 +64,80 @@ Erlaubte Übergänge:
 - `approved` → `needs_review`, `rejected`
 - `rejected` → `pending_review`, `needs_review`
 
-Zusätzliche Regeln:
+Additional rules:
 
-- `is_primary=true` ist nur für Produkt-Bilder erlaubt (`owner_type=product`, `kind=image`).
-- `approved` erfordert `local_path` oder `url`.
-- Wechsel zu `rejected` setzt `is_primary=false`.
+- `is_primary=true` is only valid for product images.
+- `approved` requires either `local_path` or `url`.
+- A transition to `rejected` clears `is_primary`.
 
 ## Content (`ContentStatus`)
 
-Erlaubte Übergänge:
+Allowed transitions:
 
 - `idea` → `draft`
 - `draft` → `recorded`, `scheduled`
 - `recorded` → `edited`
 - `edited` → `scheduled`, `published`
 - `scheduled` → `published`, `draft`
-- `published` → _(keine)_
+- `published` → none
 
-Zusätzliche Regeln:
+Additional rules:
 
-- `scheduled` erfordert `planned_date` oder `publish_date`.
-- `published` erfordert `publish_date` oder `external_url`.
-- Bei Wechsel zu `published` wird `publish_date` automatisch gesetzt, falls nicht vorhanden.
+- `scheduled` requires `planned_date` or `publish_date`.
+- `published` requires `publish_date` or `external_url`.
+- A transition to `published` sets `publish_date` automatically when needed.
 
-## Freigaben (`RegistrationRequestStatus`)
+## Registration Requests
 
-Erlaubte Übergänge:
+Allowed transitions:
 
 - `pending` → `approved`, `rejected`
-- `rejected` → `pending` (erneute Einreichung)
-- `approved` → _(keine)_
+- `rejected` → `pending`
+- `approved` → none
 
-Zusätzliche Regeln:
+Additional rules:
 
-- Bei `approved` wird ein neuer Benutzer angelegt.
-- Bei Re-Submission wird ein bestehender `rejected` Request auf `pending` zurückgesetzt.
+- Approval creates a new user account.
+- Re-submission resets a rejected request to pending.
 
 ## Domain Events
 
-Statuswechsel und zustandsbezogene Nebenwirkungen werden zusätzlich als Domain-Event über Audit-Logs erfasst (`action = domain_event.<name>`), z. B.:
+Status changes and related side effects are also captured as domain events in audit logs, for example:
 
 - `domain_event.product.status.changed`
 - `domain_event.product.transaction.created`
 - `domain_event.asset.review_state.changed`
 - `domain_event.content.status.changed`
-- `domain_event.registration.request.approved|rejected|reopened`
+- `domain_event.registration.request.approved`
+- `domain_event.registration.request.rejected`
+- `domain_event.registration.request.reopened`
 
-## End-to-End Workflows (7.2)
+## End-to-End Workflow Notes
 
-### Produkt → Asset → Content → Kommunikation
+### Product → Asset → Content → Communication
 
-- Produkte werden mit Assets (`owner_type=product`) und Content (`content_items.product_id`) fachlich verknüpft.
-- Operations-Inbox identifiziert Medienbrüche als `workflow_gap`, z. B.:
-	- Produkt ohne freigegebenes Asset
-	- Asset vorhanden, aber kein Content
-	- Content vorhanden, aber kein verknüpfter Deal/Kommunikationsschritt
+- Products are linked to assets and content through explicit foreign keys.
+- The operations inbox highlights workflow gaps such as missing assets or missing content.
 
-### Deal-Workflow mit Checklisten + Freigaben
+### Deal Workflow
 
-- `deal_drafts` unterstützen `product_id` und eine persistente `checklist`.
-- Bei Übergängen in `review`/`negotiating`/`won` werden Pflichtpunkte technisch geprüft.
-- Fehlende Pflichtpunkte blockieren den Fortschritt (BusinessRuleViolation).
+- Deal drafts support product linkage and persistent checklists.
+- Required checklist items are validated when a deal moves into review, negotiation, or won states.
 
-### E-Mail-Erstellung mit Risiko-Prüfung + Freigabe
+### Email Draft Workflow
 
-- Jeder Entwurf speichert `risk_flags`, `risk_score`, `risk_checked_at`.
-- Freigabe/Rejection erfolgt explizit per Approval-Flow (`approved`, `approval_reason`, `approved_by_*`, `approved_at`).
-- Für High-Risk-Entwürfe ist ein Freigabegrund verpflichtend.
+- Each draft stores risk flags, a risk score, and the time of the last risk check.
+- Approval and rejection are explicit and auditable.
 
-### Verkaufsabschluss mit Archivierung + Historisierung
+### Sales Finalization
 
-- Bei Produkt-Status `sold` wird ein Abschluss-Workflow ausgelöst:
-	- verknüpfte Deals auf `won` gesetzt und archiviert,
-	- verknüpfter Content archiviert,
-	- verknüpfte Produkt-Assets archiviert,
-	- zusammenfassende Historisierung via Audit-Log (`sales.workflow.finalized`) + Domain Event (`domain_event.sales.closed`).
+- When a product is sold, linked deals, content, and assets are archived as part of the finalization workflow.
 
-## Aufgaben- und Zuständigkeitsmodell (7.3)
+## Task and Assignment Model
 
-Für `content_tasks` gilt zusätzlich:
+For `content_tasks`:
 
-- Zuweisung an konkrete Benutzer (`assignee_user_id`) oder Rollen (`assignee_role`)
-- Prioritäten (`low|medium|high|critical`)
-- Fälligkeitsdaten (`due_date`) mit Overdue-Kennzeichnung (`is_overdue`)
-- Benachrichtigungs-/Eskalationszeitpunkte (`notified_at`, `escalated_at`)
-
-Zusätzliche Regeln:
-
-- Benutzer- und Rollenzuweisung sind gegenseitig exklusiv.
-- Kurz vor Fälligkeit werden Due-Soon-Events emittiert.
-- Überfällige Aufgaben werden eskaliert und als `content_overdue` in Operations hervorgehoben.
-
-Persönliche Arbeitslisten und Ansichten:
-
-- Persönliche Task-Listen pro Benutzer (`/content/tasks/me`) mit Filtern.
-- Filterbar nach Verantwortlichem, Rolle, Priorität, Status, Overdue.
-- Gespeicherte Ansichten (`content_task_views`) für wiederkehrende Arbeitsfilter.
+- Assignments may target a user or a role, but not both.
+- Priority values are `low`, `medium`, `high`, and `critical`.
+- Due dates support overdue detection and escalation.
+- Saved task views are supported for recurring work patterns.

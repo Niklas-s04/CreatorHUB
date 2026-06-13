@@ -6,16 +6,20 @@ Also anonymizes their audit logs for privacy compliance.
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import and_, select
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.db.session import SessionLocal
 from app.models.audit import AuditLog
 from app.models.auth_session import AuthSession, RevokedToken
 from app.models.user import User
 from app.services.audit import record_audit_log
+
+logger = logging.getLogger(__name__)
 
 
 def _utcnow() -> datetime:
@@ -23,7 +27,7 @@ def _utcnow() -> datetime:
 
 
 def purge_deleted_users(
-    grace_period_days: int = 30,
+    grace_period_days: int | None = None,
     db: Session | None = None,
 ) -> dict[str, int]:
     """
@@ -43,15 +47,18 @@ def purge_deleted_users(
             "errors": 0,
         }
 
-        # Calculate cutoff date: now - grace_period_days
-        cutoff_date = _utcnow() - timedelta(days=grace_period_days)
+        resolved_grace_period_days = (
+            grace_period_days or settings.ACCOUNT_DELETION_GRACE_PERIOD_DAYS
+        )
 
-        # Find users scheduled for deletion (is_active=False, deletion_requested_at < cutoff_date)
+        # Calculate cutoff date: now - grace_period_days
+        cutoff_date = _utcnow() - timedelta(days=resolved_grace_period_days)
+
+        # Find users scheduled for deletion and past grace period.
         users_to_purge = (
             db.execute(
                 select(User).where(
                     and_(
-                        User.is_active == False,  # noqa: E712
                         User.deletion_requested_at.isnot(None),
                         User.deletion_requested_at < cutoff_date,
                     )
@@ -106,11 +113,10 @@ def purge_deleted_users(
                 # Commit this user's deletion atomically
                 db.commit()
 
-            except Exception as e:
+            except Exception:
                 db.rollback()
                 stats["errors"] += 1
-                # Log error but continue with other users
-                print(f"Error purging user {user_id}: {e}")
+                logger.exception("Error purging user %s", user_id)
                 continue
 
         # Create summary audit log for compliance
@@ -129,12 +135,12 @@ def purge_deleted_users(
                         "sessions_deleted": stats["sessions_deleted"],
                         "tokens_revoked": stats["tokens_revoked"],
                         "audit_logs_anonymized": stats["audit_logs_anonymized"],
-                        "grace_period_days": grace_period_days,
+                        "grace_period_days": resolved_grace_period_days,
                     },
                 )
                 db.commit()
-            except Exception as e:
-                print(f"Error creating summary audit log: {e}")
+            except Exception:
+                logger.exception("Error creating deleted-user purge summary audit log")
                 db.rollback()
 
         return stats

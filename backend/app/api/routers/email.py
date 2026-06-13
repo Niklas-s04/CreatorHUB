@@ -694,7 +694,7 @@ def refine_draft(
 
     template = _resolve_template(db, payload.template_id, thread.id)
 
-    # Ursprünglichen E-Mail-Text aus dem Thread als Referenz nutzen.
+    # Use the original thread body as the reference text.
     raw_body = thread.raw_body
     subject = thread.subject
 

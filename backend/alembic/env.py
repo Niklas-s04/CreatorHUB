@@ -11,7 +11,7 @@ from app.db.base import Base
 config = context.config
 fileConfig(config.config_file_name)
 
-# Alembic braucht nur die DB-URL. Security-Secrets der App sind hier nicht erforderlich.
+# Alembic only needs the database URL; app security secrets are not required here.
 database_url = (os.getenv("DATABASE_URL") or config.get_main_option("sqlalchemy.url") or "").strip()
 if not database_url:
     raise RuntimeError("DATABASE_URL must be set for Alembic migrations")

@@ -1,8 +1,8 @@
-import { createHttpClient } from './shared/api/httpClient'
+import { ApiError, createHttpClient } from './shared/api/httpClient'
 
 declare const __API_BASE__: string
 
-const API_BASE = __API_BASE__ || '/api'
+export const API_BASE = __API_BASE__ || '/api/v1'
 const AUTH_HINT_KEY = 'auth_session'
 const CSRF_COOKIE_NAME = 'creatorhub_csrf'
 
@@ -21,6 +21,7 @@ export type AuthSession = {
   device_label: string | null
   user_agent: string | null
   mfa_verified: boolean
+  mfa_step_up_expires_at: string | null
   is_current: boolean
 }
 
@@ -110,6 +111,23 @@ export type ApiRequestOptions = RequestInit & {
   retries?: number
   retryDelayMs?: number
   shouldRetry?: (status: number) => boolean
+}
+
+type StepUpHandler = () => Promise<void>
+let stepUpHandler: StepUpHandler | null = null
+
+export function setStepUpHandler(handler: StepUpHandler | null) {
+  stepUpHandler = handler
+}
+
+function isStepUpRequiredError(error: unknown): boolean {
+  if (!(error instanceof ApiError)) return false
+  if (error.status !== 403) return false
+  return error.details.includes('Step-up authentication required') || error.message.includes('Step-up authentication required')
+}
+
+export function apiUrl(path: string): string {
+  return `${API_BASE}${path}`
 }
 
 function getCookie(name: string): string | null {
@@ -216,6 +234,14 @@ export async function logout(): Promise<void> {
   }
 }
 
+export async function deleteAccount(): Promise<{ ok: string; message: string }> {
+  try {
+    return await apiFetch('/auth/account', { method: 'DELETE' })
+  } finally {
+    setToken(null)
+  }
+}
+
 export async function checkSession(): Promise<boolean> {
   try {
     await apiFetch('/auth/me')
@@ -232,7 +258,15 @@ export async function getMe(): Promise<Me> {
 }
 
 export async function apiFetch<T = unknown>(path: string, options: ApiRequestOptions = {}): Promise<T> {
-  return httpClient.request<T>(path, options)
+  try {
+    return await httpClient.request<T>(path, options)
+  } catch (error: unknown) {
+    if (path !== '/auth/mfa/step-up' && stepUpHandler && isStepUpRequiredError(error)) {
+      await stepUpHandler()
+      return httpClient.request<T>(path, options)
+    }
+    throw error
+  }
 }
 
 
@@ -277,6 +311,10 @@ export async function getMfaStatus(): Promise<{ enabled: boolean }> {
   return apiFetch('/auth/mfa/status')
 }
 
+export async function performMfaStepUp(code: string): Promise<{ mfa_verified: boolean; step_up_expires_at: string }> {
+  return apiFetch('/auth/mfa/step-up', { method: 'POST', body: JSON.stringify({ code }) })
+}
+
 export async function provisionMfa(): Promise<{ secret: string; otpauth_uri: string }> {
   return apiFetch('/auth/mfa/provision', { method: 'POST' })
 }
@@ -296,7 +334,7 @@ export async function changePassword(currentPassword: string, newPassword: strin
   })
 }
 
-export async function requestPasswordReset(username: string): Promise<{ ok: boolean; reset_token: string | null }> {
+export async function requestPasswordReset(username: string): Promise<{ ok: boolean; reset_token: null }> {
   return apiFetch('/auth/password-reset/request', { method: 'POST', body: JSON.stringify({ username }) })
 }
 

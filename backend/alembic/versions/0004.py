@@ -11,7 +11,7 @@ from alembic import op
 import sqlalchemy as sa
 
 
-# Revisionsdaten für Alembic.
+# Alembic revision metadata.
 revision = "0004"
 down_revision = "0003"
 branch_labels = None

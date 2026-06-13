@@ -158,11 +158,15 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         return "unknown"
 
     def _limit_for_path(self, path: str) -> int:
-        if path.startswith("/api/auth/token"):
+        normalized = path
+        if normalized.startswith("/api/v1/"):
+            normalized = "/api/" + normalized.removeprefix("/api/v1/")
+
+        if normalized.startswith("/api/auth/token"):
             return self.auth_limit
-        if path.startswith("/api/auth/register-request"):
+        if normalized.startswith("/api/auth/register-request"):
             return max(2, self.auth_limit // 2)
-        if path.startswith("/api/auth/setup-admin-password"):
+        if normalized.startswith("/api/auth/setup-admin-password"):
             return max(2, self.auth_limit // 2)
         return self.global_limit
 
@@ -228,9 +232,6 @@ class CsrfProtectionMiddleware(BaseHTTPMiddleware):
         self.exempt_paths = {
             "/api/auth/token",
             "/api/v1/auth/token",
-            "/api/v1/auth/account",  # Allow account deletion without CSRF - requires bearer token
-            "/api/v1/user/account",
-            "/api/user/account",
         }
 
     async def dispatch(self, request: Request, call_next: Callable) -> Response:

@@ -70,11 +70,11 @@ def ensure_json(text: str) -> Any:
         return json.loads(text)
     except Exception:
         pass
-    # Erstes JSON-Objekt oder -Array aus Freitext extrahieren.
+    # Extract the first JSON object or array from plain text.
     start = min([i for i in [text.find("{"), text.find("[")] if i != -1], default=-1)
     if start == -1:
         raise ValueError("No JSON start found")
-    # Einfache Klammerlogik zum Finden des JSON-Endes.
+    # Use simple bracket matching to find the JSON end.
     stack = []
     end = None
     for i in range(start, len(text)):

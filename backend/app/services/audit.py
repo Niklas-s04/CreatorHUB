@@ -22,6 +22,26 @@ CRITICAL_AUDIT_ACTIONS = {
     "product.delete",
 }
 
+SENSITIVE_AUDIT_FIELDS = {
+    "password",
+    "token",
+    "secret",
+    "cvv",
+    "ssn",
+    "mfa_secret",
+    "access_token",
+    "refresh_token",
+    "card_number",
+    "card",
+}
+
+
+def _is_sensitive_audit_field(key: object) -> bool:
+    lowered = str(key).strip().lower()
+    if lowered in SENSITIVE_AUDIT_FIELDS:
+        return True
+    return any(part in lowered for part in ("password", "token", "secret", "card", "ssn", "cvv"))
+
 
 def _utcnow_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -104,6 +124,22 @@ def _normalize(value: Any) -> Any:
     return value
 
 
+def redact_audit_data(value: Any) -> Any:
+    if isinstance(value, dict):
+        redacted: dict[str, Any] = {}
+        for key, item in value.items():
+            if _is_sensitive_audit_field(key):
+                redacted[key] = "***REDACTED***"
+            else:
+                redacted[key] = redact_audit_data(item)
+        return redacted
+    if isinstance(value, list):
+        return [redact_audit_data(item) for item in value]
+    if isinstance(value, tuple):
+        return [redact_audit_data(item) for item in value]
+    return value
+
+
 def record_audit_log(
     db: Session,
     *,
@@ -136,9 +172,9 @@ def record_audit_log(
         entity_type=entity_type,
         entity_id=entity_id,
         description=description,
-        before=_normalize(before) if before else None,
-        after=_normalize(after) if after else None,
-        meta=normalized_meta,
+        before=redact_audit_data(_normalize(before)) if before else None,
+        after=redact_audit_data(_normalize(after)) if after else None,
+        meta=redact_audit_data(normalized_meta),
     )
     db.add(log)
     return log

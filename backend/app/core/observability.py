@@ -130,7 +130,15 @@ def _set_alert(code: str, *, active: bool, severity: str, message: str) -> None:
     if previous is None or bool(previous.get("active")) != active:
         level = logging.ERROR if active else logging.INFO
         alert_logger.log(
-            level, "Observability alert state changed", extra={"alert_code": code, **current}
+            level,
+            "Observability alert state changed",
+            extra={
+                "alert_code": code,
+                "alert_message": message,
+                "active": active,
+                "severity": severity,
+                "updated_at_unix": current["updated_at_unix"],
+            },
         )
 
 

@@ -130,7 +130,7 @@ def redact_sensitive(text: str) -> str:
     out = PII_PATTERNS["iban"].sub("[IBAN_REDACTED]", out)
     out = PII_PATTERNS["credit_card"].sub("[CARD_REDACTED]", out)
     out = URL_PATTERN.sub("[URL_REDACTED]", out)
-    # Kurze normale Zahlen nicht übermäßig schwärzen.
+    # Do not over-redact short ordinary numbers.
     return out
 
 

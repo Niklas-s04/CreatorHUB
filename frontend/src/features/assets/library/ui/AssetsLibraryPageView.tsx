@@ -7,6 +7,7 @@ import { EmptyState } from '../../../../shared/ui/states/EmptyState'
 import { ErrorState } from '../../../../shared/ui/states/ErrorState'
 import { ListSkeleton } from '../../../../shared/ui/states/ListSkeleton'
 import { useToast } from '../../../../shared/ui/toast/ToastProvider'
+import { useI18n } from '../../../../shared/i18n/i18n'
 import {
   type AssetKind,
   type AssetLibraryItem,
@@ -16,29 +17,29 @@ import {
 } from '../../../../shared/api/queries/assets'
 
 const ownerTypeOptions: { value: '' | AssetOwnerType; label: string }[] = [
-  { value: '', label: 'Alle Typen' },
-  { value: 'product', label: 'Produkt' },
+  { value: '', label: 'All types' },
+  { value: 'product', label: 'Product' },
   { value: 'content', label: 'Content' },
   { value: 'email', label: 'Email' },
   { value: 'deal', label: 'Deal' },
 ]
 
 const kindOptions: { value: '' | AssetKind; label: string }[] = [
-  { value: '', label: 'Alle Formate' },
-  { value: 'image', label: 'Bild' },
+  { value: '', label: 'All formats' },
+  { value: 'image', label: 'Image' },
   { value: 'video', label: 'Video' },
   { value: 'pdf', label: 'PDF' },
   { value: 'link', label: 'Link' },
 ]
 
 const licenseFilterOptions: { value: LicenseFilter; label: string }[] = [
-  { value: 'any', label: 'Lizenz egal' },
-  { value: 'licensed', label: 'Lizenz vorhanden' },
-  { value: 'missing', label: 'Lizenz fehlt' },
+  { value: 'any', label: 'Any license' },
+  { value: 'licensed', label: 'Licensed' },
+  { value: 'missing', label: 'Missing license' },
 ]
 
 const ownerLabels: Record<AssetOwnerType, string> = {
-  product: 'Produkt',
+  product: 'Product',
   content: 'Content',
   email: 'Email',
   deal: 'Deal',
@@ -58,9 +59,9 @@ function summarizeDimension(asset: AssetLibraryItem) {
   return `${asset.width}×${asset.height}`
 }
 
-function formatDate(value: string) {
+function formatDate(value: string, locale: 'de-DE' | 'en-US' = 'de-DE') {
   try {
-    return new Date(value).toLocaleDateString('de-DE', {
+    return new Date(value).toLocaleDateString(locale, {
       day: '2-digit', month: '2-digit', year: '2-digit'
     })
   } catch (e) {
@@ -97,6 +98,7 @@ function ThumbVisibilityProbe({ assetId, onVisible }: { assetId: string; onVisib
 
 export default function AssetsPage() {
   const toast = useToast()
+  const { language } = useI18n()
   const [searchParams, setSearchParams] = useSearchParams()
   const [searchInput, setSearchInput] = useState(searchParams.get('q') || '')
   const [ownerType, setOwnerType] = useState<'' | AssetOwnerType>((searchParams.get('owner_type') as AssetOwnerType | '') || '')
@@ -223,7 +225,7 @@ export default function AssetsPage() {
       window.open(url, '_blank', 'noopener')
       setTimeout(() => URL.revokeObjectURL(url), 60_000)
     } catch (e: unknown) {
-      const message = `Download fehlgeschlagen: ${getErrorMessage(e)}`
+      const message = language === 'en' ? `Download failed: ${getErrorMessage(e)}` : `Download fehlgeschlagen: ${getErrorMessage(e)}`
       setErr(message)
       toast.error(message)
     } finally {
@@ -235,16 +237,16 @@ export default function AssetsPage() {
     <div className="container">
       <div className="row between">
         <div>
-          <h2>Mediathek</h2>
-          <div className="muted">Suche, filtere und exportiere geprüfte Assets.</div>
+          <h2>{language === 'en' ? 'Media library' : 'Mediathek'}</h2>
+          <div className="muted">{language === 'en' ? 'Search, filter and export reviewed assets.' : 'Suche, filtere und exportiere geprüfte Assets.'}</div>
         </div>
         <div className="control-row">
           <div className="card tight" role="status" aria-live="polite" aria-label={`Gefilterte Assets: ${assets.length}`}>
-            <div className="muted small">Gefiltert</div>
+            <div className="muted small">{language === 'en' ? 'Filtered' : 'Gefiltert'}</div>
             <div className="kpi">{assets.length}</div>
           </div>
           <div className="card tight">
-            <div className="muted small">Lizenz ok</div>
+            <div className="muted small">{language === 'en' ? 'License ok' : 'Lizenz ok'}</div>
             <div className="kpi metric-kpi">{stats.licensed}</div>
           </div>
           <div className="card tight">
@@ -256,60 +258,60 @@ export default function AssetsPage() {
 
       {queryErr && (
         <ErrorState
-          title="Assets konnten nicht geladen werden"
+          title={language === 'en' ? 'Assets could not be loaded' : 'Assets konnten nicht geladen werden'}
           message={queryErr}
           onRetry={reload}
         />
       )}
-      {err && !queryErr && <ErrorState title="Aktion fehlgeschlagen" message={err} />}
+      {err && !queryErr && <ErrorState title={language === 'en' ? 'Action failed' : 'Aktion fehlgeschlagen'} message={err} />}
 
       <div className="card asset-controls mt16">
         <div ref={tableAnchorRef} />
         <div className="control-row stretch">
-          <label className="sr-only" htmlFor="assets-search">Assets suchen</label>
+          <label className="sr-only" htmlFor="assets-search">{language === 'en' ? 'Search assets' : 'Assets suchen'}</label>
           <input
             id="assets-search"
             className="grow"
-            placeholder="Suche (Titel, Quelle, URL)"
+            placeholder={language === 'en' ? 'Search (title, source, URL)' : 'Suche (Titel, Quelle, URL)'}
             value={searchInput}
             onChange={e => setSearchInput(e.target.value)}
           />
-          <button className="btn" onClick={reload} disabled={loading}>Refresh</button>
+          <button className="btn" onClick={reload} disabled={loading}>{language === 'en' ? 'Refresh' : 'Aktualisieren'}</button>
         </div>
         <div className="control-row">
-          <label className="sr-only" htmlFor="assets-owner-type">Owner-Typ</label>
+          <label className="sr-only" htmlFor="assets-owner-type">{language === 'en' ? 'Owner type' : 'Owner-Typ'}</label>
           <select id="assets-owner-type" value={ownerType} onChange={e => setOwnerType(e.target.value as AssetOwnerType | '')}>
             {ownerTypeOptions.map(opt => (
               <option key={opt.value || 'all'} value={opt.value}>{opt.label}</option>
             ))}
           </select>
-          <label className="sr-only" htmlFor="assets-kind">Asset-Art</label>
+          <label className="sr-only" htmlFor="assets-kind">{language === 'en' ? 'Asset kind' : 'Asset-Art'}</label>
           <select id="assets-kind" value={kind} onChange={e => setKind(e.target.value as AssetKind | '')}>
             {kindOptions.map(opt => (
               <option key={opt.value || 'all'} value={opt.value}>{opt.label}</option>
             ))}
           </select>
-          <label className="sr-only" htmlFor="assets-license-filter">Lizenzfilter</label>
+          <label className="sr-only" htmlFor="assets-license-filter">{language === 'en' ? 'License filter' : 'Lizenzfilter'}</label>
           <select id="assets-license-filter" value={licenseFilter} onChange={e => setLicenseFilter(e.target.value as LicenseFilter)}>
             {licenseFilterOptions.map(opt => (
               <option key={opt.value} value={opt.value}>{opt.label}</option>
             ))}
           </select>
-          <label className="sr-only" htmlFor="assets-page-size">Seitenlimit</label>
+          <label className="sr-only" htmlFor="assets-page-size">{language === 'en' ? 'Page size' : 'Seitenlimit'}</label>
           <select id="assets-page-size" value={String(pageSize)} onChange={e => setPageSize(Number(e.target.value))}>
-            <option value="24">24 / Seite</option>
-            <option value="36">36 / Seite</option>
-            <option value="60">60 / Seite</option>
+            <option value="24">24 {language === 'en' ? '/ page' : '/ Seite'}</option>
+            <option value="36">36 {language === 'en' ? '/ page' : '/ Seite'}</option>
+            <option value="60">60 {language === 'en' ? '/ page' : '/ Seite'}</option>
           </select>
         </div>
         <div className="asset-checkboxes">
           <label className="filter-check">
             <input type="checkbox" checked={approvedOnly} onChange={e => setApprovedOnly(e.target.checked)} />
-            Nur approved
+            {language === 'en' ? 'Approved only' : 'Nur approved'}
           </label>
           <label className="filter-check">
             <input type="checkbox" checked={primaryOnly} onChange={e => setPrimaryOnly(e.target.checked)} />
-            Nur Primary
+            {language === 'en' ? 'Primary only' : 'Nur Primary'}
           </label>
         </div>
       </div>
@@ -327,7 +329,7 @@ export default function AssetsPage() {
                 {asset.kind === 'image' && thumbUrl && (
                   <img
                     src={thumbUrl}
-                    alt={asset.title || 'Asset preview'}
+                    alt={asset.title || (language === 'en' ? 'Asset preview' : 'Asset preview')}
                     loading="lazy"
                     decoding="async"
                     fetchPriority="low"
@@ -349,30 +351,30 @@ export default function AssetsPage() {
               </div>
               <div className="asset-card-body">
                 <div className="row between">
-                  <strong>{asset.title || 'Ohne Titel'}</strong>
+                  <strong>{asset.title || (language === 'en' ? 'Untitled' : 'Ohne Titel')}</strong>
                   <span className={`asset-license ${licenseOk ? 'ok' : 'missing'}`}>
-                    {licenseOk ? 'Lizenz ok' : 'Lizenz fehlt'}
+                    {licenseOk ? (language === 'en' ? 'License ok' : 'Lizenz ok') : (language === 'en' ? 'License missing' : 'Lizenz fehlt')}
                   </span>
                 </div>
                 <div className="asset-meta">
                   <span className="pill small">{ownerLabels[asset.owner_type]}</span>
                   <span className="pill small">{asset.kind}</span>
-                  <span className="pill small">{formatDate(asset.created_at)}</span>
+                  <span className="pill small">{formatDate(asset.created_at, language === 'en' ? 'en-US' : 'de-DE')}</span>
                 </div>
                 <div className="muted small mt12">
-                  Quelle: {asset.source_name || asset.source_url || asset.source.toUpperCase()}
+                  {language === 'en' ? 'Source' : 'Quelle'}: {asset.source_name || asset.source_url || asset.source.toUpperCase()}
                 </div>
-                <div className="muted small">Lizenz: {asset.license_type || 'n/a'}</div>
+                <div className="muted small">{language === 'en' ? 'License' : 'Lizenz'}: {asset.license_type || 'n/a'}</div>
                 {asset.license_url && (
-                  <a href={asset.license_url} className="muted small" target="_blank" rel="noreferrer">Lizenzlink</a>
+                  <a href={asset.license_url} className="muted small" target="_blank" rel="noreferrer">{language === 'en' ? 'License link' : 'Lizenzlink'}</a>
                 )}
                 <div className="asset-stats">
                   <div>
-                    <div className="muted small">Dimensionen</div>
+                    <div className="muted small">{language === 'en' ? 'Dimensions' : 'Dimensionen'}</div>
                     <div>{summarizeDimension(asset)}</div>
                   </div>
                   <div>
-                    <div className="muted small">Dateigröße</div>
+                    <div className="muted small">{language === 'en' ? 'File size' : 'Dateigröße'}</div>
                     <div>{formatBytes(asset.size_bytes)}</div>
                   </div>
                 </div>
@@ -382,10 +384,10 @@ export default function AssetsPage() {
                     onClick={() => openOriginal(asset.id)}
                     disabled={downloadingId === asset.id}
                   >
-                    {downloadingId === asset.id ? 'Lädt…' : 'Original'}
+                    {downloadingId === asset.id ? (language === 'en' ? 'Loading…' : 'Lädt…') : 'Original'}
                   </button>
                   {asset.source_url && (
-                    <a className="btn ghost" href={asset.source_url} target="_blank" rel="noreferrer">Quelle</a>
+                    <a className="btn ghost" href={asset.source_url} target="_blank" rel="noreferrer">{language === 'en' ? 'Source' : 'Quelle'}</a>
                   )}
                 </div>
               </div>
@@ -393,14 +395,14 @@ export default function AssetsPage() {
           )
         })}
         {!assets.length && !loading && (
-          <EmptyState title="Keine Assets gefunden" message="Passe die Filter an oder entferne Suchbegriffe." />
+          <EmptyState title={language === 'en' ? 'No assets found' : 'Keine Assets gefunden'} message={language === 'en' ? 'Adjust the filters or remove search terms.' : 'Passe die Filter an oder entferne Suchbegriffe.'} />
         )}
       </div>
 
       <div className="row between mt12">
-        <button className="btn" onClick={() => changePage('prev')} disabled={offset <= 0}>← Zurück</button>
-        <span className="muted small">Offset {offset} · Limit {pageSize} · Ergebnisse {assets.length}</span>
-        <button className="btn" onClick={() => changePage('next')} disabled={assets.length < pageSize}>Weiter →</button>
+        <button className="btn" onClick={() => changePage('prev')} disabled={offset <= 0}>{language === 'en' ? '← Back' : '← Zurück'}</button>
+        <span className="muted small">{language === 'en' ? 'Offset' : 'Offset'} {offset} · {language === 'en' ? 'Limit' : 'Limit'} {pageSize} · {language === 'en' ? 'Results' : 'Ergebnisse'} {assets.length}</span>
+        <button className="btn" onClick={() => changePage('next')} disabled={assets.length < pageSize}>{language === 'en' ? 'Next →' : 'Weiter →'}</button>
       </div>
     </div>
   )

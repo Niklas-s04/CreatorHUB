@@ -21,6 +21,7 @@ if str(ROOT) not in sys.path:
 
 os.environ.setdefault("ENV", "test")
 os.environ.setdefault("JWT_SECRET", "test_secret_please_change_1234567890")
+os.environ.setdefault("BOOTSTRAP_ADMIN_USERNAME", "admin")
 os.environ.setdefault("BOOTSTRAP_ADMIN_PASSWORD", "test-bootstrap-admin-pass")
 os.environ.setdefault(
     "DATABASE_URL", "postgresql+psycopg://creator:creator@localhost:5432/creator_suite_test"
@@ -29,12 +30,14 @@ os.environ.setdefault("REDIS_URL", "redis://localhost:6379/9")
 os.environ.setdefault("CORS_ORIGINS", "http://localhost:3000")
 os.environ.setdefault("TRUSTED_HOSTS", "localhost,127.0.0.1,testserver")
 os.environ.setdefault("AUTH_COOKIE_SECURE", "false")
+os.environ.setdefault("AUTH_COOKIE_DOMAIN", "testserver.local")
 os.environ.setdefault("BOOTSTRAP_INSTALL_TOKEN", "test-bootstrap-token")
 os.environ.setdefault("RATE_LIMIT_ENABLED", "false")
 os.environ.setdefault("AUTO_ARCHIVE_ENABLED", "false")
 os.environ.setdefault("SECURITY_SENSITIVE_ACTION_CONFIRMATION_REQUIRED", "false")
 os.environ.setdefault("SECURITY_SENSITIVE_ACTION_REQUIRE_STEP_UP_MFA", "false")
 
+import app.models  # noqa: F401
 from app.api import deps
 from app.api.routers import (
     assets,
@@ -56,24 +59,9 @@ from app.core.web_security import (
     RequestSizeLimitMiddleware,
     SecurityHeadersMiddleware,
 )
-from app.models.asset import Asset
-from app.models.audit import AuditLog
-from app.models.auth_session import AuthSession, LoginHistory, PasswordResetToken, RevokedToken
-from app.models.product import Product
-from app.models.registration_request import RegistrationRequest
-from app.models.user import User
+from app.models.base import Base
 
-TEST_TABLES = [
-    User.__table__,
-    AuthSession.__table__,
-    RevokedToken.__table__,
-    LoginHistory.__table__,
-    PasswordResetToken.__table__,
-    RegistrationRequest.__table__,
-    Product.__table__,
-    Asset.__table__,
-    AuditLog.__table__,
-]
+TEST_TABLES = list(Base.metadata.sorted_tables)
 
 
 @pytest.fixture(autouse=True)

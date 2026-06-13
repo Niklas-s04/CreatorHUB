@@ -32,7 +32,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function parseProductsPage(input: unknown, fallback: ProductsListParams): ProductsListPageVm {
   if (Array.isArray(input)) {
     return {
-      items: parseProductsDtoArray(input).map(toProductListItemVm).filter(product => product.id >= 0),
+      items: parseProductsDtoArray(input).map(toProductListItemVm).filter(product => product.id),
       meta: {
         limit: fallback.limit ?? 50,
         offset: fallback.offset ?? 0,
@@ -56,7 +56,7 @@ function parseProductsPage(input: unknown, fallback: ProductsListParams): Produc
   }
   const items = parseProductsDtoArray(input.items)
     .map(toProductListItemVm)
-    .filter(product => product.id >= 0)
+    .filter(product => product.id)
 
   const metaRaw = isRecord(input.meta) ? input.meta : {}
   const sortOrder = metaRaw.sort_order === 'asc' ? 'asc' : 'desc'
@@ -112,7 +112,7 @@ export function useProductAssetsQuery(id: string | undefined) {
     staleTime: 45_000,
     queryFn: async () => {
       const data = await apiFetch<unknown>(`/assets?owner_type=product&owner_id=${id}&include_pending=true`)
-      return parseProductAssetsDtoArray(data).map(toProductAssetVm).filter(asset => asset.id >= 0)
+      return parseProductAssetsDtoArray(data).map(toProductAssetVm).filter(asset => asset.id)
     },
   })
 }
@@ -124,7 +124,7 @@ export function useProductTransactionsQuery(id: string | undefined) {
     staleTime: 10_000,
     queryFn: async () => {
       const data = await apiFetch<unknown>(`/products/${id}/transactions`)
-      return parseProductTransactionsDtoArray(data).map(toProductTransactionVm).filter(tx => tx.id >= 0)
+      return parseProductTransactionsDtoArray(data).map(toProductTransactionVm).filter(tx => tx.id)
     },
   })
 }
@@ -210,7 +210,7 @@ export function useChangeProductStatusMutation() {
 export function useReviewAssetMutation(id: string | undefined) {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: async ({ assetId, state }: { assetId: number; state: 'approved' | 'rejected' }) => {
+    mutationFn: async ({ assetId, state }: { assetId: string; state: 'approved' | 'rejected' }) => {
       await apiFetch(`/assets/${assetId}`, { method: 'PATCH', body: JSON.stringify({ review_state: state }) })
     },
     onSuccess: async () => {
@@ -223,8 +223,8 @@ export function useReviewAssetMutation(id: string | undefined) {
 export function useSetPrimaryAssetMutation(id: string | undefined) {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: async ({ assetId }: { assetId: number }) => {
-      await apiFetch(`/assets/${assetId}/primary`, { method: 'POST' })
+    mutationFn: async ({ assetId }: { assetId: string }) => {
+      await apiFetch(`/assets/${assetId}`, { method: 'PATCH', body: JSON.stringify({ is_primary: true }) })
     },
     onSuccess: async () => {
       if (!id) return

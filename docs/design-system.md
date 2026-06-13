@@ -1,56 +1,68 @@
-# Design System – CreatorHUB
+# Design System
 
-Stand: 26.03.2026
+## Purpose
 
-## 1) Komponenten-Inventar
+This document describes the shared UI patterns used by CreatorHUB. It is the reference for spacing, typography, colors, state handling, and accessible interaction patterns.
 
-### Layout & Navigation
-- `TopBar` – globale Suche, Benachrichtigungen, Profil
-- `Sidebar` – Hauptnavigation (Desktop + Drawer auf Mobile)
-- `Breadcrumbs` – Kontextnavigation je Route
-- `PageHeader` – Titel/Subtitel/Aktionsbereich pro Seite
+## Component Inventory
 
-### Zustände & Feedback
-- `GlobalLoading` – initiale/seitige Ladezustände
-- `ListSkeleton` / `Skeleton` – Platzhalter während Fetch
-- `EmptyState` – leere Datenzustände
-- `ErrorState` – Fehlerkarten mit Retry
-- `InlineHint` – Inline-Hinweise (Domain/Technical/Warning/Success/Error)
-- `ToastProvider` – globales Feedback (polite success, assertive error)
+### Layout and Navigation
 
-### Domain-nahe UI (Feature-spezifisch)
-- Produktliste/-detail, Assets-Library, Content-Kanban, E-Mail-Threads, Operations Inbox, Audit, Admin, Settings
+- `TopBar` for global search, notifications, and profile actions
+- `Sidebar` for primary navigation
+- `Breadcrumbs` for route context
+- `PageHeader` for page-level titles and actions
 
-## 2) Standards pro Baustein
+### Status and Feedback
 
-### Buttons
-- Basis: `.btn`; Varianten: `.primary`, `.secondary`, `.danger`, `.ghost`
-- Interaktive Zustände: `:hover`, `:active`, `:focus-visible`
-- Disabled: `button[disabled]` mit reduzierter Opazität und `cursor:not-allowed`
-- Loading: optional `.is-loading`
+- `GlobalLoading` for page-level loading states
+- `Skeleton` and `ListSkeleton` for fetch placeholders
+- `EmptyState` for empty data sets
+- `ErrorState` for retryable errors
+- `InlineHint` for contextual messages
+- `ToastProvider` for global success and error feedback
 
-### Inputs / Selects / Textareas
-- Immer mit Label (`label[for]`) oder `aria-label` (nur wenn visuell nötig)
-- Fehlerzustand: `aria-invalid`, `aria-describedby`, Fehlertext mit `role="alert"`
-- Fokus sichtbar über globales `:focus-visible` Pattern
+### Domain-Specific UI
 
-### Tabellen
-- Semantik: `caption`, `th scope="col"`, ggf. `th scope="row"`
-- Sortierbare Header: `aria-sort` + beschriftete Sortierbuttons
-- Leere Tabellenzustände konsistent (eine Zeile mit `colSpan` + `muted`)
+- Product views
+- Asset library views
+- Content workflow views
+- Email thread views
+- Operations inbox views
+- Audit views
+- Admin views
+- Settings views
 
-### Badges / Pills
-- Kleine Statusmarker mit `.pill` oder `.status-badge`
-- Farbsemantik über vorhandene Tokens (`ok`, `warn`, `danger`)
+## Button Standards
 
-### Modals / Drawer
-- Drawer: `role="dialog"`, `aria-modal`, Fokusfalle, Escape-Schließen, Fokus-Rückgabe
-- Modal-Basisklassen in CSS: `.modal-backdrop`, `.modal`
-- Overlay schließt nur via expliziter Interaktion (`button` mit Label)
+- Base class: `.btn`
+- Variants: `.primary`, `.secondary`, `.danger`, `.ghost`
+- Interactive states must cover hover, active, focus-visible, and disabled
+- Disabled buttons must remain visually distinct and semantically disabled
 
-## 3) Spacing-System
+## Form Controls
 
-Definiert in `:root`:
+- Every input should have a label or a clear accessible name
+- Error states should use `aria-invalid` and `aria-describedby`
+- Validation messages should be visible and screen-reader friendly
+
+## Tables
+
+- Use semantic table markup with `caption` and scoped headers
+- Sortable columns should expose `aria-sort`
+- Empty states should be consistent and readable
+
+## Modals and Drawers
+
+- Use `role="dialog"` and `aria-modal="true"`
+- Trap focus while open
+- Close on Escape where appropriate
+- Return focus to the triggering element after close
+
+## Spacing
+
+Defined spacing tokens:
+
 - `--space-1: 4px`
 - `--space-2: 8px`
 - `--space-3: 12px`
@@ -59,66 +71,50 @@ Definiert in `:root`:
 - `--space-6: 24px`
 - `--space-8: 32px`
 
-Regel:
-- Komponentenintern bevorzugt Tokens statt fixer Werte
-- `--gap` referenziert `--space-5` als Standard-Abstand
+Rule:
 
-## 4) Typografie-Regeln
+- Prefer tokens over hardcoded spacing values.
 
-Definiert in `:root`:
-- Größen: `--font-size-xs/sm/md/lg/xl`
-- Gewichte: `--font-weight-regular/medium/semibold`
+## Typography
 
-Regel:
-- Body basiert auf `--font-size-sm`
-- H1/H2/H3 über Token gesteuert
-- Sekundärtext nur über `--muted`
+- Base text should use the shared typography tokens.
+- Headings should follow the same scale across pages.
+- Secondary text should use the muted text token instead of custom colors.
 
-## 5) Farbregeln
+## Color System
 
-Core-Tokens:
-- Flächen: `--bg`, `--panel`, `--panel2`
-- Text: `--text`, `--muted`
-- Interaktion/Brand: `--accent`
-- Status: `--ok`, `--warn`, `--danger`, `--violet`
+Core tokens:
 
-State-Flächen:
-- Erfolg: `--state-success-bg/border`
-- Fehler: `--state-error-bg/border`
-- Warnung: `--state-warning-bg/border`
+- `--bg`
+- `--panel`
+- `--panel2`
+- `--text`
+- `--muted`
+- `--accent`
+- `--ok`
+- `--warn`
+- `--danger`
 
-Regel:
-- Keine neuen Hardcoded-Farben ohne Token-Erweiterung
+Rule:
 
-## 6) Interaktionsmuster
+- Do not introduce hardcoded colors without extending the token set.
 
-- Tastatur-first: alle interaktiven Elemente fokussierbar und per Enter/Space auslösbar
-- Fokus klar sichtbar via globales `:focus-visible`
-- Dynamische Suche als Combobox/Listbox mit `aria-activedescendant`
-- Escape schließt Overlay-UI (Drawer/Modal)
+## Interaction Rules
 
-## 7) Zustandsstandardisierung
+- All interactive elements must be reachable by keyboard
+- Focus must be visible
+- Escape should close overlays such as drawers and dialogs
+- Live regions should be used for meaningful async status changes
 
-- Disabled: visuell + semantisch (`disabled` Attribut)
-- Loading: Skeleton oder Statusrolle (`role="status"`, `aria-live="polite"`)
-- Success: Toast/InlineHint mit Erfolgstonalität
-- Error: `ErrorState`, `InlineHint error`, Toast `role="alert"`
+## State Handling
 
-## 8) Empty States & Inline-Hinweise
+- Loading should be represented explicitly
+- Success should be confirmed with visible feedback
+- Errors should be actionable and close to the affected control
+- Empty states should offer a next step when possible
 
-- `EmptyState`: konsistente Karte mit Titel, Nachricht, optional Action
-- `InlineHint`: standardisierte Varianten (`domain|technical|success|warning|error`)
-- Fehler in Formularen immer feldnah und screenreader-fähig
+## Source of Truth
 
-## 9) Wiederverwendbare UI-Bausteine (Doku-Setup)
-
-Single Source of Truth:
-- Styling + Tokens: `frontend/src/styles.css`
-- Basis-Zustandskomponenten: `frontend/src/shared/ui/states/*`
-- Layout-Grundbausteine: `frontend/src/shared/ui/layout/*`, `page/PageHeader.tsx`
-
-Pflegeprozess:
-1. Neue UI zuerst als wiederverwendbare Komponente in `shared/ui` prüfen.
-2. Variante über bestehende Tokens/Klassen lösen, nicht ad hoc.
-3. A11y-Minimum (Label, Fokus, Keyboard, Live Region) immer in der Komponente verankern.
-4. Diese Doku bei neuen Variants/Patterns aktualisieren.
+- Styling and tokens: `frontend/src/styles.css`
+- Shared state components: `frontend/src/shared/ui/states/*`
+- Shared layout components: `frontend/src/shared/ui/layout/*`

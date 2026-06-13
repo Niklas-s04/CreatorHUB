@@ -1,313 +1,162 @@
-# Technische Dokumentation
+# Technical Documentation
 
-## 1. Architekturuebersicht
+## 1. Architecture Overview
 
-CreatorHUB ist eine Full-Stack-Anwendung mit klar getrennter Verantwortung zwischen Browser, Backend, Datenbank, Cache/Queue und externen Diensten.
+CreatorHUB is a full-stack application with clear boundaries between browser, backend, database, cache, worker, and external integrations.
 
-- Das Backend ist eine FastAPI-Anwendung mit versionierten API-Routen unter `/api/v1/...` und temporaer weiter verfuegbaren Legacy-Routen unter `/api/...`.
-- Das Frontend ist eine React/Vite-SPA, die fachliche Seiten ueber `frontend/src/pages` und Feature-Module unter `frontend/src/features` zusammensetzt.
-- PostgreSQL ist die fachliche Source of Truth fuer persistente Daten.
-- Redis wird fuer Rate-Limiting, Background-Jobs und runtime-nahe Koordination verwendet.
-- Hintergrundjobs laufen getrennt vom Webprozess im Worker-Prozess.
-- Externe Dienste sind bewusst gekapselt, vor allem Ollama fuer KI-Funktionen und externe Download-/Bildquellen fuer Medien- und Suchfunktionen.
+- The backend is a FastAPI application with versioned routes under `/api/v1/...`.
+- The frontend is a React and Vite single-page application.
+- PostgreSQL is the primary source of truth for persistent data.
+- Redis supports rate limiting, background coordination, and worker queues.
+- Background jobs run outside the web process.
+- External integrations are isolated, especially Ollama for local AI features and open-source media search providers.
 
-Wichtige Einstiegspunkte:
+Main entry points:
 
-- [Backend-App-Start](../backend/app/main.py)
-- [Backend-Konfiguration](../backend/app/core/config.py)
-- [Docker Compose Stack](../docker-compose.yml)
-- [Frontend-Skripte](../frontend/package.json)
+- [Backend app entry](../backend/app/main.py)
+- [Backend configuration](../backend/app/core/config.py)
+- [Docker Compose stack](../docker-compose.yml)
+- [Frontend scripts](../frontend/package.json)
 
 ### Trust Boundaries
 
-- Browser und SPA duerfen keine geheimen Werte oder privilegierte Logik enthalten.
-- Das Backend entscheidet serverseitig ueber Authentifizierung, Autorisierung, Session-Gueltigkeit und sensible Admin-Aktionen.
-- Schreibende Operationen mit Sicherheitsbezug sind an CSRF, Session-Pruefung und Audit-Logging gebunden.
-- Externe Netzwerkanfragen werden zentral kontrolliert und gegen SSRF- und Redirect-Risiken abgesichert.
+- The browser must not contain secrets or privileged business logic.
+- The backend owns authentication, authorization, session validity, and sensitive administrative actions.
+- State-changing requests are protected with CSRF and audit logging.
+- Outbound network requests are validated centrally to reduce SSRF risk.
 
-## 2. Modulgrenzen
+## 2. Module Boundaries
 
-Die Repo-Struktur ist bewusst in fachliche und technische Schichten getrennt.
+The repository is split into functional and technical layers.
 
 ### Backend
 
-- `backend/app/api/`  
-  HTTP-Schicht mit Routern, Dependencies und Fehlerbehandlung. Hier liegen keine Fachregeln, die auch ohne HTTP gebraucht werden.
-- `backend/app/core/`  
-  Infrastruktur und Querschnitt: Konfiguration, Security, Logging, Observability, Web-Schutz.
-- `backend/app/db/`  
-  Engine-, Session- und Datenbank-Basis.
-- `backend/app/models/`  
-  SQLAlchemy-Modelle und Persistenzstrukturen.
-- `backend/app/schemas/`  
-  Pydantic-Modelle fuer Request- und Response-Vertraege.
-- `backend/app/services/`  
-  Fachlogik und Integrationslogik, z. B. Domain-Regeln, CSV-Import, Storage, Audit, Auto-Archive.
-- `backend/app/workers/`  
-  Separater Ausfuehrungsbereich fuer Queue- und Background-Jobs.
-- `backend/app/seed.py`  
-  Bootstrap-/Initialisierungslogik fuer Erstsetup.
+- `backend/app/api/` - HTTP routes, dependencies, and error handling
+- `backend/app/core/` - configuration, security, logging, observability, and web protection
+- `backend/app/db/` - engine and session primitives
+- `backend/app/models/` - persistence models
+- `backend/app/schemas/` - request and response schemas
+- `backend/app/services/` - domain logic and integrations
+- `backend/app/workers/` - background jobs and queue processing
+- `backend/app/seed.py` - bootstrap and initial setup
 
 ### Frontend
 
-- `frontend/src/api.ts`  
-  Zentrale API-Bindings fuer den Browser.
-- `frontend/src/features/`  
-  Fachliche UI-Features mit eigener Logik und eigener Komposition.
-- `frontend/src/pages/`  
-  Seitencontainer und Routing-Ziele.
-- `frontend/src/shared/`  
-  Wiederverwendbare UI-, API- und Helper-Bausteine.
-- `frontend/src/components/`  
-  Querschnittskomponenten.
-- `frontend/src/entities/`  
-  Domainnahe Frontend-Modelle.
-- `frontend/src/hooks/`  
-  Wiederverwendbare React-Hooks.
+- `frontend/src/api.ts` - browser API bindings
+- `frontend/src/features/` - feature-specific UI modules
+- `frontend/src/pages/` - routed page containers
+- `frontend/src/shared/` - reusable UI and helper code
+- `frontend/src/components/` - cross-cutting components
 
-### Praktische Regel
+### Working Rule
 
-- UI schickt Daten und Interaktionen.
-- Services pruefen und transformieren Fachregeln.
-- Modelle bilden Persistenz ab.
-- Schemas definieren API-Vertraege.
-- Core kapselt technische Querschnittsthemen.
+- UI sends data and interactions.
+- Services enforce and transform business rules.
+- Models represent persistence.
+- Schemas define API contracts.
+- Core modules handle technical cross-cutting concerns.
 
-## 3. Umgebungsvariablen
+## 3. Environment Variables
 
-Die Default-Werte liegen in [backend/app/core/config.py](../backend/app/core/config.py). Die wichtigsten Variablen sind hier nach Zweck gruppiert.
+The most important environment variables are grouped by purpose in `.env.example` and in `backend/app/core/config.py`.
 
-### Basis und Datenhaltung
+### Application and Infrastructure
 
-- `PROJECT_NAME`  
-  Anzeigename der Anwendung.
-- `ENV`  
-  Laufzeitmodus, z. B. `prod` oder `dev`.
-- `DATABASE_URL`  
-  PostgreSQL-Verbindungszeichenkette.
-- `REDIS_URL`  
-  Redis-Verbindungszeichenkette.
-- `UPLOADS_DIR`  
-  Speicherort fuer Uploads.
-- `CACHE_DIR`  
-  Speicherort fuer Cache-Daten.
-- `EXPORTS_DIR`  
-  Speicherort fuer Exporte.
+- `PROJECT_NAME`
+- `ENV`
+- `DATABASE_URL`
+- `REDIS_URL`
+- `UPLOADS_DIR`
+- `CACHE_DIR`
+- `EXPORTS_DIR`
 
-### Authentifizierung und Sessions
+### Authentication and Sessions
 
-- `JWT_SECRET`  
-  Signierschluessel fuer JWTs.
-- `JWT_ACCESS_EXPIRE_MINUTES`  
-  Laufzeit des Access-Tokens.
-- `JWT_REFRESH_EXPIRE_MINUTES`  
-  Laufzeit des Refresh-Tokens.
-- `AUTH_COOKIE_NAME`  
-  Legacy-Auth-Cookie.
-- `AUTH_ACCESS_COOKIE_NAME`  
-  Access-Cookie.
-- `AUTH_REFRESH_COOKIE_NAME`  
-  Refresh-Cookie.
-- `AUTH_COOKIE_SECURE`  
-  Cookie nur ueber sichere Verbindungen.
-- `AUTH_COOKIE_SAMESITE`  
-  SameSite-Policy fuer Cookies.
-- `AUTH_COOKIE_DOMAIN`  
-  Optionale Cookie-Domain.
-- `AUTH_ACCESS_COOKIE_MAX_AGE_SECONDS`  
-  Max-Age des Access-Cookies.
-- `AUTH_REFRESH_COOKIE_MAX_AGE_SECONDS`  
-  Max-Age des Refresh-Cookies.
-- `AUTH_COOKIE_MAX_AGE_SECONDS`  
-  Max-Age des Legacy-Cookies.
-- `CSRF_COOKIE_NAME`  
-  Name des CSRF-Cookies.
-- `SESSION_IDLE_TIMEOUT_MINUTES`  
-  Inaktivitaets-Timeout.
-- `SESSION_ABSOLUTE_TIMEOUT_MINUTES`  
-  Absolute Session-Laufzeit.
-- `AUTH_MAX_FAILED_ATTEMPTS`  
-  Maximal erlaubte Fehlversuche vor Sperre.
-- `AUTH_LOCK_MINUTES`  
-  Sperrdauer nach zu vielen Fehlversuchen.
-- `AUTH_SUSPICIOUS_FAILED_THRESHOLD`  
-  Schwellwert fuer auffaellige Fehlversuche.
-- `AUTH_SUSPICIOUS_WINDOW_MINUTES`  
-  Zeitfenster fuer Suspicious-Login-Erkennung.
-- `MFA_TOTP_ISSUER`  
-  Issuer-Name fuer TOTP.
-- `MFA_RECOVERY_CODES_COUNT`  
-  Anzahl Wiederherstellungscodes.
-- `SECURITY_SENSITIVE_ACTION_CONFIRMATION_REQUIRED`  
-  Ob sensible Aktionen zusaetzliche Bestaetigung brauchen.
-- `SECURITY_SENSITIVE_ACTION_CONFIRMATION_HEADER`  
-  Header fuer die Bestaetigung.
-- `SECURITY_SENSITIVE_ACTION_CONFIRMATION_VALUE`  
-  Erwarteter Bestaetigungswert.
-- `SECURITY_SENSITIVE_ACTION_REQUIRE_STEP_UP_MFA`  
-  Ob Step-up-MFA fuer sensible Aktionen verlangt wird.
-- `PASSWORD_RESET_TOKEN_TTL_MINUTES`  
-  Gueltigkeit von Passwort-Reset-Tokens.
+- `JWT_SECRET`
+- `JWT_EXPIRE_MINUTES`
+- `BOOTSTRAP_ADMIN_USERNAME`
+- `BOOTSTRAP_ADMIN_PASSWORD`
+- `BOOTSTRAP_INSTALL_TOKEN`
+- `AUTH_COOKIE_DOMAIN`
+- `AUTH_COOKIE_SECURE`
+- `AUTH_COOKIE_SAMESITE`
+- `CSRF_COOKIE_NAME`
+- `SECURITY_SENSITIVE_ACTION_REQUIRE_STEP_UP_MFA`
+- `ACCOUNT_DELETION_GRACE_PERIOD_DAYS`
 
-### Netzwerkrichtlinien und Outbound-Requests
+### Networking and Outbound Requests
 
-- `OLLAMA_URL`  
-  Ziel fuer KI-Anfragen.
-- `OLLAMA_TEXT_MODEL`  
-  Textmodell fuer KI-Funktionen.
-- `OLLAMA_VISION_MODEL`  
-  Visionmodell fuer Bildfunktionen.
-- `IMAGE_HUNT_DEFAULT_SOURCES`  
-  Standardquellen fuer Bildsuche.
-- `OPENVERSE_API_BASE`  
-  Basis-URL fuer Openverse.
-- `OUTBOUND_CONNECT_TIMEOUT_SECONDS`  
-  Verbindungs-Timeout fuer externe Requests.
-- `OUTBOUND_READ_TIMEOUT_SECONDS`  
-  Lese-Timeout fuer externe Requests.
-- `OUTBOUND_MAX_RESPONSE_BYTES`  
-  Maximale Response-Groesse.
-- `OUTBOUND_MAX_REDIRECTS`  
-  Maximal erlaubte Redirects.
-- `OUTBOUND_RETRIES`  
-  Retry-Anzahl fuer geeignete Requests.
-- `OUTBOUND_ALLOWED_PORTS`  
-  Erlaubte Zielports.
-- `OUTBOUND_REQUIRE_HTTPS`  
-  Ob HTTPS erzwungen wird.
-- `OUTBOUND_ALLOWLIST_HOSTS`  
-  Host-Allowlist fuer allgemeine externe Ziele.
-- `OUTBOUND_SENSITIVE_ALLOWLIST_HOSTS`  
-  Zusaetzliche Allowlist fuer sensible Ziele.
-- `OUTBOUND_BLOCK_PRIVATE_RANGES`  
-  Blockiert interne/private Zielnetze.
+- `OLLAMA_URL`
+- `OLLAMA_TEXT_MODEL`
+- `OLLAMA_VISION_MODEL`
+- `IMAGE_HUNT_DEFAULT_SOURCES`
+- `OPENVERSE_API_BASE`
+- `OUTBOUND_CONNECT_TIMEOUT_SECONDS`
+- `OUTBOUND_READ_TIMEOUT_SECONDS`
+- `OUTBOUND_MAX_RESPONSE_BYTES`
+- `OUTBOUND_MAX_REDIRECTS`
+- `OUTBOUND_ALLOWED_PORTS`
+- `OUTBOUND_REQUIRE_HTTPS`
+- `OUTBOUND_BLOCK_PRIVATE_RANGES`
+- `OUTBOUND_ALLOWLIST_HOSTS`
 
-### Uploads und Assets
+### Uploads and Assets
 
-- `UPLOAD_ALLOWED_IMAGE_EXTENSIONS`  
-  Erlaubte Bild-Endungen.
-- `UPLOAD_ALLOWED_PDF_EXTENSIONS`  
-  Erlaubte PDF-Endungen.
-- `UPLOAD_MAX_IMAGE_BYTES`  
-  Bild-Upload-Limit.
-- `UPLOAD_MAX_PDF_BYTES`  
-  PDF-Upload-Limit.
-- `UPLOAD_MAX_IMAGE_WIDTH`  
-  Maximale Bildbreite.
-- `UPLOAD_MAX_IMAGE_HEIGHT`  
-  Maximale Bildhoehe.
-- `UPLOAD_MAX_IMAGE_PIXELS`  
-  Maximale Pixelzahl fuer Bilder.
-- `ASSET_MAX_DELIVERY_BYTES`  
-  Maximale Auslieferungsmenge fuer Assets.
-- `ENABLE_OPTIONAL_MALWARE_SCAN`  
-  Optionale AV-Integration.
+- `UPLOAD_ALLOWED_IMAGE_EXTENSIONS`
+- `UPLOAD_ALLOWED_PDF_EXTENSIONS`
+- `UPLOAD_MAX_IMAGE_BYTES`
+- `UPLOAD_MAX_PDF_BYTES`
+- `UPLOAD_MAX_IMAGE_WIDTH`
+- `UPLOAD_MAX_IMAGE_HEIGHT`
+- `UPLOAD_MAX_IMAGE_PIXELS`
+- `ASSET_MAX_DELIVERY_BYTES`
+- `ENABLE_OPTIONAL_MALWARE_SCAN`
 
-### Security, CORS und Rate-Limits
+### Security and Rate Limiting
 
-- `CORS_ORIGINS`  
-  Erlaubte Frontend-Origin-Liste.
-- `TRUSTED_HOSTS`  
-  Gueltige Host-Header.
-- `MAX_REQUEST_BODY_BYTES`  
-  Maximal erlaubte Request-Groesse.
-- `RATE_LIMIT_ENABLED`  
-  Aktiviert Rate-Limiting.
-- `RATE_LIMIT_WINDOW_SECONDS`  
-  Zeitfenster des Rate-Limits.
-- `RATE_LIMIT_GLOBAL`  
-  Globales Limit.
-- `RATE_LIMIT_AUTH`  
-  Strengeres Limit fuer Auth-Endpunkte.
-- `RATE_LIMIT_REDIS_PREFIX`  
-  Redis-Prefix fuer Limiter-Schluessel.
-- `TRUST_PROXY_HEADERS`  
-  Ob Proxy-Header vertrauenswuerdig sind.
-- `SECURITY_HSTS_SECONDS`  
-  HSTS-Dauer.
+- `CORS_ORIGINS`
+- `TRUSTED_HOSTS`
+- `MAX_REQUEST_BODY_BYTES`
+- `RATE_LIMIT_ENABLED`
+- `RATE_LIMIT_WINDOW_SECONDS`
+- `RATE_LIMIT_GLOBAL`
+- `RATE_LIMIT_AUTH`
+- `SECURITY_HSTS_SECONDS`
 
-### Bootstrap und Initialisierung
+### Logging and Observability
 
-- `BOOTSTRAP_ADMIN_USERNAME`  
-  Username fuer den Bootstrap-Admin.
-- `BOOTSTRAP_ADMIN_PASSWORD`  
-  Passwort fuer den Bootstrap-Admin.
-- `BOOTSTRAP_INSTALL_TOKEN`  
-  Installations-Token fuer Erstsetup.
+- `LOG_LEVEL`
+- `UVICORN_LOG_LEVEL`
+- `UVICORN_ACCESS_LOG_LEVEL`
+- `LOG_FORMAT`
+- `LOG_TO_STDOUT`
+- `LOG_TO_FILE`
+- `LOG_DIR`
+- `LOG_FILE_NAME`
+- `LOG_RETENTION_DAYS`
+- `SECURITY_LOG_LEVEL`
+- `SECURITY_LOG_TO_SEPARATE_FILE`
+- `SECURITY_LOG_FILE_NAME`
+- `SECURITY_LOG_RETENTION_DAYS`
+- `OBSERVABILITY_METRICS_ENABLED`
+- `OBSERVABILITY_METRICS_PATH`
+- `OBSERVABILITY_MONITOR_ENABLED`
+- `OBSERVABILITY_MONITOR_INTERVAL_SECONDS`
+- `ALERT_DB_FAILURE_CONSECUTIVE`
+- `ALERT_REDIS_FAILURE_CONSECUTIVE`
+- `ALERT_WORKER_FAILURE_CONSECUTIVE`
+- `ALERT_QUEUE_LENGTH_WARN`
+- `ALERT_QUEUE_LENGTH_CRITICAL`
+- `ALERT_FAILED_JOBS_CRITICAL`
+- `OTEL_ENABLED`
+- `OTEL_SERVICE_NAME`
+- `OTEL_EXPORTER_OTLP_ENDPOINT`
+- `OTEL_EXPORTER_OTLP_INSECURE`
+- `OTEL_SAMPLE_RATIO`
 
-### Automatisierung und Lifecycle
+## 4. Build and Runbook
 
-- `AUTO_ARCHIVE_ENABLED`  
-  Aktiviert das automatische Archivieren.
-- `AUTO_ARCHIVE_INTERVAL_MINUTES`  
-  Zyklus des Auto-Archive-Tasks.
-- `AUTO_ARCHIVE_SOLD_AFTER_DAYS`  
-  Frist fuer verkaufte Produkte vor Archivierung.
-
-### Logging und Observability
-
-- `LOG_LEVEL`  
-  Grund-Log-Level.
-- `UVICORN_LOG_LEVEL`  
-  Log-Level fuer Uvicorn.
-- `UVICORN_ACCESS_LOG_LEVEL`  
-  Access-Log-Level fuer Uvicorn.
-- `LOG_FORMAT`  
-  `json` oder `plain`.
-- `LOG_TO_STDOUT`  
-  Logs auf Standardausgabe.
-- `LOG_TO_FILE`  
-  Datei-Logging aktivieren.
-- `LOG_DIR`  
-  Zielverzeichnis fuer Logdateien.
-- `LOG_FILE_NAME`  
-  Name der Hauptlogdatei.
-- `LOG_RETENTION_DAYS`  
-  Aufbewahrung der Hauptlogs.
-- `SECURITY_LOG_LEVEL`  
-  Log-Level fuer Security-Logs.
-- `SECURITY_LOG_TO_SEPARATE_FILE`  
-  Security-Logs in separater Datei.
-- `SECURITY_LOG_FILE_NAME`  
-  Name der Security-Logdatei.
-- `SECURITY_LOG_RETENTION_DAYS`  
-  Aufbewahrung der Security-Logs.
-- `SECURITY_LOG_PROPAGATE_TO_ROOT`  
-  Ob Security-Logs zum Root-Logger durchgereicht werden.
-- `OBSERVABILITY_METRICS_ENABLED`  
-  Schaltet Metriken frei.
-- `OBSERVABILITY_METRICS_PATH`  
-  Metrik-Endpunkt.
-- `OBSERVABILITY_MONITOR_ENABLED`  
-  Aktiviert Health-Monitoring.
-- `OBSERVABILITY_MONITOR_INTERVAL_SECONDS`  
-  Intervall des Monitors.
-- `ALERT_DB_FAILURE_CONSECUTIVE`  
-  Alarmgrenze fuer Datenbankfehler.
-- `ALERT_REDIS_FAILURE_CONSECUTIVE`  
-  Alarmgrenze fuer Redisfehler.
-- `ALERT_WORKER_FAILURE_CONSECUTIVE`  
-  Alarmgrenze fuer Workerfehler.
-- `ALERT_QUEUE_LENGTH_WARN`  
-  Warnschwelle fuer Queue-Laenge.
-- `ALERT_QUEUE_LENGTH_CRITICAL`  
-  Kritische Schwelle fuer Queue-Laenge.
-- `ALERT_FAILED_JOBS_CRITICAL`  
-  Kritische Schwelle fuer fehlgeschlagene Jobs.
-- `OTEL_ENABLED`  
-  Aktiviert OpenTelemetry.
-- `OTEL_SERVICE_NAME`  
-  Service-Name fuer Traces.
-- `OTEL_EXPORTER_OTLP_ENDPOINT`  
-  OTLP-Ziel fuer Traces.
-- `OTEL_EXPORTER_OTLP_INSECURE`  
-  Insecure-Transport fuer OTLP.
-- `OTEL_SAMPLE_RATIO`  
-  Sampling-Rate fuer Traces.
-
-## 4. Build- und Runbook
-
-### Lokale Entwicklung
+### Local Development
 
 Backend:
 
@@ -326,16 +175,17 @@ npm ci
 npm run dev
 ```
 
-### Qualitaetspruefungen
+### Quality Checks
 
 Backend:
 
 ```bash
 cd backend
-python -m ruff check .
-python -m ruff format --check .
-python -m mypy .
-python -m pytest
+ruff check app tests
+ruff format --check app tests
+mypy --config-file mypy.ini
+pytest --cov=app --cov-report=term-missing
+pip-audit -r requirements.txt
 ```
 
 Frontend:
@@ -349,137 +199,125 @@ npm run test
 npm run build
 ```
 
-### Docker-basierter Start
+### Docker-Based Start
 
 ```bash
 docker compose up --build
 ```
 
-Dieser Stack startet PostgreSQL, Redis, Backend, Worker und Frontend gemeinsam. Die Health-Checks sind unter anderem:
+The Docker stack runs PostgreSQL, Redis, backend, worker, and frontend together.
 
-- Backend live: `/health/live`
-- Backend ready: `/health/ready`
-- Frontend health: `/healthz`
+### Shutdown Behavior
 
-### Ruhezustand und Shutdown
+- The backend closes background jobs and Redis connections cleanly during shutdown.
+- The worker is a separate process and must be considered during maintenance or rollouts.
 
-- Der Backend-Prozess beendet Hintergrundjobs und Redis-Verbindungen sauber beim Shutdown.
-- Der Worker laeuft als eigener Prozess und muss bei Release- oder Wartungsfenstern mitberuecksichtigt werden.
+## 5. Troubleshooting
 
-## 5. Fehlerbehebungsleitfaeden
+### Backend Does Not Start
 
-### 5.1 Backend startet nicht
+Check:
 
-Pruefen:
+- `DATABASE_URL` and `REDIS_URL` are valid and reachable
+- `JWT_SECRET` is set and strong enough
+- `AUTH_COOKIE_SECURE` is enabled in production
+- `BOOTSTRAP_INSTALL_TOKEN` and `BOOTSTRAP_ADMIN_PASSWORD` are set where required
+- `CORS_ORIGINS` does not use a wildcard in production
 
-- `DATABASE_URL` und `REDIS_URL` sind gueltig und erreichbar.
-- In Production ist `JWT_SECRET` nicht auf dem Defaultwert.
-- In Production ist `AUTH_COOKIE_SECURE=true` gesetzt.
-- `BOOTSTRAP_INSTALL_TOKEN` und `BOOTSTRAP_ADMIN_PASSWORD` sind produktiv gesetzt.
-- `CORS_ORIGINS` enthaelt keine Wildcard in Production.
+### Login or Session Behavior Looks Wrong
 
-### 5.2 Login oder Sessions verhalten sich unerwartet
+Check:
 
-Pruefen:
+- Cookies are accepted for the current domain
+- SameSite and Secure settings match the environment
+- The CSRF cookie is being sent
+- The account is not locked
+- The session has not expired by idle or absolute timeout
 
-- Browser akzeptiert Cookies fuer die aktuelle Domain.
-- SameSite- und Secure-Policy passen zur Zielumgebung.
-- CSRF-Cookie wird mitgeschickt.
-- Benutzerkonto ist nicht gesperrt.
-- Die Session ist nicht idle oder absolut abgelaufen.
+### Frontend Loads, but API Requests Fail
 
-### 5.3 Frontend laedt, aber API-Aufrufe schlagen fehl
+Check:
 
-Pruefen:
+- The frontend and backend use the correct API base path
+- Reverse proxy rules forward `/api` to the backend
+- CORS includes the frontend origin
+- The backend is running on the expected host and port
 
-- Frontend und Backend zeigen auf denselben API-Pfad, lokal meist `/api`.
-- Reverse Proxy leitet `/api` korrekt an das Backend weiter.
-- CORS erlaubt die Frontend-Origin.
-- Das Backend laeuft wirklich auf der erwarteten Host-/Port-Kombination.
+### Uploads or Assets Are Rejected
 
-### 5.4 Uploads oder Assets werden abgelehnt
+Check:
 
-Pruefen:
+- The file type and extension are allowed
+- The file size stays within the configured limit
+- Image dimensions and pixel count are within bounds
+- The upload directory is writable
+- The asset is not blocked by a review state
 
-- Dateityp und Endung sind erlaubt.
-- Datei liegt unter dem Groessenlimit.
-- Bilddimensionen und Pixelgrenzen sind eingehalten.
-- Das Upload- bzw. Asset-Verzeichnis ist beschreibbar.
-- Die Datei ist nicht in einen gesperrten Review-Status gefallen.
+### Worker or Queue Issues
 
-### 5.5 Worker oder Queue wirken festgefahren
+Check:
 
-Pruefen:
+- Redis is reachable
+- The worker is running
+- `/health/metrics` and `/health/background-jobs` show valid queue data
+- Failed jobs are visible in the worker log
 
-- Redis ist erreichbar.
-- Der Worker-Prozess laeuft.
-- Der Health-Endpunkt `/health/metrics` bzw. `/health/background-jobs` zeigt valide Queue-Daten.
-- Fehlgeschlagene Jobs werden im Worker-Log sichtbar.
+## 6. Security Assumptions
 
-### 5.6 Sinnvolle Log-Quellen
+- The backend is authoritative for all security decisions.
+- The browser must not know secrets or privileged controls.
+- Cookies are HTTP-only where possible and scoped to the API path.
+- CSRF protection is required for unsafe methods when auth cookies are present.
+- Sensitive actions require server-side checks and are audited.
+- Outbound requests must be protected against private networks, unsupported ports, and excessive redirects.
+- Logs must be redacted and must not contain sensitive values.
+- Production deployments should use restrictive CORS, cookie, and host settings.
+- External AI and download services must be treated as untrusted dependencies.
 
-- Backend-Logs im Container-Output oder in `LOG_DIR`
-- Security-Logs in der separaten Security-Logdatei, falls Datei-Logging aktiviert ist
-- Frontend-Build-Fehler ueber `npm run build` und Browser-Konsole
+## 7. Deployment Steps
 
-## 6. Security-Annahmen
+Recommended order:
 
-- Das Backend ist fuer alle Sicherheitsentscheidungen autoritativ.
-- Der Browser darf keine Secrets kennen und keine privilegierten Admin-Schalter enthalten.
-- Cookies sind HTTP-only, soweit technisch moeglich, und an den API-Pfad gebunden.
-- CSRF ist fuer unsichere Methoden mit Auth-Cookie verpflichtend.
-- Sensible Aktionen benoetigen serverseitige Pruefung, optional Step-up-MFA und werden auditiert.
-- Outbound-Requests sind gegen private Netze, unerlaubte Ports und zu viele Redirects abgesichert.
-- Logs werden defensiv maskiert und duerfen keine sensiblen Werte enthalten.
-- Produktionsumgebungen sollen auf restriktiven CORS-, Cookie- und Host-Einstellungen laufen.
-- Externe KI- und Download-Dienste sind nicht vertrauensvoll und muessen wie Fremdsysteme behandelt werden.
+1. Run local quality checks.
+2. Bring the database schema to the target state with Alembic.
+3. Build and deploy the backend image.
+4. Roll out the worker at the same release level.
+5. Build and deploy the frontend.
+6. Check health endpoints.
+7. Run smoke tests for login, registration review, product flows, asset flows, and admin views.
 
-## 7. Deployment-Schritte
+### Docker References
 
-### Empfohlene Reihenfolge
+- Backend image: [backend/Dockerfile](../backend/Dockerfile)
+- Frontend image: [frontend/Dockerfile](../frontend/Dockerfile)
+- Compose stack: [docker-compose.yml](../docker-compose.yml)
 
-1. Lokale Qualitaetspruefungen laufen lassen.
-2. Datenbankschema mit Alembic auf den Zielstand bringen.
-3. Backend-Image bauen und deployen.
-4. Worker mit demselben Release-Stand ausrollen.
-5. Frontend bauen und ausrollen.
-6. Health-Checks pruefen.
-7. Smoke-Tests fuer Login, Registrierungsfreigabe, Produktfluss, Asset-Flow und Admin-Ansichten ausfuehren.
+### Rollout Notes
 
-### Docker-Referenz
+- Test new migrations before release.
+- Use staged rollouts when a critical workflow is affected.
+- Monitor error rates, authentication failures, and queue health after deployment.
 
-- Backend-Image basiert auf [backend/Dockerfile](../backend/Dockerfile)
-- Frontend-Image basiert auf [frontend/Dockerfile](../frontend/Dockerfile)
-- Produktionsnaeherer Compose-Stack liegt in [docker-compose.yml](../docker-compose.yml)
+## 8. Backup and Restore
 
-### Rollout-Hinweise
+### Assumptions
 
-- Neue Migrationen vor dem Rollout testen.
-- Wenn ein kritischer Workflow betroffen ist, lieber gestaffelt ausrollen.
-- Post-Deploy-Monitoring soll Fehlerquoten, Auth-Fehler und Queue-Zustand abdecken.
-
-## 8. Backup- und Restore-Prozesse
-
-### Annahmen
-
-- PostgreSQL enthaelt die fachliche Primärdatenbank.
-- Uploads, Exporte, Cache und Logdateien liegen ausserhalb des Datenbankschemas und muessen separat gesichert werden.
-- Es gibt kein eingebautes Backup-Subsystem im Application-Code; die Sicherung erfolgt auf Infrastrukturebene.
+- PostgreSQL is the primary database.
+- Uploads, exports, cache, and log files are stored outside the database and must be backed up separately.
+- Backup orchestration is handled at infrastructure level, not inside the application code.
 
 ### Backup
-
-Empfohlen ist eine saubere Trennung zwischen Datenbank, Dateien und Konfiguration:
 
 ```bash
 pg_dump --format=custom --file=creatorhub-db.dump "$DATABASE_URL"
 ```
 
-Zusatzlich sichern:
+Also back up:
 
-- Upload-Verzeichnis aus `UPLOADS_DIR`
-- Export-Verzeichnis aus `EXPORTS_DIR`
-- Cache nur, wenn ein Restore ohne erneute Generierung notwendig ist
-- Konfigurationsdateien und Secrets separat und sicher verwahren
+- the upload directory
+- the export directory
+- the cache only if a full restore requires it
+- configuration and secrets through a secure channel
 
 ### Restore
 
@@ -488,183 +326,30 @@ createdb creatorhub_restore
 pg_restore --clean --if-exists --dbname=creatorhub_restore creatorhub-db.dump
 ```
 
-Danach:
+After the restore:
 
-1. Anwendung gegen die wiederhergestellte Datenbank starten.
-2. Alembic-Stand pruefen und nur bei Bedarf kontrolliert migrieren.
-3. Uploads, Exporte und ggf. weitere Dateipfade zurueckspielen.
-4. Health-Checks und einen fachlichen Smoke-Test ausfuehren.
+1. Start the application against the restored database.
+2. Verify Alembic state and migrate only if needed.
+3. Restore file-based assets if necessary.
+4. Run health checks and a business-level smoke test.
 
-### Restore-Pruefung
+### Restore Validation
 
-- Login und Session-Handling testen
-- Eine Registrierungsfreigabe pruefen
-- Einen Produkt- oder Asset-Workflow pruefen
-- Worker-Queue und Health-Endpunkte beobachten
+- Verify login and session handling
+- Verify a registration review flow
+- Verify a product or asset workflow
+- Observe worker queue and health endpoints
 
-## 9. Verweis auf weitere Dokumente
+## 9. Related Documents
 
-- [API-Design-Konventionen](./api-design.md)
+- [API Design Guidelines](./api-design.md)
 - [Domain Status Rules](./domain-status-rules.md)
-- [Release- und Rollback-Prozess](./release-and-rollback.md)
 - [Design System](./design-system.md)
 
-## 10. Rollen und Verantwortlichkeiten
+## 10. Operational Roles
 
-Die folgenden Rollen beschreiben die praktische Zustands- und Betriebsverantwortung im Projekt.
+### Product and Business Ownership
 
-### Produkt- und Fachverantwortung
-
-- Produktverantwortliche definieren Prioritaeten, fachliche Zielbilder und Freigabekriterien.
-- Fachverantwortliche geben inhaltliche Regeln fuer Produkte, Content, Assets, Kommunikation und Registrierung vor.
-- Reviewer entscheiden ueber Freigaben, Rueckweisungen und Ausnahmefaelle innerhalb ihrer Berechtigungen.
-
-### Technische Verantwortung
-
-- Backend-Entwicklung verantwortet API, Domänenlogik, Migrationen, Auth, Audit und Hintergrundverarbeitung.
-- Frontend-Entwicklung verantwortet Nutzerfuehrung, Zustandsanzeige, Formulare und Bedienbarkeit.
-- Betrieb/Administration verantwortet Freigaben, Sperren, Passwort-Resets, Monitoring und Incident-Erstreaktion.
-- Plattform-/DevOps-Verantwortliche pflegen Deployment, Infrastruktur, Backups, Restore-Tests und Laufzeitkonfiguration.
-
-### Klarer Zuständigkeitsgrundsatz
-
-- Fachliche Entscheidungen gehoeren nicht in UI-Only-Code.
-- Sicherheitsentscheidungen gehoeren nicht in den Browser.
-- Datenkorrekturen mit Folgen fuer andere Benutzer werden nur mit Audit und Rueckrollmöglichkeit vorgenommen.
-
-## 11. Freigabeworkflows
-
-Freigabeworkflows sind im Projekt bewusst serverseitig modelliert und auditiert.
-
-### Registrierung
-
-- Neue Benutzer registrieren sich ueber einen Request.
-- Admins pruefen den Request, geben ihn frei oder lehnen ihn mit Begruendung ab.
-- Bei Freigabe wird ein Benutzer angelegt.
-- Bei Ablehnung wird der Grund dokumentiert und im Verlauf sichtbar gehalten.
-
-### Produkt- und Content-Freigaben
-
-- Produkte, Assets, Content und zugehoerige Arbeitsobjekte folgen dem dokumentierten Statusmodell.
-- Statuswechsel benoetigen die jeweils passenden Berechtigungen.
-- Relevante Aenderungen erzeugen Review- und Audit-Spuren.
-
-### Benutzer- und Sicherheitsfreigaben
-
-- Rollenwechsel, Sperren, Entsperren und Passwort-Resets sind sensible Aktionen.
-- Diese Aktionen benoetigen serverseitige Berechtigungspruefung und werden protokolliert.
-- Bei Bedarf sind Bestaetigung und Step-up-MFA Teil des Workflows.
-
-## 12. Datenlebenszyklen
-
-Die wichtigsten Datenklassen folgen unterschiedlichen Lebenszyklen.
-
-### Registrierung und Identitaet
-
-- `RegistrationRequest` beginnt als `pending`.
-- Nach Review wechselt der Request zu `approved` oder `rejected`.
-- `reviewed_at`, Reviewer und Ablehnungsgrund bleiben fuer Nachvollziehbarkeit erhalten.
-- Benutzerkonten koennen gesperrt, entsperrt oder fuer Passwort-Reset markiert werden.
-
-### Sessions und Tokens
-
-- Auth-Sessions haben Idle- und Absolute-Timeouts.
-- Refresh- und Access-Cookies sind zeitlich begrenzt und an Sessionzustand gebunden.
-- Administrative Eingriffe koennen Sessions revoken und Tokens ungueltig machen.
-
-### Inhalte, Assets und Produkte
-
-- Inhalte und Assets durchlaufen Review-, Freigabe- und Archivzustand.
-- Produktdaten koennen durch Verkaufs- oder Archivprozesse weiterentwickelt werden.
-- Historische Aenderungen bleiben ueber Audit- und Domain-Events nachvollziehbar.
-
-### Logs, Exporte und Cache
-
-- Logs werden rotiert und nach Frist geloescht.
-- Exporte sind fuer externe Weitergabe gedacht und muessen separat behandelt werden.
-- Cache-Daten sind abgeleitet und duerfen nicht als alleinige Quelle fuer kritische Wahrheiten dienen.
-
-## 13. Onboarding fuer neue Entwickler
-
-### Ziel des Onboardings
-
-- Neue Entwickler sollen die Produktdomänen, die lokale Entwicklungsumgebung und die Sicherheitsgrenzen schnell verstehen.
-
-### Empfohlene Reihenfolge
-
-1. Repository klonen und README lesen.
-2. Backend- und Frontend-Abhaengigkeiten installieren.
-3. `.env` aus dem Template ableiten und mindestens Datenbank, Redis und JWT konfigurieren.
-4. Backend lokal starten und Health-Endpunkte pruefen.
-5. Frontend lokal starten und die wichtigsten Flows manuell pruefen.
-6. Backend-Tests und Frontend-Checks einmal ausfuehren.
-7. Die Doku fuer Architektur, Statusregeln und Release-Prozess lesen.
-
-### Wichtige Einstiegspunkte im Code
-
-- [Backend-Startpunkt](../backend/app/main.py)
-- [Backend-Konfiguration](../backend/app/core/config.py)
-- [Backend-Routen](../backend/app/api/routers/)
-- [Frontend-API](../frontend/src/api.ts)
-- [Frontend-Seiten](../frontend/src/pages/)
-- [Frontend-Features](../frontend/src/features/)
-
-### Onboarding-Prueffragen
-
-- Wo liegt die Source of Truth fuer einen bestimmten Datentyp?
-- Welche Aktionen sind im Browser nur sichtbar, aber serverseitig abgesichert?
-- Welche Statuswechsel sind erlaubt und welche erzeugen Audit- oder Domain-Events?
-- Wie wird ein Problem sauber zurueckgerollt oder wiederhergestellt?
-
-## 14. Admin-Handbuch
-
-### Typische Aufgaben
-
-- Registrierungsanfragen pruefen und mit Begruendung freigeben oder ablehnen.
-- Benutzerstatus ueberwachen, sperren, entsperren und Passwort-Resets ausloesen.
-- Aktive Sessions kontrollieren und bei Bedarf einzelne Sessions oder alle Sessions eines Benutzers entziehen.
-- Audit- und Rollenveraenderungen bei auffaelligen Vorfaellen pruefen.
-
-### Betriebsablauf fuer Admins
-
-1. Betroffenen Datensatz in der Admin-Ansicht oeffnen.
-2. Kontext und vorhandene Historie pruefen.
-3. Aktion ausfuehren und Folgezustand kontrollieren.
-4. Bei sicherheitsrelevanten Eingriffen Audit-Log und Sessionzustand verifizieren.
-5. Bei Unsicherheit zuerst sperren, dann analysieren, dann gezielt entsperren oder zuruecksetzen.
-
-### Notfallregeln
-
-- Bei verdächtigen Konten zuerst Zugriff begrenzen, dann Ursache analysieren.
-- Passwort-Resets und Sperren immer mit Grund und Nachvollziehbarkeit behandeln.
-- Nicht direkt in Datenbanktabellen manuell eingreifen, wenn ein API- oder Serviceweg existiert.
-- Bei ungewoehnlichen Ablaeufen zuerst Logs, Audit und Sessions pruefen, erst dann Daten korrigieren.
-
-## 15. Betriebliche Standards und Zuständigkeiten
-
-### Standard für Aenderungen
-
-- Jede produktive Aenderung braucht eine Rueckfallebene oder Rollback-Strategie.
-- Migrationen werden vor dem Rollout getestet.
-- Sicherheitsrelevante Aenderungen werden auditiert.
-- Kritische Flows bekommen vor Release mindestens einen gezielten Smoke-Test.
-
-### Standard fuer Betrieb und Support
-
-- Health-Checks sind erste Diagnosequelle.
-- Logs sollen strukturiert, korreliert und ohne Geheimnisse sein.
-- Queue- und Worker-Zustaende gehoeren zur regelmaessigen Betriebsbeobachtung.
-- Backup und Restore sind nicht optional, sondern Teil des Betriebsstandards.
-
-### Zustandsverantwortung
-
-- Entwicklung verantwortet Code, Tests und Migrationen.
-- Betrieb verantwortet Verfuegbarkeit, Monitoring und Wiederherstellung.
-- Fachverantwortung definiert, wann ein Zustand fachlich korrekt ist.
-- Admins handeln innerhalb der dokumentierten Berechtigungen und Eskalationswege.
-
-### Minimaler Service-Standard
-
-- Neue Features sollen dokumentiert sein, bevor sie produktiv relevant werden.
-- Kritische Aenderungen muessen in Release- und Rollback-Notizen abbildbar sein.
-- Die Doku wird bei neuen Workflows oder Sicherheitsregeln mitgezogen.
+- Product owners define priorities, goals, and acceptance criteria.
+- Domain owners define business rules for products, content, assets, communication, and registration.
+- Reviewers approve, reject, or escalate requests within their permissions.

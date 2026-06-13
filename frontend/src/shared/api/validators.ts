@@ -13,7 +13,9 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function asString(value: unknown, fallback = ''): string {
-  return typeof value === 'string' ? value : fallback
+  if (typeof value === 'string') return value
+  if (typeof value === 'number' && Number.isFinite(value)) return String(value)
+  return fallback
 }
 
 function asNullableString(value: unknown): string | null {
@@ -52,7 +54,7 @@ export function parseProductsDtoArray(input: unknown): ProductDto[] {
 export function parseProductDto(input: unknown): ProductDto {
   const src = isRecord(input) ? input : {}
   return {
-    id: asNumber(src.id, -1),
+    id: asString(src.id),
     title: asString(src.title, 'Unbenanntes Produkt'),
     brand: asNullableString(src.brand),
     model: asNullableString(src.model),
@@ -72,7 +74,7 @@ export function parseProductAssetsDtoArray(input: unknown): ProductAssetDto[] {
   return input.map(item => {
     const src = isRecord(item) ? item : {}
     return {
-      id: asNumber(src.id, -1),
+      id: asString(src.id),
       title: asNullableString(src.title),
       source: asNullableString(src.source),
       review_state: asReviewState(src.review_state),
@@ -90,7 +92,7 @@ export function parseProductTransactionsDtoArray(input: unknown): ProductTransac
   return input.map(item => {
     const src = isRecord(item) ? item : {}
     return {
-      id: asNumber(src.id, -1),
+      id: asString(src.id),
       tx_type: asString(src.tx_type, 'unknown'),
       tx_date: asNullableString(src.tx_date),
       amount: asNullableNumber(src.amount),
@@ -168,7 +170,7 @@ export function parseContentTasksDtoArray(input: unknown): ContentTaskDto[] {
   return input.map(item => {
     const src = isRecord(item) ? item : {}
     return {
-      id: asNumber(src.id, -1),
+      id: asString(src.id),
       title: asString(src.title, 'Neue Aufgabe'),
       status: asString(src.status, 'todo'),
       updated_at: asNullableString(src.updated_at),

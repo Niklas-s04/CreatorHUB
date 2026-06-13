@@ -11,7 +11,7 @@ from app.services.outbound_http import request_outbound
 
 WIKIMEDIA_API = "https://commons.wikimedia.org/w/api.php"
 
-# Schlankes HTML-Parsing per Regex, bewusst einfach gehalten.
+# Lightweight HTML parsing with regex, kept intentionally simple.
 _OG_IMAGE_RE = re.compile(
     r"<meta[^>]+property=['\"]og:image['\"][^>]+content=['\"]([^'\"]+)['\"][^>]*>",
     re.IGNORECASE,
@@ -25,7 +25,7 @@ _IMG_TAG_RE = re.compile(
     re.IGNORECASE,
 )
 
-# Einfacher Filter für offensichtliche Icons/Sprites.
+# Simple filter for obvious icons and sprites.
 _BAD_IMG_HINTS = ("sprite", "icon", "logo", "favicon", "data:")
 
 
@@ -37,7 +37,7 @@ def wikimedia_search_images(
         "action": "query",
         "generator": "search",
         "gsrsearch": query,
-        "gsrnamespace": 6,  # Namespace für Dateien in Wikimedia.
+        "gsrnamespace": 6,  # Wikimedia file namespace.
         "gsrlimit": min(limit, 50),
         "prop": "imageinfo",
         "iiprop": "url|size|extmetadata",
@@ -57,7 +57,7 @@ def wikimedia_search_images(
     pages = (data.get("query") or {}).get("pages") or {}
     out: list[dict[str, Any]] = []
     for _, page in pages.items():
-        title = page.get("title")  # Beispiel: File:Something.jpg
+        title = page.get("title")  # Example: File:Something.jpg
         imageinfo = page.get("imageinfo") or []
         if not imageinfo:
             continue
@@ -99,8 +99,8 @@ def openverse_search_images(
     params = {
         "q": query,
         "page_size": min(limit, 50),
-        # Bevorzugt brauchbare Lizenzklassen; Nutzung trotzdem selbst prüfen.
-        # Openverse liefert Lizenztyp und Lizenz-URL pro Treffer.
+        # Prefer practical license classes, but verify usage manually.
+        # Openverse returns the license type and license URL for each result.
         "license_type": "commercial,modification",
     }
     response = request_outbound(
@@ -119,7 +119,7 @@ def openverse_search_images(
             {
                 "source": "openverse",
                 "title": it.get("title"),
-                "image_url": it.get("url"),  # Direkte Dateiadresse.
+                "image_url": it.get("url"),  # Direct file URL.
                 "thumb_url": it.get("thumbnail") or it.get("url"),
                 "width": it.get("width"),
                 "height": it.get("height"),
@@ -175,7 +175,7 @@ def opengraph_images_from_page(
         if m:
             candidates.append(m.group(1).strip())
 
-    # Fallback: einige <img>-Quellen von der Seite sammeln.
+    # Fallback: collect a few <img> sources from the page.
     if len(candidates) < 3:
         for m in _IMG_TAG_RE.finditer(html):
             src = (m.group(1) or "").strip()
@@ -187,7 +187,7 @@ def opengraph_images_from_page(
             if len(candidates) >= 8:
                 break
 
-    # URLs normalisieren (relativ -> absolut).
+    # Normalize URLs from relative to absolute.
     normalized: list[str] = []
     for c in candidates:
         normalized.append(_normalize_url(c, base=base))
@@ -249,13 +249,13 @@ def _normalize_url(u: str, base: str) -> str | None:
     u = (u or "").strip()
     if not u:
         return None
-    # Protokollrelative URLs wie //cdn... behandeln.
+    # Handle protocol-relative URLs such as //cdn... .
     if u.startswith("//"):
         return "https:" + u
-    # Absolute URL unverändert übernehmen.
+    # Keep absolute URLs unchanged.
     if u.startswith("http://") or u.startswith("https://"):
         return u
-    # Relative URL gegen Basis auflösen.
+    # Resolve relative URLs against the base URL.
     try:
         return urljoin(base, u)
     except Exception:

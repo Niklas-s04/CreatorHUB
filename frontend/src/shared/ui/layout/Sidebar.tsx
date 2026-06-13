@@ -1,10 +1,13 @@
 import { NavLink } from "react-router-dom";
 import { logout } from "../../../api";
 import { useAuthz } from "../../hooks/useAuthz";
-import { NAV_SECTIONS_TASK_BASED } from "../../navigation/navConfig";
+import { buildNavSections } from "../../navigation/navConfig";
+import { useI18n } from "../../i18n/i18n";
 
 export default function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   const { hasPermission } = useAuthz();
+  const { language, t } = useI18n();
+  const sections = buildNavSections(language);
 
   async function onLogout() {
     await logout();
@@ -12,10 +15,10 @@ export default function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   }
 
   return (
-    <aside className="sidebar" aria-label="Seitennavigation">
-      <div className="sidebar-brand">CreatorHUB</div>
-      <nav className="sidebar-nav" aria-label="Hauptnavigation">
-        {NAV_SECTIONS_TASK_BASED.map(section => (
+    <aside className="sidebar" aria-label={t('common.sidebarNavigation')}>
+      <div className="sidebar-brand">{t('app.appName')}</div>
+      <nav className="sidebar-nav" aria-label={t('common.mainNavigation')}>
+        {sections.map(section => (
           <section className="sidebar-section" key={section.title} aria-label={section.title}>
             <div className="sidebar-section-title">{section.title}</div>
             {section.items
@@ -37,7 +40,7 @@ export default function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
       </nav>
       <button type="button" className="sidebar-logout" onClick={onLogout}>
         <span className="sidebar-icon" aria-hidden="true">⇥</span>
-        <span>Logout</span>
+        <span>{t('common.logout')}</span>
       </button>
     </aside>
   );

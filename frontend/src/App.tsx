@@ -2,9 +2,12 @@ import { Suspense, lazy, useEffect, useRef, useState } from "react";
 import { Navigate, Outlet, Route, Routes } from "react-router-dom";
 import TopBar from "./components/TopBar";
 import Sidebar from "./components/Sidebar";
+import CookieConsentBanner from "./components/CookieConsentBanner";
 import { checkSession } from "./api";
 import { GlobalLoading } from "./shared/ui/states/GlobalLoading";
 import { Breadcrumbs } from "./shared/ui/navigation/Breadcrumbs";
+import { LanguageProvider, useI18n } from "./shared/i18n/i18n";
+import { StepUpProvider } from "./shared/auth/StepUpProvider";
 
 const DashboardPage = lazy(() => import("./pages/DashboardPage"));
 const ProductsPage = lazy(() => import("./pages/ProductsPage"));
@@ -20,6 +23,7 @@ const OperationsPage = lazy(() => import("./pages/OperationsPage"));
 
 function RequireAuth() {
   const [state, setState] = useState<"loading" | "ok" | "no">("loading");
+  const { t } = useI18n();
 
   useEffect(() => {
     let mounted = true;
@@ -31,13 +35,14 @@ function RequireAuth() {
     };
   }, []);
 
-  if (state === "loading") return <GlobalLoading label="Session wird geprüft…" />;
+  if (state === "loading") return <GlobalLoading label={t('app.loadingSession')} />;
   if (state === "no") return <Navigate to="/login" replace />;
   return <Outlet />;
 }
 
 function PublicOnly() {
   const [state, setState] = useState<"loading" | "authed" | "guest">("loading");
+  const { t } = useI18n();
 
   useEffect(() => {
     let mounted = true;
@@ -49,12 +54,13 @@ function PublicOnly() {
     };
   }, []);
 
-  if (state === "loading") return <GlobalLoading label="Session wird geprüft…" />;
+  if (state === "loading") return <GlobalLoading label={t('app.loadingSession')} />;
   if (state === "authed") return <Navigate to="/dashboard" replace />;
   return <Outlet />;
 }
 
 function AppLayout() {
+  const { t } = useI18n();
   const [menuOpen, setMenuOpen] = useState(false);
   const drawerRef = useRef<HTMLDivElement | null>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
@@ -115,13 +121,13 @@ function AppLayout() {
   return (
     <div className="app-shell">
       <Sidebar />
-      {menuOpen && <button type="button" className="sidebar-overlay" onClick={() => setMenuOpen(false)} aria-label="Menü schließen" />}
+      {menuOpen && <button type="button" className="sidebar-overlay" onClick={() => setMenuOpen(false)} aria-label={t('app.menuClose')} />}
       <div
         id="mobile-navigation-drawer"
         className={menuOpen ? "sidebar-drawer open" : "sidebar-drawer"}
         role="dialog"
         aria-modal="true"
-        aria-label="Seitennavigation"
+        aria-label={t('common.sidebarNavigation')}
         tabIndex={-1}
         ref={drawerRef}
       >
@@ -140,28 +146,41 @@ function AppLayout() {
 
 export default function App() {
   return (
-    <Suspense fallback={<GlobalLoading label="Seite wird geladen…" />}>
-      <Routes>
-        <Route element={<PublicOnly />}>
-          <Route path="/login" element={<LoginPage />} />
-        </Route>
-        <Route element={<RequireAuth />}>
-          <Route element={<AppLayout />}>
-            <Route path="/" element={<Navigate to="/dashboard" replace />} />
-            <Route path="/dashboard" element={<DashboardPage />} />
-            <Route path="/operations" element={<OperationsPage />} />
-            <Route path="/products" element={<ProductsPage />} />
-            <Route path="/products/:id" element={<ProductDetailPage />} />
-            <Route path="/assets" element={<AssetsPage />} />
-            <Route path="/content" element={<ContentPage />} />
-            <Route path="/email" element={<EmailPage />} />
-            <Route path="/settings" element={<SettingsPage />} />
-            <Route path="/admin" element={<AdminPage />} />
-            <Route path="/audit" element={<AuditPage />} />
+    <LanguageProvider>
+      <AppInner />
+    </LanguageProvider>
+  );
+}
+
+function AppInner() {
+  const { t } = useI18n();
+
+  return (
+    <Suspense fallback={<GlobalLoading label={t('app.loadingPage')} />}>
+      <StepUpProvider>
+        <CookieConsentBanner />
+        <Routes>
+          <Route element={<PublicOnly />}>
+            <Route path="/login" element={<LoginPage />} />
           </Route>
-        </Route>
-        <Route path="*" element={<Navigate to="/dashboard" replace />} />
-      </Routes>
+          <Route element={<RequireAuth />}>
+            <Route element={<AppLayout />}>
+              <Route path="/" element={<Navigate to="/dashboard" replace />} />
+              <Route path="/dashboard" element={<DashboardPage />} />
+              <Route path="/operations" element={<OperationsPage />} />
+              <Route path="/products" element={<ProductsPage />} />
+              <Route path="/products/:id" element={<ProductDetailPage />} />
+              <Route path="/assets" element={<AssetsPage />} />
+              <Route path="/content" element={<ContentPage />} />
+              <Route path="/email" element={<EmailPage />} />
+              <Route path="/settings" element={<SettingsPage />} />
+              <Route path="/admin" element={<AdminPage />} />
+              <Route path="/audit" element={<AuditPage />} />
+            </Route>
+          </Route>
+          <Route path="*" element={<Navigate to="/dashboard" replace />} />
+        </Routes>
+      </StepUpProvider>
     </Suspense>
   );
 }

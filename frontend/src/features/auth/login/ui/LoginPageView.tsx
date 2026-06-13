@@ -8,10 +8,12 @@ import { useUnsavedChangesWarning } from '../../../../shared/forms/useUnsavedCha
 import { getErrorKind, getErrorMessage, getValidationFieldErrors, type ErrorKind } from '../../../../shared/lib/errors'
 import { InlineHint } from '../../../../shared/ui/states/InlineHint'
 import { useToast } from '../../../../shared/ui/toast/ToastProvider'
+import { useI18n } from '../../../../shared/i18n/i18n'
 
 export default function LoginPage() {
   const nav = useNavigate()
   const toast = useToast()
+  const { t } = useI18n()
   const [err, setErr] = useState<string | null>(null)
   const [errKind, setErrKind] = useState<ErrorKind>('technical')
   const [msg, setMsg] = useState<string | null>(null)
@@ -78,29 +80,29 @@ export default function LoginPage() {
         await setupAdminPassword(values.password, values.bootstrapToken)
         localStorage.removeItem('bootstrap_token')
         reset(undefined, { keepValues: false })
-        toast.success('Admin-Passwort wurde gesetzt')
+        toast.success(t('login.adminPasswordSet'))
         nav('/admin')
       } else if (values.mode === 'register') {
         await requestRegistration(values.username, values.password)
-        setMsg('Registrierungsanfrage wurde an den Admin gesendet.')
-        toast.success('Registrierungsanfrage gesendet')
+        setMsg(t('login.registrationRequested'))
+        toast.success(t('login.registrationRequested'))
         reset({ ...getValues(), password: '', password2: '' })
       } else if (values.mode === 'reset') {
         if (values.resetToken.trim()) {
           await confirmPasswordReset(values.resetToken, values.password)
-          setMsg('Passwort wurde zurückgesetzt. Bitte einloggen.')
-          toast.success('Passwort wurde zurückgesetzt')
+          setMsg(t('login.passwordResetCompleteHint'))
+          toast.success(t('login.passwordResetComplete'))
           setMode('login')
           reset({ ...getValues(), mode: 'login', password: '', password2: '', resetToken: '' })
         } else {
-          const res = await requestPasswordReset(values.username)
-          setMsg(res.reset_token ? `Reset-Token: ${res.reset_token}` : 'Falls der Benutzer existiert, wurde ein Reset ausgelöst.')
-          toast.success('Passwort-Reset angefordert')
+          await requestPasswordReset(values.username)
+          setMsg(t('login.resetFallback'))
+          toast.success(t('login.resetRequested'))
         }
       } else {
         await login(values.username, values.password, values.otp)
         reset(undefined, { keepValues: false })
-        toast.success('Login erfolgreich')
+        toast.success(t('login.loginSuccess'))
         nav('/')
       }
     } catch (e: unknown) {
@@ -126,17 +128,17 @@ export default function LoginPage() {
     setErrKind('technical')
     setMsg(null)
     try {
-      if (!bootstrapToken.trim()) throw new Error('Bootstrap-Token erforderlich')
+      if (!bootstrapToken.trim()) throw new Error(t('login.bootstrapMissing'))
       const status = await getBootstrapStatus(bootstrapToken)
       if (!status.needs_password_setup) {
-        setMsg('Erstsetup bereits abgeschlossen.')
+        setMsg(t('login.bootstrapAlreadyDone'))
         return
       }
       setAdminUsername(status.admin_username)
       setMode('setup')
       setValue('username', status.admin_username, { shouldDirty: false })
-      setMsg('Erstsetup freigeschaltet.')
-      toast.success('Erstsetup freigeschaltet')
+      setMsg(t('login.bootstrapReady'))
+      toast.success(t('login.bootstrapReadyToast'))
     } catch (e: unknown) {
       const message = getErrorMessage(e)
       setErrKind(getErrorKind(e))
@@ -149,20 +151,20 @@ export default function LoginPage() {
     <div className="login-shell">
       <div className="card login-card">
         <div className="page-header no-margin">
-          <h2 className="page-title">Login</h2>
-          <span className="muted small">CreatorHUB</span>
+          <h2 className="page-title">{t('login.title')}</h2>
+          <span className="muted small">{t('login.brandSubline')}</span>
         </div>
 
         {mode !== 'setup' && (
           <div className="mode-switch">
-            <button className={`btn ${mode === 'login' ? 'primary' : ''}`} type="button" onClick={() => setMode('login')}>Login</button>
-            <button className={`btn ${mode === 'register' ? 'primary' : ''}`} type="button" onClick={() => setMode('register')}>Registrieren</button>
-            <button className={`btn ${mode === 'reset' ? 'primary' : ''}`} type="button" onClick={() => setMode('reset')}>Passwort-Reset</button>
+            <button className={`btn ${mode === 'login' ? 'primary' : ''}`} type="button" onClick={() => setMode('login')}>{t('login.modeLogin')}</button>
+            <button className={`btn ${mode === 'register' ? 'primary' : ''}`} type="button" onClick={() => setMode('register')}>{t('login.modeRegister')}</button>
+            <button className={`btn ${mode === 'reset' ? 'primary' : ''}`} type="button" onClick={() => setMode('reset')}>{t('login.modeReset')}</button>
           </div>
         )}
 
         <div className="section-gap">
-          <label htmlFor="auth-bootstrap-token" className="field-label">Bootstrap-Token (nur Erstsetup)</label>
+          <label htmlFor="auth-bootstrap-token" className="field-label">{t('login.bootstrapTokenLabel')}</label>
           <input
             id="auth-bootstrap-token"
             className="w100"
@@ -174,16 +176,16 @@ export default function LoginPage() {
               setValue('bootstrapToken', value, { shouldValidate: true, shouldDirty: true })
               localStorage.setItem('bootstrap_token', value)
             }}
-            placeholder="Install-Token"
+            placeholder={t('login.bootstrapTokenPlaceholder')}
           />
           {errors.bootstrapToken?.message && <div id="auth-bootstrap-token-error" className="error mt8" role="alert">{errors.bootstrapToken.message}</div>}
-          <button className="btn mt8" type="button" onClick={checkBootstrap}>Erstsetup prüfen</button>
+          <button className="btn mt8" type="button" onClick={checkBootstrap}>{t('login.checkBootstrap')}</button>
         </div>
 
         {mode === 'setup' ? (
-          <div className="muted small">Erststart: Admin-Passwort für Benutzer {adminUsername} setzen.</div>
+          <div className="muted small">{t('login.setupHint', { adminUsername })}</div>
         ) : (
-          <div className="muted small">Bei Registrierung wird eine Anfrage an den Admin gestellt.</div>
+          <div className="muted small">{t('login.registerInfo')}</div>
         )}
 
         <hr />
@@ -191,7 +193,7 @@ export default function LoginPage() {
         <form onSubmit={handleSubmit(onSubmit)} className="stack">
           <input type="hidden" {...register('mode')} />
           <div>
-            <label htmlFor="auth-username" className="field-label">Username</label>
+            <label htmlFor="auth-username" className="field-label">{t('login.username')}</label>
             {mode === 'setup' ? (
               <input id="auth-username" className="w100" value={adminUsername} disabled readOnly />
             ) : (
@@ -207,7 +209,7 @@ export default function LoginPage() {
           </div>
 
           <div>
-            <label htmlFor="auth-password" className="field-label">Password</label>
+            <label htmlFor="auth-password" className="field-label">{t('login.password')}</label>
             <input
               id="auth-password"
               className="w100"
@@ -221,14 +223,14 @@ export default function LoginPage() {
 
           {mode === 'login' && (
             <div>
-              <label htmlFor="auth-otp" className="field-label">MFA-Code (optional)</label>
-              <input id="auth-otp" className="w100" {...register('otp')} placeholder="TOTP oder Recovery-Code" />
+              <label htmlFor="auth-otp" className="field-label">{t('login.otp')}</label>
+              <input id="auth-otp" className="w100" {...register('otp')} placeholder={t('login.otpPlaceholder')} />
             </div>
           )}
 
           {(mode === 'setup' || mode === 'register' || mode === 'reset') && (
             <div>
-              <label htmlFor="auth-password2" className="field-label">Password wiederholen</label>
+              <label htmlFor="auth-password2" className="field-label">{t('login.passwordRepeat')}</label>
               <input
                 id="auth-password2"
                 className="w100"
@@ -243,8 +245,8 @@ export default function LoginPage() {
 
           {mode === 'reset' && (
             <div>
-              <label htmlFor="auth-reset-token" className="field-label">Reset-Token (optional für Bestätigung)</label>
-              <input id="auth-reset-token" className="w100" {...register('resetToken')} placeholder="Token einfügen, um neues Passwort zu setzen" />
+              <label htmlFor="auth-reset-token" className="field-label">{t('login.resetToken')}</label>
+              <input id="auth-reset-token" className="w100" {...register('resetToken')} placeholder={t('login.resetTokenPlaceholder')} />
             </div>
           )}
 
@@ -252,7 +254,7 @@ export default function LoginPage() {
           {msg && <div className="muted" role="status" aria-live="polite">{msg}</div>}
 
           <button className="btn primary w100" disabled={busy}>
-            {busy ? '...' : mode === 'setup' ? 'Admin-Passwort setzen' : mode === 'register' ? 'Anfrage senden' : mode === 'reset' ? (resetToken.trim() ? 'Passwort setzen' : 'Reset anfordern') : 'Login'}
+            {busy ? '...' : mode === 'setup' ? t('login.submitSetup') : mode === 'register' ? t('login.submitRegister') : mode === 'reset' ? (resetToken.trim() ? t('login.submitResetConfirm') : t('login.submitResetRequest')) : t('login.submitLogin')}
           </button>
         </form>
       </div>

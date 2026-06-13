@@ -23,6 +23,7 @@ class SessionOut(BaseModel):
     device_label: str | None
     user_agent: str | None
     mfa_verified: bool
+    mfa_step_up_expires_at: datetime | None = None
     is_current: bool = False
 
 
@@ -63,6 +64,15 @@ class MfaDisableIn(BaseModel):
 
 class MfaEnableOut(BaseModel):
     recovery_codes: list[str]
+
+
+class MfaStepUpIn(BaseModel):
+    code: str
+
+
+class MfaStepUpOut(BaseModel):
+    mfa_verified: bool = True
+    step_up_expires_at: datetime
 
 
 class ChangePasswordIn(BaseModel):

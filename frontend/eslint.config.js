@@ -63,6 +63,12 @@ export default [
     },
   },
   {
+    files: ['src/shared/i18n/i18n.tsx'],
+    rules: {
+      'react-refresh/only-export-components': 'off',
+    },
+  },
+  {
     files: ['playwright.config.ts', 'e2e/**/*.ts'],
     languageOptions: {
       globals: {

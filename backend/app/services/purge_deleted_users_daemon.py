@@ -18,7 +18,7 @@ async def purge_deleted_users_daemon() -> None:
     Background daemon that periodically purges deleted users.
     Runs every 6 hours by default (configurable via PURGE_DELETED_USERS_INTERVAL_HOURS).
     """
-    interval_hours = getattr(settings, "PURGE_DELETED_USERS_INTERVAL_HOURS", 6)
+    interval_hours = settings.PURGE_DELETED_USERS_INTERVAL_HOURS
     interval_seconds = interval_hours * 3600
 
     logger.info(f"Starting purge_deleted_users_daemon. Will run every {interval_hours} hours.")
@@ -29,7 +29,9 @@ async def purge_deleted_users_daemon() -> None:
 
             logger.info("Starting scheduled purge of deleted users...")
             try:
-                result = purge_deleted_users(grace_period_days=30)
+                result = purge_deleted_users(
+                    grace_period_days=settings.ACCOUNT_DELETION_GRACE_PERIOD_DAYS
+                )
                 logger.info(f"Purge completed. Stats: {result}")
             except Exception as e:
                 logger.error(f"Error running purge_deleted_users: {e}", exc_info=True)

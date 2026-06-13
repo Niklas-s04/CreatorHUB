@@ -128,4 +128,4 @@ class KnowledgeDocDraftLink(Base, UUIDMixin, TimestampMixin):
     linked_by_name: Mapped[str | None] = mapped_column(String(128), nullable=True)
 
     knowledge_doc: Mapped[KnowledgeDoc] = relationship(back_populates="draft_links")
-    # Embeddings (pgvector) sind im MVP bewusst nicht enthalten.
+    # Embeddings (pgvector) are intentionally excluded from the MVP.

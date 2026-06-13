@@ -9,7 +9,7 @@ from alembic import op
 import sqlalchemy as sa
 
 
-# Revisionsdaten für Alembic.
+# Alembic revision metadata.
 revision = "0002"
 down_revision = "0001"
 branch_labels = None

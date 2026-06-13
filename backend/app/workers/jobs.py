@@ -28,7 +28,7 @@ def _build_query(p: Product) -> str:
     parts = [p.brand, p.model, p.title]
     parts = [x.strip() for x in parts if x and x.strip()]
     q = " ".join(parts)
-    # Suchbegriff um einen Bildhinweis ergänzen.
+    # Add an image hint to the search term.
     return f"{q} product photo" if q else "product photo"
 
 
@@ -37,7 +37,7 @@ def _parse_sources(source: str) -> list[str]:
     if not s or s == "auto":
         s = settings.IMAGE_HUNT_DEFAULT_SOURCES
     parts = [p.strip() for p in s.split(",") if p.strip()]
-    # Quellen normalisieren und auf bekannte Werte begrenzen.
+    # Normalize sources and limit them to known values.
     known = {"wikimedia", "openverse", "manufacturer", "opengraph"}
     out = [p for p in parts if p in known]
     return out or ["wikimedia"]
@@ -94,7 +94,7 @@ def image_hunt_job(
 
         sources = _parse_sources(source)
         per = max(1, max_results // max(1, len(sources)))
-        # Restkontingent der ersten Quelle zuweisen.
+        # Assign the remaining quota to the first source.
         remainder = max_results - (per * len(sources))
 
         candidates: list[dict[str, Any]] = []
@@ -108,7 +108,7 @@ def image_hunt_job(
                 if q.startswith("http://") or q.startswith("https://"):
                     candidates.extend(manufacturer_url_candidates([q], per_url_limit=lim, db=db))
             elif src == "opengraph":
-                # OpenGraph braucht URLs; bei URL-ähnlicher Query als Fallback verwenden.
+                # OpenGraph needs URLs; fall back to URL-like queries.
                 if q.startswith("http://") or q.startswith("https://"):
                     candidates.extend(opengraph_images_from_page(q, db=db))
             else:
@@ -148,7 +148,7 @@ def image_hunt_job(
             url = c.get("thumb_url") or c.get("image_url")
             if not url:
                 continue
-            # Mehrfachdownloads bei identischen URLs vermeiden.
+            # Avoid duplicate downloads for identical URLs.
             if url in seen_url:
                 continue
             seen_url.add(url)

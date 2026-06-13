@@ -53,6 +53,8 @@ from app.schemas.auth import (
     MfaEnableOut,
     MfaProvisionOut,
     MfaStatusOut,
+    MfaStepUpIn,
+    MfaStepUpOut,
     PasswordResetConfirmIn,
     PasswordResetRequestIn,
     PasswordResetRequestOut,
@@ -62,14 +64,20 @@ from app.schemas.auth import (
     TokenOut,
 )
 from app.schemas.user import UserCreate, UserOut
+from app.services.account import (
+    cancel_account_deletion,
+    request_account_deletion,
+)
 from app.services.audit import record_audit_log
 from app.services.auth_security import (
     create_session_and_tokens,
     create_totp_secret,
     generate_recovery_codes,
+    hash_password_reset_context,
     hash_recovery_codes,
     is_suspicious_login,
     is_token_revoked,
+    password_reset_context_matches,
     record_login_attempt,
     revoke_session,
     revoke_token,
@@ -210,7 +218,7 @@ def _set_auth_cookies(
         secure=settings.AUTH_COOKIE_SECURE,
         samesite=settings.AUTH_COOKIE_SAMESITE,
         max_age=refresh_max_age,
-        path="/api/auth",
+        path="/api",
         domain=domain,
     )
     response.set_cookie(
@@ -239,6 +247,7 @@ def _clear_auth_cookies(response: Response) -> None:
     domain = settings.AUTH_COOKIE_DOMAIN
     response.delete_cookie(settings.AUTH_ACCESS_COOKIE_NAME, path="/api", domain=domain)
     response.delete_cookie(settings.AUTH_REFRESH_COOKIE_NAME, path="/api/auth", domain=domain)
+    response.delete_cookie(settings.AUTH_REFRESH_COOKIE_NAME, path="/api", domain=domain)
     response.delete_cookie(settings.AUTH_COOKIE_NAME, path="/api", domain=domain)
     response.delete_cookie(settings.CSRF_COOKIE_NAME, path="/", domain=domain)
 
@@ -579,6 +588,7 @@ def logout(request: Request, response: Response, db: Session = Depends(get_db)) 
 @user_router.delete("/user/account")
 @router.delete("/account")
 def delete_account(
+    request: Request,
     response: Response,
     current_user: User = Depends(get_current_user),
     sensitive_action: SensitiveActionContext = Depends(require_sensitive_action("delete_account")),
@@ -589,58 +599,29 @@ def delete_account(
     Schedules account for deletion after 30-day grace period.
     Requires sensitive action confirmation (MFA step-up if enabled).
     """
-    if not current_user.is_active:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Account is already inactive",
+    try:
+        result = request_account_deletion(
+            db,
+            user=current_user,
+            actor_ip=get_client_ip(request),
+            actor_user_agent=request.headers.get("user-agent"),
+            metadata={
+                "request_id": sensitive_action.request_id,
+                "mfa_verified": sensitive_action.step_up_satisfied,
+                "confirmation_provided": sensitive_action.confirmation_provided,
+            },
         )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
-    if current_user.deletion_requested_at is not None:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Account deletion already requested",
-        )
-
-    # Soft-delete: mark for deletion and deactivate
-    current_user.is_active = False
-    current_user.deletion_requested_at = _utcnow()
-    db.add(current_user)
-
-    # Revoke all active sessions
-    active_sessions = (
-        db.query(AuthSession)
-        .filter(
-            AuthSession.user_id == current_user.id,
-            AuthSession.revoked_at.is_(None),
-        )
-        .all()
-    )
-    for session in active_sessions:
-        revoke_session(db, session=session, reason="account_deletion_requested")
-
-    # Create audit log
-    record_audit_log(
-        db=db,
-        actor=current_user,
-        action="auth.user.deletion_requested",
-        entity_type="User",
-        entity_id=str(current_user.id),
-        description=f"User {current_user.username} requested account deletion. Account will be permanently purged after 30 days.",
-        metadata={
-            "request_id": sensitive_action.request_id,
-            "mfa_verified": sensitive_action.step_up_satisfied,
-            "confirmation_provided": sensitive_action.confirmation_provided,
-        },
-    )
-
-    db.commit()
-
-    # Clear auth cookies
     _clear_auth_cookies(response)
 
     return {
         "ok": "true",
-        "message": "Account scheduled for deletion. Permanent removal will occur after 30 days.",
+        "message": (
+            "Account scheduled for deletion. "
+            f"Permanent removal will occur after {result['grace_period_days']} days."
+        ),
     }
 
 
@@ -919,6 +900,7 @@ def list_user_sessions(
             device_label=session.device_label,
             user_agent=session.user_agent,
             mfa_verified=session.mfa_verified,
+            mfa_step_up_expires_at=session.mfa_step_up_expires_at,
             is_current=bool(context.user.id == user.id and session.id == context.session.id),
             revoked_at=session.revoked_at,
             revoked_reason=session.revoked_reason,
@@ -959,12 +941,15 @@ def admin_request_password_reset(
         token.used_at = now
 
     reset_token = secrets.token_urlsafe(32)
+    requested_ip_hash, requested_user_agent_hash = hash_password_reset_context(
+        get_client_ip(request), request.headers.get("user-agent")
+    )
     reset_entry = PasswordResetToken(
         user_id=user.id,
         token_hash=hash_token(reset_token),
         expires_at=now + timedelta(minutes=settings.PASSWORD_RESET_TOKEN_TTL_MINUTES),
-        requested_ip=get_client_ip(request),
-        requested_user_agent=(request.headers.get("user-agent") or "")[:512] or None,
+        requested_ip=requested_ip_hash,
+        requested_user_agent=requested_user_agent_hash,
     )
     db.add(reset_entry)
 
@@ -1364,6 +1349,7 @@ def list_sessions(
             device_label=session.device_label,
             user_agent=session.user_agent,
             mfa_verified=session.mfa_verified,
+            mfa_step_up_expires_at=session.mfa_step_up_expires_at,
             is_current=session.id == context.session.id,
         )
         for session in sessions
@@ -1470,6 +1456,9 @@ def mfa_enable(
     context.user.mfa_enabled = True
     context.user.mfa_recovery_codes = hash_recovery_codes(codes)
     context.session.mfa_verified = True
+    context.session.mfa_step_up_expires_at = _utcnow() + timedelta(
+        seconds=settings.SECURITY_STEP_UP_MFA_MAX_AGE_SECONDS
+    )
     record_audit_log(
         db,
         actor=context.user,
@@ -1510,6 +1499,7 @@ def mfa_disable(
     context.user.mfa_enabled = False
     context.user.mfa_recovery_codes = None
     context.session.mfa_verified = False
+    context.session.mfa_step_up_expires_at = None
     record_audit_log(
         db,
         actor=context.user,
@@ -1531,6 +1521,39 @@ def mfa_disable(
     db.commit()
     _set_auth_cookies(response, access_token, refresh_token_value, context.session)
     return MfaStatusOut(enabled=False)
+
+
+@router.post("/mfa/step-up", response_model=MfaStepUpOut)
+def mfa_step_up(
+    request: Request,
+    payload: MfaStepUpIn,
+    context: AuthContext = Depends(get_current_auth_context),
+    db: Session = Depends(get_db),
+) -> MfaStepUpOut:
+    if not context.user.mfa_enabled:
+        raise HTTPException(status_code=409, detail="MFA must be enabled before step-up")
+    if not _verify_mfa(context.user, payload.code):
+        raise HTTPException(status_code=400, detail="Invalid MFA code")
+
+    expires_at = _utcnow() + timedelta(seconds=settings.SECURITY_STEP_UP_MFA_MAX_AGE_SECONDS)
+    context.session.mfa_verified = True
+    context.session.mfa_step_up_expires_at = expires_at
+    record_audit_log(
+        db,
+        actor=context.user,
+        action="auth.mfa.step_up",
+        entity_type="auth_session",
+        entity_id=str(context.session.id),
+        description="Completed MFA step-up for sensitive action",
+        after={"mfa_verified": True, "step_up_expires_at": expires_at.isoformat()},
+        metadata={
+            "audit_category": "security",
+            "critical": True,
+            "request_id": getattr(request.state, "request_id", None),
+        },
+    )
+    db.commit()
+    return MfaStepUpOut(step_up_expires_at=expires_at)
 
 
 @router.post("/change-password", response_model=TokenOut)
@@ -1611,13 +1634,16 @@ def request_password_reset(
         token.used_at = now
 
     reset_token = secrets.token_urlsafe(32)
+    requested_ip_hash, requested_user_agent_hash = hash_password_reset_context(
+        get_client_ip(request), request.headers.get("user-agent")
+    )
     db.add(
         PasswordResetToken(
             user_id=user.id,
             token_hash=hash_token(reset_token),
             expires_at=now + timedelta(minutes=settings.PASSWORD_RESET_TOKEN_TTL_MINUTES),
-            requested_ip=get_client_ip(request),
-            requested_user_agent=(request.headers.get("user-agent") or "")[:512] or None,
+            requested_ip=requested_ip_hash,
+            requested_user_agent=requested_user_agent_hash,
         )
     )
     record_audit_log(
@@ -1635,7 +1661,7 @@ def request_password_reset(
         },
     )
     db.commit()
-    return PasswordResetRequestOut(ok=True, reset_token=reset_token)
+    return PasswordResetRequestOut(ok=True, reset_token=None)
 
 
 @router.post("/password-reset/confirm", response_model=dict)
@@ -1658,6 +1684,14 @@ def confirm_password_reset(
     )
     if not token:
         raise HTTPException(status_code=400, detail="Invalid or expired reset token")
+
+    if not password_reset_context_matches(
+        token.requested_ip,
+        token.requested_user_agent,
+        get_client_ip(request),
+        request.headers.get("user-agent"),
+    ):
+        raise HTTPException(status_code=400, detail="Reset token context mismatch")
 
     user = db.query(User).filter(User.id == token.user_id).first()
     if not user:
@@ -1694,3 +1728,56 @@ def confirm_password_reset(
 
     db.commit()
     return {"ok": "true"}
+
+
+# Account Deletion (GDPR)
+
+
+@router.post("/users/me/account-deletion/request", response_model=dict)
+def request_user_account_deletion(
+    request: Request,
+    context: AuthContext = Depends(get_current_auth_context),
+    db: Session = Depends(get_db),
+) -> dict:
+    """
+    Request account deletion (GDPR compliance).
+
+    Account will be soft-deleted and hard-deleted after grace period (default 30 days).
+
+    Security: Requires active authenticated session.
+    """
+    try:
+        result = request_account_deletion(
+            db,
+            user=context.user,
+            actor_ip=get_client_ip(request),
+            actor_user_agent=request.headers.get("user-agent"),
+        )
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/users/me/account-deletion/cancel", response_model=dict)
+def cancel_user_account_deletion(
+    request: Request,
+    context: AuthContext = Depends(get_current_auth_context),
+    db: Session = Depends(get_db),
+) -> dict:
+    """
+    Cancel a pending account deletion request.
+
+    Account restoration must happen before grace period expires.
+
+    Security: Requires active authenticated session.
+    """
+    try:
+        result = cancel_account_deletion(
+            db,
+            user=context.user,
+            actor_ip=get_client_ip(request),
+            actor_user_agent=request.headers.get("user-agent"),
+        )
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))

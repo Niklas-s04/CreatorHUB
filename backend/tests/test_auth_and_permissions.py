@@ -2,15 +2,18 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 
+import pyotp
 from sqlalchemy.orm import Session
 
 from app.api import deps
 from app.core.config import settings
+from app.core.security import hash_token
 from app.models.audit import AuditLog
 from app.models.auth_session import AuthSession, PasswordResetToken, RevokedToken
 from app.models.product import Product
 from app.models.registration_request import RegistrationRequest, RegistrationRequestStatus
 from app.models.user import UserRole
+from app.services.auth_security import create_totp_secret
 from tests.factories import DEFAULT_PASSWORD, create_tokens_for_user, create_user
 
 
@@ -220,6 +223,7 @@ def test_approve_registration_requires_step_up_mfa_when_enabled(
     session = db_session.query(AuthSession).filter(AuthSession.user_id == admin.id).first()
     assert session is not None
     session.mfa_verified = True
+    session.mfa_step_up_expires_at = datetime.utcnow() + timedelta(minutes=5)
     db_session.commit()
 
     allowed = client.post(
@@ -228,6 +232,98 @@ def test_approve_registration_requires_step_up_mfa_when_enabled(
     )
     assert allowed.status_code == 200
     assert allowed.json()["reviewed_by_username"] == admin.username
+
+
+def test_mfa_step_up_requires_enabled_mfa(client, db_session: Session) -> None:
+    admin = create_user(db_session, username="admin_stepup_without_mfa", role=UserRole.admin)
+    token, _ = create_tokens_for_user(db_session, user=admin)
+
+    response = client.post(
+        "/api/auth/mfa/step-up",
+        json={"code": "123456"},
+        headers=_auth_header(token),
+    )
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "MFA must be enabled before step-up"
+
+
+def test_mfa_step_up_sets_short_lived_session_verification(
+    client,
+    db_session: Session,
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(settings, "SECURITY_STEP_UP_MFA_MAX_AGE_SECONDS", 120)
+
+    secret = create_totp_secret()
+    admin = create_user(db_session, username="admin_stepup_endpoint", role=UserRole.admin)
+    admin.mfa_enabled = True
+    admin.mfa_secret = secret
+    db_session.commit()
+    token, _ = create_tokens_for_user(db_session, user=admin)
+
+    response = client.post(
+        "/api/auth/mfa/step-up",
+        json={"code": pyotp.TOTP(secret).now()},
+        headers=_auth_header(token),
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["mfa_verified"] is True
+    assert body["step_up_expires_at"]
+
+    session = db_session.query(AuthSession).filter(AuthSession.user_id == admin.id).first()
+    assert session is not None
+    assert session.mfa_verified is True
+    assert session.mfa_step_up_expires_at is not None
+    assert session.mfa_step_up_expires_at > datetime.utcnow()
+
+    audit = (
+        db_session.query(AuditLog)
+        .filter(
+            AuditLog.action == "auth.mfa.step_up",
+            AuditLog.entity_id == str(session.id),
+        )
+        .first()
+    )
+    assert audit is not None
+    assert audit.meta is not None
+    assert audit.meta.get("audit_category") == "security"
+
+
+def test_sensitive_action_rejects_expired_step_up(
+    client,
+    db_session: Session,
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(settings, "SECURITY_SENSITIVE_ACTION_REQUIRE_STEP_UP_MFA", True)
+
+    admin = create_user(db_session, username="admin_expired_stepup", role=UserRole.admin)
+    token, _ = create_tokens_for_user(db_session, user=admin)
+
+    session = db_session.query(AuthSession).filter(AuthSession.user_id == admin.id).first()
+    assert session is not None
+    session.mfa_verified = True
+    session.mfa_step_up_expires_at = datetime.utcnow() - timedelta(seconds=1)
+    db_session.commit()
+
+    req = RegistrationRequest(
+        username="pending_expired_stepup_user",
+        hashed_password="hashed",
+        status=RegistrationRequestStatus.pending,
+    )
+    db_session.add(req)
+    db_session.commit()
+    db_session.refresh(req)
+
+    denied = client.post(
+        f"/api/auth/registration-requests/{req.id}/approve",
+        headers=_auth_header(token),
+    )
+
+    assert denied.status_code == 403
+    assert denied.json()["detail"] == "Step-up authentication required"
 
 
 def test_reject_registration_stores_reason_and_history(client, db_session: Session) -> None:
@@ -378,8 +474,18 @@ def test_confirm_password_reset_writes_security_audit(client, db_session: Sessio
         json={"username": user.username},
     )
     assert request_response.status_code == 200
-    reset_token = request_response.json().get("reset_token")
-    assert isinstance(reset_token, str) and reset_token
+    assert request_response.json().get("reset_token") is None
+
+    reset_token = "test-reset-token-audit"
+    token_row = (
+        db_session.query(PasswordResetToken)
+        .filter(PasswordResetToken.user_id == user.id)
+        .order_by(PasswordResetToken.created_at.desc())
+        .first()
+    )
+    assert token_row is not None
+    token_row.token_hash = hash_token(reset_token)
+    db_session.commit()
 
     confirm_response = client.post(
         "/api/auth/password-reset/confirm",

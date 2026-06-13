@@ -66,6 +66,9 @@ class ContentItem(Base, UUIDMixin, TimestampMixin):
     script_md: Mapped[str | None] = mapped_column(Text, nullable=True)
     description_md: Mapped[str | None] = mapped_column(Text, nullable=True)
     tags_csv: Mapped[str | None] = mapped_column(Text, nullable=True)
+    platform_meta_json: Mapped[dict[str, str | int | bool | float | None]] = mapped_column(
+        JSON, default=dict
+    )
 
     planned_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     publish_date: Mapped[date | None] = mapped_column(Date, nullable=True)
@@ -96,6 +99,10 @@ class ContentItem(Base, UUIDMixin, TimestampMixin):
     published_by_name: Mapped[str | None] = mapped_column(String(128), nullable=True)
     review_cycle: Mapped[int] = mapped_column(Integer, default=0)
     last_change_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    applied_template_snapshot_id: Mapped[uuid.UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), nullable=True, index=True
+    )
+    readiness_score: Mapped[int] = mapped_column(Integer, default=0)
 
     tasks: Mapped[list["ContentTask"]] = relationship(
         back_populates="content_item", cascade="all, delete-orphan"
@@ -150,6 +157,11 @@ class ContentTask(Base, UUIDMixin, TimestampMixin):
     blocked_by_task_id: Mapped[uuid.UUID | None] = mapped_column(
         PGUUID(as_uuid=True), nullable=True, index=True
     )
+    required_for_publish: Mapped[bool] = mapped_column(Boolean, default=False)
+    can_block_publish: Mapped[bool] = mapped_column(Boolean, default=False)
+    checklist_snapshot_id: Mapped[uuid.UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), nullable=True, index=True
+    )
     notified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     escalated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -194,3 +206,88 @@ class ContentItemRevision(Base, UUIDMixin, TimestampMixin):
     changed_by_name: Mapped[str | None] = mapped_column(String(128), nullable=True)
 
     content_item: Mapped[ContentItem] = relationship(back_populates="revisions")
+
+
+class ChecklistPhase(str, enum.Enum):
+    pre_production = "pre_production"
+    production = "production"
+    post_production = "post_production"
+    upload = "upload"
+
+
+class ContentPlatformProfile(Base, UUIDMixin, TimestampMixin):
+    __tablename__ = "content_platform_profiles"
+
+    platform: Mapped[ContentPlatform] = mapped_column(Enum(ContentPlatform), index=True)
+    name: Mapped[str] = mapped_column(String(120))
+    schema_json: Mapped[dict[str, str | int | bool | float | None]] = mapped_column(
+        JSON, default=dict
+    )
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    is_system: Mapped[bool] = mapped_column(Boolean, default=False)
+    owner_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), nullable=True, index=True
+    )
+    version: Mapped[int] = mapped_column(Integer, default=1)
+
+
+class ContentChecklistTemplate(Base, UUIDMixin, TimestampMixin):
+    __tablename__ = "content_checklist_templates"
+
+    name: Mapped[str] = mapped_column(String(160))
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    applies_to_platform: Mapped[ContentPlatform | None] = mapped_column(
+        Enum(ContentPlatform), nullable=True, index=True
+    )
+    applies_to_type: Mapped[ContentType | None] = mapped_column(
+        Enum(ContentType), nullable=True, index=True
+    )
+    is_shared: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_system: Mapped[bool] = mapped_column(Boolean, default=False)
+    owner_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), nullable=True, index=True
+    )
+    version: Mapped[int] = mapped_column(Integer, default=1)
+
+    items: Mapped[list["ContentChecklistTemplateItem"]] = relationship(
+        back_populates="template", cascade="all, delete-orphan"
+    )
+
+
+class ContentChecklistTemplateItem(Base, UUIDMixin, TimestampMixin):
+    __tablename__ = "content_checklist_template_items"
+
+    template_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("content_checklist_templates.id", ondelete="CASCADE"), index=True
+    )
+    title: Mapped[str] = mapped_column(String(160))
+    phase: Mapped[ChecklistPhase] = mapped_column(
+        Enum(ChecklistPhase), default=ChecklistPhase.production
+    )
+    required: Mapped[bool] = mapped_column(Boolean, default=True)
+    priority_default: Mapped[TaskPriority] = mapped_column(
+        Enum(TaskPriority), default=TaskPriority.medium
+    )
+    due_offset_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    can_block_publish: Mapped[bool] = mapped_column(Boolean, default=False)
+    sort_order: Mapped[int] = mapped_column(Integer, default=0)
+
+    template: Mapped[ContentChecklistTemplate] = relationship(back_populates="items")
+
+
+class ContentChecklistSnapshot(Base, UUIDMixin, TimestampMixin):
+    __tablename__ = "content_checklist_snapshots"
+
+    content_item_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("content_items.id", ondelete="CASCADE"), index=True
+    )
+    template_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("content_checklist_templates.id", ondelete="CASCADE"), index=True
+    )
+    template_version: Mapped[int] = mapped_column(Integer, default=1)
+    snapshot_json: Mapped[dict[str, str | int | bool | float | None]] = mapped_column(
+        JSON, default=dict
+    )
+    created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), nullable=True, index=True
+    )

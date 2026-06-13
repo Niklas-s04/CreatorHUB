@@ -25,6 +25,9 @@ class AuthSession(Base, UUIDMixin, TimestampMixin):
     device_label: Mapped[str | None] = mapped_column(String(128), nullable=True)
 
     mfa_verified: Mapped[bool] = mapped_column(Boolean, default=False)
+    mfa_step_up_expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     last_activity_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     idle_expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

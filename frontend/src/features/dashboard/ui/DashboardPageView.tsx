@@ -4,6 +4,7 @@ import { apiFetch } from '../../../api'
 import { getErrorMessage } from '../../../shared/lib/errors'
 import { ErrorState } from '../../../shared/ui/states/ErrorState'
 import { ListSkeleton } from '../../../shared/ui/states/ListSkeleton'
+import { useI18n } from '../../../shared/i18n/i18n'
 
 type DashboardMetricKey =
   | 'open_deals'
@@ -53,13 +54,14 @@ const TONE_CLASS: Record<DashboardTone, string> = {
 function formatTime(value: string | null): string {
   if (!value) return ''
   try {
-    return new Date(value).toLocaleString('de-DE')
+    return new Date(value).toLocaleString()
   } catch {
     return value
   }
 }
 
 export default function DashboardPage() {
+  const { t, language } = useI18n()
   const [summary, setSummary] = useState<DashboardSummary | null>(null)
   const [err, setErr] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
@@ -84,15 +86,21 @@ export default function DashboardPage() {
   const metrics = summary?.metrics ?? []
   const roleHint = useMemo(() => {
     if (!summary) return ''
-    return ROLE_LABELS[summary.role] || `Rollenfokus: ${summary.role}`
-  }, [summary])
+    if (language === 'en') {
+      if (summary.role === 'admin') return t('dashboard.roleAdmin')
+      if (summary.role === 'editor') return t('dashboard.roleEditor')
+      if (summary.role === 'viewer') return t('dashboard.roleViewer')
+      return t('dashboard.roleFallback', { role: summary.role })
+    }
+    return ROLE_LABELS[summary.role] || t('dashboard.roleFallback', { role: summary.role })
+  }, [summary, language, t])
 
   return (
     <div className="dashboard-layout">
       {loading && <ListSkeleton rows={6} />}
       {!loading && err && (
         <ErrorState
-          title="Dashboard konnte nicht geladen werden"
+          title={t('dashboard.loadError')}
           message={err}
           onRetry={() => {
             void load()
@@ -104,7 +112,7 @@ export default function DashboardPage() {
         <>
           <section className="card dashboard-role-card">
             <div className="card-head">
-              <h3>Operatives Dashboard</h3>
+              <h3>{t('dashboard.title')}</h3>
             </div>
             <div className="muted">{roleHint}</div>
           </section>
@@ -120,13 +128,13 @@ export default function DashboardPage() {
                 <div className="kpi-label">{metric.label}</div>
                 <div className="kpi-value">{metric.count}</div>
                 <div className="kpi-trend">{metric.description}</div>
-                <div className="kpi-drilldown">Zur Arbeitsliste →</div>
+                <div className="kpi-drilldown">{t('dashboard.openWorklist')} →</div>
               </Link>
             ))}
             {metrics.length === 0 && (
               <article className="card">
-                <h3>Keine operativen KPIs verfügbar</h3>
-                <div className="muted">Für deine Rolle stehen aktuell keine Dashboard-Kennzahlen zur Verfügung.</div>
+                <h3>{t('dashboard.noMetricsTitle')}</h3>
+                <div className="muted">{t('dashboard.noMetricsBody')}</div>
               </article>
             )}
           </section>
@@ -136,7 +144,7 @@ export default function DashboardPage() {
               <article className="card" key={`${metric.key}-list`}>
                 <div className="card-head">
                   <h3>{metric.label}</h3>
-                  <Link className="btn" to={metric.route}>Öffnen</Link>
+                  <Link className="btn" to={metric.route}>{t('dashboard.open')}</Link>
                 </div>
                 <div className="worklist-items">
                   {metric.items.map(item => (
@@ -146,7 +154,7 @@ export default function DashboardPage() {
                       {item.updated_at && <div className="worklist-time">{formatTime(item.updated_at)}</div>}
                     </div>
                   ))}
-                  {metric.items.length === 0 && <div className="muted">Keine offenen Einträge.</div>}
+                  {metric.items.length === 0 && <div className="muted">{t('dashboard.noItems')}</div>}
                 </div>
               </article>
             ))}

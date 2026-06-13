@@ -9,16 +9,17 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
+import app.models  # noqa: F401
 from app.api.routers import email as email_router
-from app.models.ai_settings import CreatorAiProfile, CreatorAiTone
+from app.models.ai_settings import CreatorAiTone
 from app.models.asset import Asset, AssetKind, AssetOwnerType, AssetReviewState, AssetSource
 from app.models.audit import AuditLog
+from app.models.base import Base
 from app.models.content import (
     ContentItem,
     ContentItemRevision,
     ContentStatus,
     ContentTask,
-    ContentTaskView,
     ContentType,
     TaskPriority,
     TaskStatus,
@@ -28,14 +29,11 @@ from app.models.deal import DealDraft, DealDraftStatus
 from app.models.email import (
     EmailApprovalStatus,
     EmailDraft,
-    EmailDraftSuggestion,
     EmailDraftVersion,
     EmailHandoffStatus,
     EmailIntent,
     EmailRiskLevel,
-    EmailTemplate,
     EmailThread,
-    EmailThreadMessage,
     EmailTone,
 )
 from app.models.knowledge import KnowledgeDoc, KnowledgeDocDraftLink, KnowledgeDocVersion
@@ -63,27 +61,7 @@ from app.services import content_service, deal_service, knowledge_service
 from app.services.errors import BusinessRuleViolation
 from app.services.sales_workflow import finalize_product_sale
 
-TEST_TABLES = [
-    User.__table__,
-    CreatorAiProfile.__table__,
-    Product.__table__,
-    Asset.__table__,
-    KnowledgeDoc.__table__,
-    KnowledgeDocVersion.__table__,
-    KnowledgeDocDraftLink.__table__,
-    ContentItem.__table__,
-    ContentItemRevision.__table__,
-    ContentTask.__table__,
-    ContentTaskView.__table__,
-    EmailThread.__table__,
-    EmailThreadMessage.__table__,
-    EmailTemplate.__table__,
-    EmailDraft.__table__,
-    EmailDraftVersion.__table__,
-    EmailDraftSuggestion.__table__,
-    DealDraft.__table__,
-    AuditLog.__table__,
-]
+TEST_TABLES = list(Base.metadata.sorted_tables)
 
 
 @pytest.fixture()

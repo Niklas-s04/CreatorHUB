@@ -39,7 +39,7 @@ def _heuristic_score(image_path: Path) -> ScoreResult:
                     0.0, "invalid image size", 0.0, 0.0, 0.0, False, 0.0, orig_w, orig_h
                 )
 
-            # Für Performance verkleinern, Seitenverhältnis bleibt erhalten.
+            # Downscale for performance while preserving aspect ratio.
             img.thumbnail((512, 512))
 
             w, h = img.size
@@ -50,13 +50,13 @@ def _heuristic_score(image_path: Path) -> ScoreResult:
 
             px = img.load()
 
-            # Bis zu ~60k Pixel gleichmäßig sampeln.
+            # Sample up to about 60k pixels evenly.
             target_samples = min(60000, w * h)
             step = int(((w * h) / target_samples) ** 0.5) or 1
 
             white = 0
             total = 0
-            # Einfacher Schwellwert für weiße Flächen.
+            # Use a simple threshold for white areas.
             for y in range(0, h, step):
                 for x in range(0, w, step):
                     r, g, b = px[x, y]
@@ -65,7 +65,7 @@ def _heuristic_score(image_path: Path) -> ScoreResult:
                     total += 1
             white_ratio = white / max(total, 1)
 
-            # Kantendichte über Graustufe und FIND_EDGES bestimmen.
+            # Estimate edge density from a grayscale edge filter.
             gray = img.convert("L")
             edges = gray.filter(ImageFilter.FIND_EDGES)
             ep = edges.load()
@@ -116,5 +116,5 @@ def score_image(
     If a vision_model is configured, caller may provide a higher-level score elsewhere.
     Fallback to heuristic score here.
     """
-    # Im MVP wird hier nur die Heuristik verwendet.
+    # The MVP uses only the heuristic scorer here.
     return _heuristic_score(image_path)

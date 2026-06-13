@@ -1,8 +1,10 @@
 import React, { useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
+import { useNavigate } from 'react-router-dom'
 import {
   apiFetch,
+  deleteAccount,
   changePassword,
   disableMfa,
   enableMfa,
@@ -34,15 +36,19 @@ import { ErrorState } from '../../../../shared/ui/states/ErrorState'
 import { InlineHint } from '../../../../shared/ui/states/InlineHint'
 import { ListSkeleton } from '../../../../shared/ui/states/ListSkeleton'
 import { useToast } from '../../../../shared/ui/toast/ToastProvider'
+import { useI18n } from '../../../../shared/i18n/i18n'
 
 export default function SettingsPage() {
   const toast = useToast()
+  const navigate = useNavigate()
+  const { language, setLanguage, t } = useI18n()
   const [docs, setDocs] = useState<KnowledgeDocVm[]>([])
   const [sessions, setSessions] = useState<AuthSession[]>([])
   const [history, setHistory] = useState<LoginHistoryEntry[]>([])
   const [mfaEnabled, setMfaEnabled] = useState(false)
   const [mfaSecret, setMfaSecret] = useState('')
   const [recoveryCodes, setRecoveryCodes] = useState<string[]>([])
+  const [deleteConfirmation, setDeleteConfirmation] = useState('')
   const [err, setErr] = useState<string | null>(null)
   const [errKind, setErrKind] = useState<ErrorKind>('technical')
   const [loading, setLoading] = useState(true)
@@ -98,7 +104,7 @@ export default function SettingsPage() {
       await changePassword(values.currentPassword, values.newPassword)
       changePasswordForm.reset()
       await load()
-      toast.success('Passwort erfolgreich geändert')
+      toast.success(t('settings.passwordChanged'))
     } catch (e: unknown) {
       const message = getErrorMessage(e)
       setErrKind(getErrorKind(e))
@@ -112,7 +118,7 @@ export default function SettingsPage() {
       setErr(null)
       const res = await provisionMfa()
       setMfaSecret(res.secret)
-      toast.success('TOTP-Secret wurde erzeugt')
+      toast.success(t('settings.totpCreated'))
     } catch (e: unknown) {
       const message = getErrorMessage(e)
       setErrKind(getErrorKind(e))
@@ -128,7 +134,7 @@ export default function SettingsPage() {
       setRecoveryCodes(res.recovery_codes)
       mfaEnableForm.reset()
       await load()
-      toast.success('MFA wurde aktiviert')
+      toast.success(t('settings.mfaEnabled'))
     } catch (e: unknown) {
       const message = getErrorMessage(e)
       setErrKind(getErrorKind(e))
@@ -144,7 +150,7 @@ export default function SettingsPage() {
       mfaDisableForm.reset()
       setRecoveryCodes([])
       await load()
-      toast.success('MFA wurde deaktiviert')
+      toast.success(t('settings.mfaDisabled'))
     } catch (e: unknown) {
       const message = getErrorMessage(e)
       setErrKind(getErrorKind(e))
@@ -158,7 +164,22 @@ export default function SettingsPage() {
       setErr(null)
       await revokeSession(id)
       await load()
-      toast.success('Session beendet')
+      toast.success(t('settings.sessionEnded'))
+    } catch (e: unknown) {
+      const message = getErrorMessage(e)
+      setErrKind(getErrorKind(e))
+      setErr(message)
+      toast.error(message)
+    }
+  }
+
+  async function onDeleteAccount() {
+    try {
+      setErr(null)
+      const response = await deleteAccount()
+      setDeleteConfirmation('')
+      toast.success(response.message)
+      navigate('/login')
     } catch (e: unknown) {
       const message = getErrorMessage(e)
       setErrKind(getErrorKind(e))
@@ -188,7 +209,7 @@ export default function SettingsPage() {
         }),
       })
       await load()
-      toast.success('Dokument gespeichert')
+      toast.success(t('settings.documentSaved'))
     } catch (e: unknown) {
       const message = getErrorMessage(e)
       setErrKind(getErrorKind(e))
@@ -201,10 +222,8 @@ export default function SettingsPage() {
     <div className="container">
       <div className="page-header">
         <div>
-          <h2 className="page-title">Einstellungen</h2>
-          <div className="page-subtitle">
-            Brand Voice / Policy / Templates für den E-Mail-Assistenten.
-          </div>
+          <h2 className="page-title">{t('settings.title')}</h2>
+          <div className="page-subtitle">{t('settings.subtitle')}</div>
         </div>
       </div>
       {err && <InlineHint type={errKind} message={err} />}
@@ -217,7 +236,7 @@ export default function SettingsPage() {
 
       {!loading && err && (
         <ErrorState
-          title="Einstellungen konnten nicht geladen werden"
+          title={t('settings.loadError')}
           message={err}
           onRetry={() => {
             void load()
@@ -228,11 +247,29 @@ export default function SettingsPage() {
       {!loading && !err && (
         <>
       <div className="card section-gap">
-        <h3>Account-Sicherheit</h3>
-        <div className="muted">MFA: {mfaEnabled ? 'Aktiv' : 'Inaktiv'}</div>
+        <h3>{t('settings.appLanguageCardTitle')}</h3>
+        <div className="muted">{t('settings.appLanguageCardBody')}</div>
+        <div className="section-gap">
+          <label htmlFor="app-language-select" className="field-label">{t('settings.appLanguageLabel')}</label>
+          <select
+            id="app-language-select"
+            className="w100"
+            value={language}
+            onChange={event => setLanguage(event.target.value === 'en' ? 'en' : 'de')}
+          >
+            <option value="de">{t('settings.languageGerman')}</option>
+            <option value="en">{t('settings.languageEnglish')}</option>
+          </select>
+          <div className="muted small mt8">{t('settings.languageDescription')}</div>
+        </div>
+      </div>
+
+      <div className="card section-gap">
+        <h3>{t('settings.accountSecurity')}</h3>
+        <div className="muted">MFA: {mfaEnabled ? t('settings.mfaActive') : t('settings.mfaInactive')}</div>
 
         <div className="section-gap">
-          <label htmlFor="settings-current-password" className="field-label">Aktuelles Passwort</label>
+          <label htmlFor="settings-current-password" className="field-label">{t('settings.currentPassword')}</label>
           <input
             id="settings-current-password"
             className="full-width"
@@ -244,7 +281,7 @@ export default function SettingsPage() {
           {changePasswordForm.formState.errors.currentPassword?.message && (
             <div id="settings-current-password-error" className="error mt8" role="alert">{changePasswordForm.formState.errors.currentPassword.message}</div>
           )}
-          <label htmlFor="settings-new-password" className="field-label mt8">Neues Passwort</label>
+          <label htmlFor="settings-new-password" className="field-label mt8">{t('settings.newPassword')}</label>
           <input
             id="settings-new-password"
             className="full-width"
@@ -261,17 +298,17 @@ export default function SettingsPage() {
             onClick={changePasswordForm.handleSubmit(onChangePassword)}
             disabled={!changePasswordForm.formState.isDirty || !changePasswordForm.formState.isValid}
           >
-            Passwort ändern
+            {language === 'en' ? 'Change password' : 'Passwort ändern'}
           </button>
         </div>
 
         <div className="section-gap">
-          <div className="field-label">MFA einrichten</div>
-          <button className="btn" onClick={onProvisionMfa}>TOTP-Secret erzeugen</button>
-          {!!mfaSecret && <div className="muted mt8">Secret: {mfaSecret}</div>}
+          <div className="field-label">{language === 'en' ? 'Set up MFA' : 'MFA einrichten'}</div>
+          <button className="btn" onClick={onProvisionMfa}>{language === 'en' ? 'Create TOTP secret' : 'TOTP-Secret erzeugen'}</button>
+          {!!mfaSecret && <div className="muted mt8">{language === 'en' ? 'Secret' : 'Secret'}: {mfaSecret}</div>}
           {!!mfaSecret && (
             <>
-              <label htmlFor="settings-mfa-enable-code" className="field-label mt8">TOTP-Code</label>
+              <label htmlFor="settings-mfa-enable-code" className="field-label mt8">{t('settings.totpCode')}</label>
               <input
                 id="settings-mfa-enable-code"
                 className="full-width"
@@ -287,22 +324,22 @@ export default function SettingsPage() {
                 onClick={mfaEnableForm.handleSubmit(onEnableMfa)}
                 disabled={!mfaSecret || !mfaEnableForm.formState.isDirty || !mfaEnableForm.formState.isValid}
               >
-                MFA aktivieren
+                {language === 'en' ? 'Enable MFA' : 'MFA aktivieren'}
               </button>
             </>
           )}
-          {!!recoveryCodes.length && <div className="muted mt8">Recovery-Codes: {recoveryCodes.join(', ')}</div>}
+          {!!recoveryCodes.length && <div className="muted mt8">{language === 'en' ? 'Recovery codes' : 'Recovery-Codes'}: {recoveryCodes.join(', ')}</div>}
         </div>
 
         {mfaEnabled && (
           <div className="section-gap">
-            <div className="field-label">MFA deaktivieren</div>
-            <label htmlFor="settings-mfa-disable-password" className="sr-only">Passwort für MFA-Deaktivierung</label>
+            <div className="field-label">{language === 'en' ? 'Disable MFA' : 'MFA deaktivieren'}</div>
+            <label htmlFor="settings-mfa-disable-password" className="sr-only">{t('settings.mfaPassword')}</label>
             <input
               id="settings-mfa-disable-password"
               className="full-width"
               type="password"
-              placeholder="Passwort"
+              placeholder={language === 'en' ? 'Password' : 'Passwort'}
               {...mfaDisableForm.register('password')}
               aria-invalid={Boolean(mfaDisableForm.formState.errors.password?.message)}
               aria-describedby={mfaDisableForm.formState.errors.password?.message ? 'settings-mfa-disable-password-error' : undefined}
@@ -310,11 +347,11 @@ export default function SettingsPage() {
             {mfaDisableForm.formState.errors.password?.message && (
               <div id="settings-mfa-disable-password-error" className="error mt8" role="alert">{mfaDisableForm.formState.errors.password.message}</div>
             )}
-            <label htmlFor="settings-mfa-disable-code" className="sr-only">TOTP oder Recovery-Code für MFA-Deaktivierung</label>
+            <label htmlFor="settings-mfa-disable-code" className="sr-only">{t('settings.mfaDisableCode')}</label>
             <input
               id="settings-mfa-disable-code"
               className="full-width mt8"
-              placeholder="TOTP oder Recovery-Code"
+              placeholder={language === 'en' ? 'TOTP or recovery code' : 'TOTP oder Recovery-Code'}
               {...mfaDisableForm.register('code')}
               aria-invalid={Boolean(mfaDisableForm.formState.errors.code?.message)}
               aria-describedby={mfaDisableForm.formState.errors.code?.message ? 'settings-mfa-disable-code-error' : undefined}
@@ -327,35 +364,35 @@ export default function SettingsPage() {
               onClick={mfaDisableForm.handleSubmit(onDisableMfa)}
               disabled={!mfaDisableForm.formState.isDirty || !mfaDisableForm.formState.isValid}
             >
-              MFA deaktivieren
+              {language === 'en' ? 'Disable MFA' : 'MFA deaktivieren'}
             </button>
           </div>
         )}
       </div>
 
       <div className="card section-gap">
-        <h3>Aktive Sessions</h3>
-        {!sessions.length && <div className="muted">Keine Sessions.</div>}
+        <h3>{language === 'en' ? 'Active sessions' : 'Aktive Sessions'}</h3>
+        {!sessions.length && <div className="muted">{language === 'en' ? 'No sessions.' : 'Keine Sessions.'}</div>}
         {!!sessions.length && (
           <table>
-            <caption className="sr-only">Liste aktiver Sitzungen</caption>
+            <caption className="sr-only">{language === 'en' ? 'List of active sessions' : 'Liste aktiver Sitzungen'}</caption>
             <thead>
               <tr>
-                <th scope="col">Gerät</th>
+                <th scope="col">{language === 'en' ? 'Device' : 'Gerät'}</th>
                 <th scope="col">IP</th>
-                <th scope="col">Letzte Aktivität</th>
-                <th scope="col">Ablauf</th>
-                <th scope="col">Aktion</th>
+                <th scope="col">{language === 'en' ? 'Last activity' : 'Letzte Aktivität'}</th>
+                <th scope="col">{language === 'en' ? 'Expires' : 'Ablauf'}</th>
+                <th scope="col">{language === 'en' ? 'Action' : 'Aktion'}</th>
               </tr>
             </thead>
             <tbody>
               {sessions.map(s => (
                 <tr key={s.id}>
-                  <td>{s.device_label || 'Unbekannt'}{s.is_current ? ' (aktuell)' : ''}</td>
+                  <td>{s.device_label || (language === 'en' ? 'Unknown' : 'Unbekannt')}{s.is_current ? (language === 'en' ? ' (current)' : ' (aktuell)') : ''}</td>
                   <td>{s.ip_address || '-'}</td>
                   <td>{new Date(s.last_activity_at).toLocaleString()}</td>
                   <td>{new Date(s.expires_at).toLocaleString()}</td>
-                  <td>{!s.is_current && <button className="btn danger" onClick={() => onRevokeSession(s.id)} aria-label={`Session auf ${s.device_label || 'Unbekannt'} beenden`}>Beenden</button>}</td>
+                  <td>{!s.is_current && <button className="btn danger" onClick={() => onRevokeSession(s.id)} aria-label={language === 'en' ? `End session on ${s.device_label || 'Unknown'}` : `Session auf ${s.device_label || 'Unbekannt'} beenden`}>{language === 'en' ? 'End' : 'Beenden'}</button>}</td>
                 </tr>
               ))}
             </tbody>
@@ -364,17 +401,17 @@ export default function SettingsPage() {
       </div>
 
       <div className="card section-gap">
-        <h3>Anmeldehistorie</h3>
-        {!history.length && <div className="muted">Keine Einträge.</div>}
+        <h3>{language === 'en' ? 'Login history' : 'Anmeldehistorie'}</h3>
+        {!history.length && <div className="muted">{language === 'en' ? 'No entries.' : 'Keine Einträge.'}</div>}
         {!!history.length && (
           <table>
-            <caption className="sr-only">Anmeldehistorie</caption>
+            <caption className="sr-only">{language === 'en' ? 'Login history' : 'Anmeldehistorie'}</caption>
             <thead>
               <tr>
-                <th scope="col">Zeit</th>
+                <th scope="col">{language === 'en' ? 'Time' : 'Zeit'}</th>
                 <th scope="col">IP</th>
                 <th scope="col">Status</th>
-                <th scope="col">Hinweis</th>
+                <th scope="col">{language === 'en' ? 'Note' : 'Hinweis'}</th>
               </tr>
             </thead>
             <tbody>
@@ -382,7 +419,7 @@ export default function SettingsPage() {
                 <tr key={h.id}>
                   <td>{new Date(h.occurred_at).toLocaleString()}</td>
                   <td>{h.ip_address || '-'}</td>
-                  <td>{h.success ? 'Erfolg' : 'Fehler'}{h.suspicious ? ' (verdächtig)' : ''}</td>
+                  <td>{h.success ? (language === 'en' ? 'Success' : 'Erfolg') : (language === 'en' ? 'Failure' : 'Fehler')}{h.suspicious ? (language === 'en' ? ' (suspicious)' : ' (verdächtig)') : ''}</td>
                   <td>{h.reason || '-'}</td>
                 </tr>
               ))}
@@ -391,9 +428,37 @@ export default function SettingsPage() {
         )}
       </div>
 
+      <div className="card section-gap">
+        <h3>{language === 'en' ? 'Delete account' : 'Account löschen'}</h3>
+        <div className="muted">
+          {language === 'en'
+            ? 'Deletion becomes permanent after 30 days. All active sessions end immediately.'
+            : 'Die Löschung wird nach 30 Tagen endgültig ausgeführt. Alle aktiven Sessions werden sofort beendet.'}
+        </div>
+        <label htmlFor="settings-delete-account-confirm" className="field-label mt8">{t('settings.confirmation')}</label>
+        <input
+          id="settings-delete-account-confirm"
+          className="full-width"
+          value={deleteConfirmation}
+          onChange={event => setDeleteConfirmation(event.target.value)}
+          placeholder={language === 'en' ? 'DELETE' : 'LÖSCHEN'}
+          autoComplete="off"
+          spellCheck={false}
+        />
+        <button
+          className="btn danger mt8"
+          onClick={() => {
+            void onDeleteAccount()
+          }}
+          disabled={deleteConfirmation.trim().toUpperCase() !== (language === 'en' ? 'DELETE' : 'LÖSCHEN')}
+        >
+          {language === 'en' ? 'Schedule account deletion' : 'Account zur Löschung anmelden'}
+        </button>
+      </div>
+
       <div className="section-gap">
         {docs.map(d => <DocEditor key={d.id} doc={d} onSave={save} />)}
-        {!docs.length && <EmptyState title="Keine Dokumente" message="Es sind aktuell keine Wissensdokumente vorhanden." />}
+        {!docs.length && <EmptyState title={language === 'en' ? 'No documents' : 'Keine Dokumente'} message={language === 'en' ? 'There are currently no knowledge documents.' : 'Es sind aktuell keine Wissensdokumente vorhanden.'} />}
       </div>
         </>
       )}

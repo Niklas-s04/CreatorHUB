@@ -3,11 +3,12 @@ import react from '@vitejs/plugin-react'
 
 export default defineConfig(({ mode }) => {
   const shouldAnalyze = mode === 'analyze'
+  const apiProxyTarget = process.env.E2E_API_PROXY_TARGET || 'http://127.0.0.1:8000'
 
   return {
     plugins: [react()],
     define: {
-      __API_BASE__: JSON.stringify(process.env.VITE_API_BASE || '/api'),
+      __API_BASE__: JSON.stringify(process.env.VITE_API_BASE || '/api/v1'),
     },
     build: {
       sourcemap: shouldAnalyze,
@@ -37,6 +38,15 @@ export default defineConfig(({ mode }) => {
         },
       },
     },
+    server: {
+      proxy: {
+        '/api': {
+          target: apiProxyTarget,
+          changeOrigin: true,
+          secure: false,
+        },
+      },
+    },
     test: {
       environment: 'jsdom',
       globals: true,
@@ -48,10 +58,10 @@ export default defineConfig(({ mode }) => {
         provider: 'v8',
         reporter: ['text', 'lcov'],
         thresholds: {
-          lines: 30,
-          functions: 30,
-          branches: 20,
-          statements: 30,
+          lines: 70,
+          functions: 70,
+          branches: 60,
+          statements: 70,
         },
       },
     },

@@ -1,7 +1,7 @@
 # Build stage
 FROM node:20-alpine AS build
 WORKDIR /app
-ARG VITE_API_BASE=/api
+ARG VITE_API_BASE=/api/v1
 ENV VITE_API_BASE=${VITE_API_BASE}
 
 COPY package.json package-lock.json* /app/
@@ -14,4 +14,8 @@ RUN npm run build
 FROM nginxinc/nginx-unprivileged:1.27-alpine
 COPY --from=build /app/dist /usr/share/nginx/html
 COPY nginx.conf /etc/nginx/conf.d/default.conf
+
+HEALTHCHECK --interval=20s --timeout=3s --start-period=15s --retries=5 \
+	CMD wget -q -O - http://127.0.0.1/healthz >/dev/null 2>&1 || exit 1
+
 EXPOSE 80

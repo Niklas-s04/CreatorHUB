@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../../../../api'
+import { useI18n } from '../../../../shared/i18n/i18n'
 import { getErrorMessage } from '../../../../shared/lib/errors'
 import { useDebouncedValue } from '../../../../shared/hooks/useDebouncedValue'
 import { ErrorState } from '../../../../shared/ui/states/ErrorState'
@@ -34,23 +35,23 @@ type OperationInboxOut = {
 }
 
 const KIND_LABELS: Record<OperationKind, string> = {
-  asset_review: 'Asset-Review',
-  registration_approval: 'Registrierungsfreigabe',
-  email_risk: 'Riskanter E-Mail-Entwurf',
-  content_overdue: 'Überfällige Content-Aufgabe',
+  asset_review: 'Asset review',
+  registration_approval: 'Registration approval',
+  email_risk: 'Risky email draft',
+  content_overdue: 'Overdue content task',
 }
 
 const PRIORITY_LABELS: Record<OperationPriority, string> = {
-  low: 'Niedrig',
-  medium: 'Mittel',
-  high: 'Hoch',
-  critical: 'Kritisch',
+  low: 'Low',
+  medium: 'Medium',
+  high: 'High',
+  critical: 'Critical',
 }
 
-function formatDateTime(value: string | null): string {
+function formatDateTime(value: string | null, locale: 'de-DE' | 'en-US'): string {
   if (!value) return '—'
   try {
-    return new Date(value).toLocaleString('de-DE')
+    return new Date(value).toLocaleString(locale)
   } catch {
     return value
   }
@@ -90,6 +91,8 @@ function matchesDueFilter(item: OperationInboxItem, dueFilter: DueFilter): boole
 }
 
 export default function OperationsInboxPageView() {
+  const { language } = useI18n()
+  const isEnglish = language === 'en'
   const [searchParams, setSearchParams] = useSearchParams()
   const [data, setData] = useState<OperationInboxOut | null>(null)
   const [loading, setLoading] = useState(true)
@@ -200,7 +203,7 @@ export default function OperationsInboxPageView() {
   if (err) {
     return (
       <ErrorState
-        title="Operations Inbox konnte nicht geladen werden"
+        title={isEnglish ? 'Operations inbox could not be loaded' : 'Operations Inbox konnte nicht geladen werden'}
         message={err}
         onRetry={() => {
           void load()
@@ -213,30 +216,30 @@ export default function OperationsInboxPageView() {
     <div className="container stack">
       <section className="card">
         <div className="card-head">
-          <h2>Operations Inbox</h2>
+          <h2>{isEnglish ? 'Operations inbox' : 'Operations Inbox'}</h2>
           <button className="btn" onClick={() => {
             void load()
           }}>
-            Refresh
+            {isEnglish ? 'Refresh' : 'Aktualisieren'}
           </button>
         </div>
-        <div className="muted">Zentrale Arbeitsoberfläche für offene Freigaben, ToDos und Eskalationen.</div>
+        <div className="muted">{isEnglish ? 'Central workspace for open approvals, todos and escalations.' : 'Zentrale Arbeitsoberfläche für offene Freigaben, ToDos und Eskalationen.'}</div>
 
         <div className="control-row mt16">
           <div className="card tight">
-            <div className="muted small">Offen</div>
+            <div className="muted small">{isEnglish ? 'Open' : 'Offen'}</div>
             <div className="kpi metric-kpi">{filteredItems.length}</div>
           </div>
           <div className="card tight">
-            <div className="muted small">Kritisch</div>
+            <div className="muted small">{isEnglish ? 'Critical' : 'Kritisch'}</div>
             <div className="kpi metric-kpi">{prioritySummary.critical}</div>
           </div>
           <div className="card tight">
-            <div className="muted small">Hoch</div>
+            <div className="muted small">{isEnglish ? 'High' : 'Hoch'}</div>
             <div className="kpi metric-kpi">{prioritySummary.high}</div>
           </div>
           <div className="card tight">
-            <div className="muted small">Eskaliert</div>
+            <div className="muted small">{isEnglish ? 'Escalated' : 'Eskaliert'}</div>
             <div className="kpi metric-kpi">{filteredItems.filter(item => item.escalation).length}</div>
           </div>
         </div>
@@ -244,55 +247,55 @@ export default function OperationsInboxPageView() {
 
       <section className="card">
         <div className="card-head">
-          <h3>Filter</h3>
+          <h3>{isEnglish ? 'Filters' : 'Filter'}</h3>
         </div>
         <div className="control-row">
           <input
             className="grow"
-            placeholder="Suche (Titel, Beschreibung, Assignee, Typ)"
+            placeholder={isEnglish ? 'Search (title, description, assignee, type)' : 'Suche (Titel, Beschreibung, Assignee, Typ)'}
             value={searchInput}
             onChange={e => setSearchInput(e.target.value)}
           />
 
           <select value={userFilter} onChange={e => setUserFilter(e.target.value)}>
-            <option value="all">Benutzer: Alle</option>
+            <option value="all">{isEnglish ? 'User: all' : 'Benutzer: Alle'}</option>
             {assigneeOptions.map(value => (
               <option key={value} value={value}>
-                Benutzer: {value === 'unassigned' ? 'Nicht zugewiesen' : value}
+                {isEnglish ? 'User' : 'Benutzer'}: {value === 'unassigned' ? (isEnglish ? 'Unassigned' : 'Nicht zugewiesen') : value}
               </option>
             ))}
           </select>
 
           <select value={roleFilter} onChange={e => setRoleFilter(e.target.value as 'all' | OperationRole)}>
-            <option value="all">Rolle: Alle</option>
-            <option value="admin">Rolle: Admin</option>
-            <option value="editor">Rolle: Editor</option>
-            <option value="viewer">Rolle: Viewer</option>
+            <option value="all">{isEnglish ? 'Role: all' : 'Rolle: Alle'}</option>
+            <option value="admin">{isEnglish ? 'Role: Admin' : 'Rolle: Admin'}</option>
+            <option value="editor">{isEnglish ? 'Role: Editor' : 'Rolle: Editor'}</option>
+            <option value="viewer">{isEnglish ? 'Role: Viewer' : 'Rolle: Viewer'}</option>
           </select>
 
           <select value={priorityFilter} onChange={e => setPriorityFilter(e.target.value as 'all' | OperationPriority)}>
-            <option value="all">Priorität: Alle</option>
-            <option value="low">Priorität: Niedrig</option>
-            <option value="medium">Priorität: Mittel</option>
-            <option value="high">Priorität: Hoch</option>
-            <option value="critical">Priorität: Kritisch</option>
+            <option value="all">{isEnglish ? 'Priority: all' : 'Priorität: Alle'}</option>
+            <option value="low">{isEnglish ? 'Priority: low' : 'Priorität: Niedrig'}</option>
+            <option value="medium">{isEnglish ? 'Priority: medium' : 'Priorität: Mittel'}</option>
+            <option value="high">{isEnglish ? 'Priority: high' : 'Priorität: Hoch'}</option>
+            <option value="critical">{isEnglish ? 'Priority: critical' : 'Priorität: Kritisch'}</option>
           </select>
 
           <select value={dueFilter} onChange={e => setDueFilter(e.target.value as DueFilter)}>
-            <option value="all">Fälligkeit: Alle</option>
-            <option value="overdue">Fälligkeit: Überfällig</option>
-            <option value="today">Fälligkeit: Heute</option>
-            <option value="next7">Fälligkeit: Nächste 7 Tage</option>
-            <option value="none">Fälligkeit: Ohne Datum</option>
+            <option value="all">{isEnglish ? 'Due date: all' : 'Fälligkeit: Alle'}</option>
+            <option value="overdue">{isEnglish ? 'Due date: overdue' : 'Fälligkeit: Überfällig'}</option>
+            <option value="today">{isEnglish ? 'Due date: today' : 'Fälligkeit: Heute'}</option>
+            <option value="next7">{isEnglish ? 'Due date: next 7 days' : 'Fälligkeit: Nächste 7 Tage'}</option>
+            <option value="none">{isEnglish ? 'Due date: none' : 'Fälligkeit: Ohne Datum'}</option>
           </select>
 
           <select value={String(pageSize)} onChange={e => {
             setPageSize(Number(e.target.value))
             setOffset(0)
           }}>
-            <option value="25">25 / Seite</option>
-            <option value="50">50 / Seite</option>
-            <option value="100">100 / Seite</option>
+            <option value="25">25 {isEnglish ? '/ page' : '/ Seite'}</option>
+            <option value="50">50 {isEnglish ? '/ page' : '/ Seite'}</option>
+            <option value="100">100 {isEnglish ? '/ page' : '/ Seite'}</option>
           </select>
         </div>
       </section>
@@ -300,19 +303,19 @@ export default function OperationsInboxPageView() {
       <section className="card">
         <div ref={tableAnchorRef} />
         <div className="card-head">
-          <h3>Offene Freigaben & ToDos</h3>
+          <h3>{isEnglish ? 'Open approvals & todos' : 'Offene Freigaben & ToDos'}</h3>
         </div>
         <table className="status-table">
-          <caption className="sr-only">Operations Inbox Einträge</caption>
+          <caption className="sr-only">{isEnglish ? 'Operations inbox entries' : 'Operations Inbox Einträge'}</caption>
           <thead>
             <tr>
-              <th scope="col">Typ</th>
-              <th scope="col">Titel</th>
-              <th scope="col">Priorität</th>
-              <th scope="col">Eskalation</th>
-              <th scope="col">Zuständigkeit</th>
-              <th scope="col">Fällig</th>
-              <th scope="col">Aktion</th>
+              <th scope="col">{isEnglish ? 'Type' : 'Typ'}</th>
+              <th scope="col">{isEnglish ? 'Title' : 'Titel'}</th>
+              <th scope="col">{isEnglish ? 'Priority' : 'Priorität'}</th>
+              <th scope="col">{isEnglish ? 'Escalation' : 'Eskalation'}</th>
+              <th scope="col">{isEnglish ? 'Ownership' : 'Zuständigkeit'}</th>
+              <th scope="col">{isEnglish ? 'Due' : 'Fällig'}</th>
+              <th scope="col">{isEnglish ? 'Action' : 'Aktion'}</th>
             </tr>
           </thead>
           <tbody>
@@ -330,21 +333,21 @@ export default function OperationsInboxPageView() {
                 </td>
                 <td>{item.escalation ? 'Ja' : 'Nein'}</td>
                 <td>
-                  <div>Rolle: {item.responsible_role}</div>
-                  <div className="muted small">Benutzer: {item.assignee_username || 'Nicht zugewiesen'}</div>
+                  <div>{isEnglish ? 'Role' : 'Rolle'}: {item.responsible_role}</div>
+                  <div className="muted small">{isEnglish ? 'User' : 'Benutzer'}: {item.assignee_username || (isEnglish ? 'Unassigned' : 'Nicht zugewiesen')}</div>
                 </td>
                 <td>
-                  <div>{formatDateTime(item.due_at)}</div>
-                  {isOverdue(item.due_at) && <div className="muted small">überfällig</div>}
+                  <div>{formatDateTime(item.due_at, isEnglish ? 'en-US' : 'de-DE')}</div>
+                  {isOverdue(item.due_at) && <div className="muted small">{isEnglish ? 'overdue' : 'überfällig'}</div>}
                 </td>
                 <td>
-                  <Link className="btn" to={item.source_route}>Öffnen</Link>
+                  <Link className="btn" to={item.source_route}>{isEnglish ? 'Open' : 'Öffnen'}</Link>
                 </td>
               </tr>
             ))}
             {filteredItems.length === 0 && (
               <tr>
-                <td colSpan={7} className="muted">Keine Einträge für die aktuelle Filterung.</td>
+                <td colSpan={7} className="muted">{isEnglish ? 'No entries match the current filters.' : 'Keine Einträge für die aktuelle Filterung.'}</td>
               </tr>
             )}
           </tbody>
@@ -352,9 +355,9 @@ export default function OperationsInboxPageView() {
       </section>
 
       <div className="row between">
-        <button className="btn" onClick={() => changePage('prev')} disabled={offset <= 0}>← Zurück</button>
-        <span className="muted small">Offset {offset} · Limit {pageSize} · Ergebnisse {filteredItems.length}</span>
-        <button className="btn" onClick={() => changePage('next')} disabled={allItems.length < pageSize}>Weiter →</button>
+        <button className="btn" onClick={() => changePage('prev')} disabled={offset <= 0}>{isEnglish ? '← Back' : '← Zurück'}</button>
+        <span className="muted small">{isEnglish ? 'Offset' : 'Offset'} {offset} · {isEnglish ? 'Limit' : 'Limit'} {pageSize} · {isEnglish ? 'Results' : 'Ergebnisse'} {filteredItems.length}</span>
+        <button className="btn" onClick={() => changePage('next')} disabled={allItems.length < pageSize}>{isEnglish ? 'Next →' : 'Weiter →'}</button>
       </div>
     </div>
   )

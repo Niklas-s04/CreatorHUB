@@ -241,7 +241,7 @@ def create_product(
     db.add(p)
     db.commit()
     db.refresh(p)
-    # Optionalen Startwert in die Wert-Historie übernehmen.
+    # Store the initial value in the value history when present.
     if p.current_value is not None:
         vh = ProductValueHistory(
             product_id=p.id,

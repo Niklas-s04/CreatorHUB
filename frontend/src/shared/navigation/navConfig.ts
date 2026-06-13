@@ -1,4 +1,5 @@
 import type { Permission } from '../../api'
+import { type Language, translate } from '../i18n/i18n'
 
 export type NavItem = {
   to: string
@@ -9,99 +10,103 @@ export type NavItem = {
 }
 
 export type NavSection = {
-  title: 'Operations' | 'Content' | 'Communication' | 'Governance'
+  title: string
   items: NavItem[]
 }
 
-export const NAV_SECTIONS_TASK_BASED: NavSection[] = [
+export function buildNavSections(language: Language): NavSection[] {
+  return [
   {
-    title: 'Operations',
+    title: translate(language, 'nav.sections.operations'),
     items: [
       {
         to: '/dashboard',
-        label: 'Dashboard',
+        label: translate(language, 'nav.dashboard'),
         icon: '◧',
-        keywords: ['dashboard', 'übersicht', 'kpi', 'cockpit'],
+        keywords: ['dashboard', 'übersicht', 'kpi', 'cockpit', 'overview', 'metrics'],
       },
       {
         to: '/operations',
-        label: 'Operations Inbox',
+        label: translate(language, 'nav.operationsInbox'),
         icon: '☰',
-        keywords: ['operations', 'inbox', 'todo', 'aufgaben', 'freigaben', 'eskalation'],
+        keywords: ['operations', 'inbox', 'todo', 'aufgaben', 'freigaben', 'eskalation', 'tasks', 'approvals'],
       },
     ],
   },
   {
-    title: 'Content',
+    title: translate(language, 'nav.sections.content'),
     items: [
       {
         to: '/products',
-        label: 'Produkte',
+        label: translate(language, 'nav.products'),
         icon: '◫',
-        keywords: ['produkte', 'inventar', 'produkt', 'detail'],
+        keywords: ['produkte', 'inventar', 'produkt', 'detail', 'products', 'inventory'],
       },
       {
         to: '/assets',
-        label: 'Assets',
+        label: translate(language, 'nav.assets'),
         icon: '◩',
-        keywords: ['assets', 'mediathek', 'review', 'asset'],
+        keywords: ['assets', 'mediathek', 'review', 'asset', 'media library'],
       },
       {
         to: '/content',
-        label: 'Content Plan',
+        label: translate(language, 'nav.contentPlan'),
         icon: '✎',
-        keywords: ['content', 'kanban', 'aufgaben', 'planung'],
+        keywords: ['content', 'kanban', 'aufgaben', 'planung', 'planning'],
       },
     ],
   },
   {
-    title: 'Communication',
+    title: translate(language, 'nav.sections.communication'),
     items: [
       {
         to: '/email',
-        label: 'E-Mail Threads',
+        label: translate(language, 'nav.emailThreads'),
         icon: '✉',
-        keywords: ['email', 'mail', 'kommunikation', 'deals', 'threads'],
+        keywords: ['email', 'mail', 'kommunikation', 'deals', 'threads', 'correspondence'],
       },
     ],
   },
   {
-    title: 'Governance',
+    title: translate(language, 'nav.sections.governance'),
     items: [
       {
         to: '/admin',
-        label: 'Administration',
+        label: translate(language, 'nav.administration'),
         icon: '⌘',
-        keywords: ['admin', 'registrierung', 'freigabe', 'user'],
+        keywords: ['admin', 'registrierung', 'freigabe', 'user', 'approval'],
         requiredPermission: 'user.approve_registration',
       },
       {
         to: '/audit',
-        label: 'Audit',
+        label: translate(language, 'nav.audit'),
         icon: '⧉',
-        keywords: ['audit', 'vorfälle', 'security', 'compliance'],
+        keywords: ['audit', 'vorfälle', 'security', 'compliance', 'security review'],
         requiredPermission: 'audit.view',
       },
       {
         to: '/settings',
-        label: 'Einstellungen',
+        label: translate(language, 'nav.settings'),
         icon: '⚙',
-        keywords: ['settings', 'einstellungen', 'mfa', 'konto'],
+        keywords: ['settings', 'einstellungen', 'mfa', 'konto', 'account'],
       },
     ],
   },
-]
+  ]
+}
 
-export function routeLabel(pathname: string): string {
-  if (pathname === '/dashboard') return 'Dashboard'
-  if (pathname === '/operations') return 'Operations Inbox'
-  if (pathname === '/products') return 'Produkte'
-  if (pathname.startsWith('/products/')) return 'Produktdetail'
-  if (pathname === '/assets') return 'Assets'
-  if (pathname === '/content') return 'Content Plan'
-  if (pathname === '/email') return 'E-Mail Threads'
-  if (pathname === '/admin') return 'Administration'
-  if (pathname === '/audit') return 'Audit'
-  if (pathname === '/settings') return 'Einstellungen'
-  return 'Bereich'
+export const NAV_SECTIONS_TASK_BASED = buildNavSections('de')
+
+export function routeLabel(pathname: string, language: Language = 'de'): string {
+  if (pathname === '/dashboard') return translate(language, 'breadcrumbs.dashboard')
+  if (pathname === '/operations') return translate(language, 'nav.operationsInbox')
+  if (pathname === '/products') return translate(language, 'nav.products')
+  if (pathname.startsWith('/products/')) return translate(language, 'breadcrumbs.productDetail')
+  if (pathname === '/assets') return translate(language, 'nav.assets')
+  if (pathname === '/content') return translate(language, 'nav.contentPlan')
+  if (pathname === '/email') return translate(language, 'nav.emailThreads')
+  if (pathname === '/admin') return translate(language, 'nav.administration')
+  if (pathname === '/audit') return translate(language, 'nav.audit')
+  if (pathname === '/settings') return translate(language, 'nav.settings')
+  return translate(language, 'breadcrumbs.section')
 }
