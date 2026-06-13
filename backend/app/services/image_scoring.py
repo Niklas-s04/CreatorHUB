@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Optional
+from typing import Optional, cast
 
 from PIL import Image, ImageFilter
 
@@ -59,7 +59,7 @@ def _heuristic_score(image_path: Path) -> ScoreResult:
             # Use a simple threshold for white areas.
             for y in range(0, h, step):
                 for x in range(0, w, step):
-                    r, g, b = px[x, y]
+                    r, g, b = cast(tuple[int, int, int], px[x, y])
                     if r > 240 and g > 240 and b > 240:
                         white += 1
                     total += 1
@@ -74,7 +74,7 @@ def _heuristic_score(image_path: Path) -> ScoreResult:
             edge_total = 0
             for y in range(0, h, step):
                 for x in range(0, w, step):
-                    if ep[x, y] > 40:
+                    if cast(int, ep[x, y]) > 40:
                         edge_hits += 1
                     edge_total += 1
             edge_density = edge_hits / max(edge_total, 1)

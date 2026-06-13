@@ -1,0 +1,122 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+
+import { ApiError, createHttpClient } from './httpClient'
+
+function createClient(overrides: Partial<Parameters<typeof createHttpClient>[0]> = {}) {
+  return createHttpClient({
+    baseUrl: '/api/v1',
+    refreshPath: '/auth/refresh',
+    tokenPath: '/auth/token',
+    ...overrides,
+  })
+}
+
+function jsonResponse(body: unknown, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { 'content-type': 'application/json' },
+  })
+}
+
+function textResponse(body: string, status = 200) {
+  return new Response(body, { status })
+}
+
+describe('createHttpClient', () => {
+  beforeEach(() => {
+    vi.stubGlobal('fetch', vi.fn())
+    vi.spyOn(Math, 'random').mockReturnValue(0)
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    vi.restoreAllMocks()
+  })
+
+  it('returns JSON and applies request defaults', async () => {
+    const beforeRequest = vi.fn((headers: Headers) => {
+      headers.set('X-Test', 'yes')
+    })
+    const fetchMock = vi.mocked(fetch)
+    fetchMock.mockResolvedValueOnce(jsonResponse({ ok: true }))
+
+    await expect(createClient({ beforeRequest }).request('/items')).resolves.toEqual({ ok: true })
+
+    const request = fetchMock.mock.calls[0]?.[1]
+    const headers = request?.headers as Headers
+    expect(fetchMock.mock.calls[0]?.[0]).toBe('/api/v1/items')
+    expect(request?.credentials).toBe('include')
+    expect(headers.get('Content-Type')).toBe('application/json')
+    expect(headers.get('X-Test')).toBe('yes')
+  })
+
+  it('returns text responses without JSON parsing', async () => {
+    const fetchMock = vi.mocked(fetch)
+    fetchMock.mockResolvedValueOnce(textResponse('plain text'))
+
+    await expect(createClient().request('/text')).resolves.toBe('plain text')
+  })
+
+  it('refreshes once after unauthorized responses', async () => {
+    const onUnauthorizedRetry = vi.fn().mockResolvedValue(undefined)
+    const fetchMock = vi.mocked(fetch)
+    fetchMock.mockResolvedValueOnce(textResponse('expired', 401)).mockResolvedValueOnce(jsonResponse({ ok: true }))
+
+    await expect(createClient({ onUnauthorizedRetry }).request('/profile')).resolves.toEqual({ ok: true })
+
+    expect(onUnauthorizedRetry).toHaveBeenCalledTimes(1)
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+
+  it('clears auth state when refresh retry fails', async () => {
+    const onUnauthorized = vi.fn()
+    const fetchMock = vi.mocked(fetch)
+    fetchMock.mockResolvedValueOnce(textResponse('expired', 401))
+
+    await expect(
+      createClient({
+        onUnauthorized,
+        onUnauthorizedRetry: vi.fn().mockRejectedValue(new Error('refresh failed')),
+      }).request('/profile')
+    ).rejects.toMatchObject({ status: 401, details: 'expired' })
+
+    expect(onUnauthorized).toHaveBeenCalledTimes(2)
+  })
+
+  it('retries idempotent network failures', async () => {
+    const fetchMock = vi.mocked(fetch)
+    fetchMock.mockRejectedValueOnce(new TypeError('network')).mockResolvedValueOnce(jsonResponse({ ok: true }))
+
+    await expect(createClient().request('/retry', { retryDelayMs: 0 })).resolves.toEqual({ ok: true })
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+
+  it('throws API errors for non-retryable failed responses', async () => {
+    const fetchMock = vi.mocked(fetch)
+    fetchMock.mockResolvedValueOnce(textResponse('bad request', 400))
+
+    const error = await createClient().request('/bad').catch(err => err)
+
+    expect(error).toBeInstanceOf(ApiError)
+    expect(error).toMatchObject({
+      status: 400,
+      path: '/bad',
+      details: 'bad request',
+    })
+  })
+
+  it('supports blob responses and reports blob request failures', async () => {
+    const onUnauthorized = vi.fn()
+    const fetchMock = vi.mocked(fetch)
+    fetchMock
+      .mockResolvedValueOnce(new Response('content', { status: 200 }))
+      .mockResolvedValueOnce(textResponse('no access', 401))
+
+    await expect(createClient().requestBlob('/file')).resolves.toMatchObject({ size: 7 })
+    await expect(createClient({ onUnauthorized }).requestBlob('/file')).rejects.toMatchObject({
+      status: 401,
+      details: 'no access',
+    })
+    expect(onUnauthorized).toHaveBeenCalledTimes(1)
+  })
+})
