@@ -26,6 +26,14 @@ def _build_csrf_app() -> FastAPI:
     def login_exempt() -> dict[str, str]:
         return {"ok": "true"}
 
+    @app.post("/api/auth/setup-admin-password")
+    def legacy_admin_setup_exempt() -> dict[str, str]:
+        return {"ok": "true"}
+
+    @app.post("/api/v1/auth/setup-admin-password")
+    def admin_setup_exempt() -> dict[str, str]:
+        return {"ok": "true"}
+
     return app
 
 
@@ -40,6 +48,30 @@ def test_csrf_skips_auth_token_endpoint() -> None:
     client = TestClient(app)
 
     response = client.post("/api/auth/token")
+    assert response.status_code == 200
+
+
+def test_csrf_skips_admin_setup_endpoint_even_with_stale_auth_cookie() -> None:
+    app = _build_csrf_app()
+    client = TestClient(app)
+
+    sid = str(uuid.uuid4())
+    client.cookies.set(settings.AUTH_ACCESS_COOKIE_NAME, _access_cookie_for_sid(sid))
+    client.cookies.set(settings.CSRF_COOKIE_NAME, create_csrf_token(sid))
+
+    response = client.post("/api/v1/auth/setup-admin-password")
+    assert response.status_code == 200
+
+
+def test_csrf_skips_legacy_admin_setup_endpoint_even_with_stale_auth_cookie() -> None:
+    app = _build_csrf_app()
+    client = TestClient(app)
+
+    sid = str(uuid.uuid4())
+    client.cookies.set(settings.AUTH_ACCESS_COOKIE_NAME, _access_cookie_for_sid(sid))
+    client.cookies.set(settings.CSRF_COOKIE_NAME, create_csrf_token(sid))
+
+    response = client.post("/api/auth/setup-admin-password")
     assert response.status_code == 200
 
 

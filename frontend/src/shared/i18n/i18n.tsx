@@ -66,17 +66,28 @@ const translations = {
     login: {
       title: 'Login',
       brandSubline: 'CreatorHUB',
+      heroTitle: 'Creator Operations an einem sicheren Ort.',
+      heroCopy: 'Ein ruhiger Einstieg fuer Admins, Redaktion und Operations.',
+      welcomeBack: 'Willkommen zurueck',
+      setupTitle: 'Admin einrichten',
+      authMode: 'Login-Modus',
       modeLogin: 'Login',
       modeRegister: 'Registrieren',
       modeReset: 'Passwort-Reset',
+      firstSetup: 'Erstsetup',
+      closeSetup: 'Erstsetup ausblenden',
       bootstrapTokenLabel: 'Bootstrap-Token (nur Erstsetup)',
       bootstrapTokenPlaceholder: 'Install-Token',
       checkBootstrap: 'Erstsetup prüfen',
       setupHint: 'Erststart: Admin-Passwort für Benutzer {adminUsername} setzen.',
       registerHint: 'Bei Registrierung wird eine Anfrage an den Admin gestellt.',
+      loginHint: 'Melde dich mit deinem Benutzerkonto an.',
+      resetHint: 'Fordere einen Reset an oder bestaetige einen vorhandenen Reset-Token.',
       username: 'Username',
       password: 'Password',
       passwordRepeat: 'Password wiederholen',
+      showPassword: 'Passwort anzeigen',
+      hidePassword: 'Passwort verbergen',
       otp: 'MFA-Code (optional)',
       otpPlaceholder: 'TOTP oder Recovery-Code',
       resetToken: 'Reset-Token (optional für Bestätigung)',
@@ -172,7 +183,8 @@ const translations = {
       mfaDisableCode: 'TOTP oder Recovery-Code für MFA-Deaktivierung',
       confirmation: 'Bestätigung',
       appLanguageCardTitle: 'App-Sprache',
-      appLanguageCardBody: 'Wähle die Sprache für Navigation, Buttons und Systemtexte der Oberfläche.',
+      appLanguageCardBody:
+        'Wähle die Sprache für Navigation, Buttons und Systemtexte der Oberfläche.',
       appLanguageLabel: 'Sprache der App',
       languageDescription: 'Die Auswahl wird lokal gespeichert und sofort übernommen.',
       languageGerman: 'Deutsch',
@@ -253,17 +265,28 @@ const translations = {
     login: {
       title: 'Login',
       brandSubline: 'CreatorHUB',
+      heroTitle: 'Creator operations in one secure place.',
+      heroCopy: 'A calm entry point for admins, editorial teams, and operations.',
+      welcomeBack: 'Welcome back',
+      setupTitle: 'Set up admin',
+      authMode: 'Login mode',
       modeLogin: 'Login',
       modeRegister: 'Register',
       modeReset: 'Password reset',
+      firstSetup: 'First setup',
+      closeSetup: 'Hide first setup',
       bootstrapTokenLabel: 'Bootstrap token (first setup only)',
       bootstrapTokenPlaceholder: 'Install token',
       checkBootstrap: 'Check first setup',
       setupHint: 'First start: set the admin password for user {adminUsername}.',
       registerHint: 'Registration sends a request to the admin.',
+      loginHint: 'Sign in with your user account.',
+      resetHint: 'Request a reset or confirm an existing reset token.',
       username: 'Username',
       password: 'Password',
       passwordRepeat: 'Repeat password',
+      showPassword: 'Show password',
+      hidePassword: 'Hide password',
       otp: 'MFA code (optional)',
       otpPlaceholder: 'TOTP or recovery code',
       resetToken: 'Reset token (optional for confirmation)',
@@ -359,7 +382,8 @@ const translations = {
       mfaDisableCode: 'TOTP or recovery code for MFA disable',
       confirmation: 'Confirmation',
       appLanguageCardTitle: 'App language',
-      appLanguageCardBody: 'Choose the language for navigation, buttons, and system text in the interface.',
+      appLanguageCardBody:
+        'Choose the language for navigation, buttons, and system text in the interface.',
       appLanguageLabel: 'App language',
       languageDescription: 'The choice is stored locally and applied immediately.',
       languageGerman: 'German',
@@ -416,7 +440,11 @@ function getValue(language: Language, key: string): unknown {
   return current
 }
 
-export function translate(language: Language, key: string, params?: Record<string, string | number>): string {
+export function translate(
+  language: Language,
+  key: string,
+  params?: Record<string, string | number>
+): string {
   const candidate = getValue(language, key) ?? getValue('de', key)
   if (typeof candidate !== 'string') return key
   if (!params) return candidate
@@ -467,14 +495,17 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
-  const value = useMemo<I18nContextValue>(() => ({
-    language,
-    setLanguage: next => {
-      setLanguageState(next)
-      setStoredLanguage(next)
-    },
-    t: (key, params) => translate(language, key, params),
-  }), [language])
+  const value = useMemo<I18nContextValue>(
+    () => ({
+      language,
+      setLanguage: (next) => {
+        setLanguageState(next)
+        setStoredLanguage(next)
+      },
+      t: (key, params) => translate(language, key, params),
+    }),
+    [language]
+  )
 
   return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>
 }

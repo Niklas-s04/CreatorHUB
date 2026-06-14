@@ -44,6 +44,7 @@ from app.api.routers import (
     audit,
     auth,
     content,
+    dashboard,
     deals,
     email,
     health,
@@ -150,6 +151,7 @@ def app(db_session: Session) -> FastAPI:
     api.include_router(knowledge.router, prefix="/api/v1/knowledge", tags=["knowledge"])
     api.include_router(deals.router, prefix="/api/v1/deals", tags=["deals"])
     api.include_router(audit.router, prefix="/api/v1/audit", tags=["audit"])
+    api.include_router(dashboard.router, prefix="/api/v1/dashboard", tags=["dashboard"])
     api.include_router(operations.router, prefix="/api/v1/operations", tags=["operations"])
     api.include_router(search.router, prefix="/api/v1/search", tags=["search"])
 
@@ -165,6 +167,9 @@ def app(db_session: Session) -> FastAPI:
     )
     api.include_router(deals.router, prefix="/api/deals", tags=["deals"], deprecated=True)
     api.include_router(audit.router, prefix="/api/audit", tags=["audit"], deprecated=True)
+    api.include_router(
+        dashboard.router, prefix="/api/dashboard", tags=["dashboard"], deprecated=True
+    )
     api.include_router(
         operations.router, prefix="/api/operations", tags=["operations"], deprecated=True
     )

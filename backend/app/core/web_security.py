@@ -231,7 +231,9 @@ class CsrfProtectionMiddleware(BaseHTTPMiddleware):
         self.unsafe_methods = {"POST", "PUT", "PATCH", "DELETE"}
         self.exempt_paths = {
             "/api/auth/token",
+            "/api/auth/setup-admin-password",
             "/api/v1/auth/token",
+            "/api/v1/auth/setup-admin-password",
         }
 
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
