@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react'
+﻿import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { apiFetch } from '../../../../api'
 import { useAuthz } from '../../../../shared/hooks/useAuthz'
@@ -1110,7 +1110,7 @@ export default function EmailPage() {
                   <div className="section-head">
                     <div>
                       <h3>AI Settings (Creator Profil)</h3>
-                      <div className="muted small">{language === 'en' ? 'User-specific generation parameters including fallback logic and transparent preview.' : 'Nutzerbezogene Parameter fuer die Generierung inkl. Fallback-Logik und transparenter Vorschau.'}</div>
+                      <div className="muted small">{language === 'en' ? 'User-specific generation parameters including fallback logic and transparent preview.' : 'Nutzerbezogene Parameter für die Generierung inkl. Fallback-Logik und transparenter Vorschau.'}</div>
                     </div>
                     <button className="btn" onClick={saveCreatorProfile} disabled={!canGenerate || settingsSaving}>
                       {settingsSaving ? (language === 'en' ? 'Saving…' : 'Speichere…') : (language === 'en' ? 'Save profile' : 'Profil speichern')}
@@ -1187,7 +1187,7 @@ export default function EmailPage() {
                   <div className="section-head">
                     <div>
                       <h3>Template Management</h3>
-                      <div className="muted small">{language === 'en' ? 'Thread-specific templates for consistent replies.' : 'Thread-spezifische Vorlagen fuer konsistente Antworten.'}</div>
+                      <div className="muted small">{language === 'en' ? 'Thread-specific templates for consistent replies.' : 'Thread-spezifische Vorlagen für konsistente Antworten.'}</div>
                     </div>
                   </div>
                   <div className="deal-fields-grid section-gap">

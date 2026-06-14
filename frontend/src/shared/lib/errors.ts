@@ -1,4 +1,4 @@
-type ValidationFieldErrors = Record<string, string>
+﻿type ValidationFieldErrors = Record<string, string>
 export type ErrorKind = 'domain' | 'technical'
 
 function safeJsonParse(input: string): unknown {
@@ -17,7 +17,7 @@ function normalizeDetail(detail: unknown): string | null {
   if (typeof detail === 'string' && detail.trim()) return detail
   if (!Array.isArray(detail)) return null
   const messages = detail
-    .map(item => {
+    .map((item) => {
       if (typeof item === 'string') return item
       if (isRecord(item) && typeof item.msg === 'string') return item.msg
       return ''
@@ -51,14 +51,14 @@ export function getValidationFieldErrors(error: unknown): ValidationFieldErrors 
   if (!isRecord(source) || !Array.isArray(source.detail)) return {}
 
   const result: ValidationFieldErrors = {}
-  source.detail.forEach(item => {
+  source.detail.forEach((item) => {
     if (!isRecord(item)) return
     const loc = Array.isArray(item.loc) ? item.loc : []
     const msg = typeof item.msg === 'string' ? item.msg : null
     if (!msg) return
 
     const field = loc
-      .filter(segment => typeof segment === 'string' && segment !== 'body')
+      .filter((segment) => typeof segment === 'string' && segment !== 'body')
       .join('.')
 
     if (field) {

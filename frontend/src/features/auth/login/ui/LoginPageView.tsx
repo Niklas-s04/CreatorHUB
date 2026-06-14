@@ -21,6 +21,7 @@ import {
 import { InlineHint } from '../../../../shared/ui/states/InlineHint'
 import { useToast } from '../../../../shared/ui/toast/ToastProvider'
 import { useI18n } from '../../../../shared/i18n/i18n'
+import { AppLogo } from '../../../../shared/ui/brand/AppLogo'
 
 type PasswordFieldProps = {
   id: string
@@ -274,7 +275,9 @@ export default function LoginPage() {
     <main className="login-shell">
       <div className="login-stage">
         <aside className="login-brand-panel" aria-label={t('login.brandSubline')}>
-          <div className="login-brand-mark">CH</div>
+          <div className="login-brand-mark">
+            <AppLogo compact />
+          </div>
           <div>
             <p className="login-eyebrow">{t('login.brandSubline')}</p>
             <h1 className="login-hero-title">{t('login.heroTitle')}</h1>

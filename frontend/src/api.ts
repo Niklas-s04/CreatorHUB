@@ -5,6 +5,7 @@ declare const __API_BASE__: string
 export const API_BASE = __API_BASE__ || '/api/v1'
 const AUTH_HINT_KEY = 'auth_session'
 const CSRF_COOKIE_NAME = 'creatorhub_csrf'
+const AUTH_REQUEST_TIMEOUT_MS = 12_000
 
 export type BootstrapStatus = {
   admin_username: string
@@ -123,7 +124,10 @@ export function setStepUpHandler(handler: StepUpHandler | null) {
 function isStepUpRequiredError(error: unknown): boolean {
   if (!(error instanceof ApiError)) return false
   if (error.status !== 403) return false
-  return error.details.includes('Step-up authentication required') || error.message.includes('Step-up authentication required')
+  return (
+    error.details.includes('Step-up authentication required') ||
+    error.message.includes('Step-up authentication required')
+  )
 }
 
 export function apiUrl(path: string): string {
@@ -139,6 +143,34 @@ function getCookie(name: string): string | null {
 function isUnsafeMethod(method?: string): boolean {
   const m = (method || 'GET').toUpperCase()
   return m === 'POST' || m === 'PUT' || m === 'PATCH' || m === 'DELETE'
+}
+
+function isAbortError(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'name' in error &&
+    (error as { name?: unknown }).name === 'AbortError'
+  )
+}
+
+async function authFetch(path: string, options: RequestInit = {}): Promise<Response> {
+  const controller = new AbortController()
+  const timeout = window.setTimeout(() => controller.abort(), AUTH_REQUEST_TIMEOUT_MS)
+  try {
+    return await fetch(`${API_BASE}${path}`, {
+      ...options,
+      signal: controller.signal,
+      credentials: 'include',
+    })
+  } catch (error: unknown) {
+    if (isAbortError(error)) {
+      throw new Error('Anfrage hat zu lange gedauert. Bitte Netzwerk oder Backend prüfen.')
+    }
+    throw error
+  } finally {
+    window.clearTimeout(timeout)
+  }
 }
 
 const httpClient = createHttpClient({
@@ -163,57 +195,57 @@ export async function login(username: string, password: string, otp?: string): P
   body.set('password', password)
   if (otp?.trim()) body.set('otp', otp.trim())
 
-  const res = await fetch(`${API_BASE}/auth/token`, {
+  const res = await authFetch('/auth/token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body,
-    credentials: 'include'
   })
   if (!res.ok) throw new Error(await res.text())
   setToken('1')
 }
 
 export async function refreshSession(): Promise<void> {
-  const res = await fetch(`${API_BASE}/auth/refresh`, {
+  const res = await authFetch('/auth/refresh', {
     method: 'POST',
-    credentials: 'include'
   })
   if (!res.ok) throw new Error(await res.text())
   setToken('1')
 }
 
 export async function getBootstrapStatus(bootstrapToken: string): Promise<BootstrapStatus> {
-  const res = await fetch(`${API_BASE}/auth/bootstrap-status`, {
-    credentials: 'include',
-    headers: { 'X-Bootstrap-Token': bootstrapToken }
+  const res = await authFetch('/auth/bootstrap-status', {
+    headers: { 'X-Bootstrap-Token': bootstrapToken },
   })
   if (!res.ok) throw new Error(await res.text())
   return res.json()
 }
 
 export async function setupAdminPassword(password: string, bootstrapToken: string): Promise<void> {
-  const res = await fetch(`${API_BASE}/auth/setup-admin-password`, {
+  const res = await authFetch('/auth/setup-admin-password', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'X-Bootstrap-Token': bootstrapToken },
     body: JSON.stringify({ password }),
-    credentials: 'include'
   })
   if (!res.ok) throw new Error(await res.text())
   setToken('1')
 }
 
-export async function requestRegistration(username: string, password: string): Promise<RegistrationRequest> {
-  const res = await fetch(`${API_BASE}/auth/register-request`, {
+export async function requestRegistration(
+  username: string,
+  password: string
+): Promise<RegistrationRequest> {
+  const res = await authFetch('/auth/register-request', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ username, password }),
-    credentials: 'include'
   })
   if (!res.ok) throw new Error(await res.text())
   return res.json()
 }
 
-export async function getRegistrationRequests(statusFilter?: 'pending' | 'approved' | 'rejected'): Promise<RegistrationRequest[]> {
+export async function getRegistrationRequests(
+  statusFilter?: 'pending' | 'approved' | 'rejected'
+): Promise<RegistrationRequest[]> {
   const query = statusFilter ? `?status_filter=${encodeURIComponent(statusFilter)}` : ''
   return apiFetch(`/auth/registration-requests${query}`)
 }
@@ -222,8 +254,14 @@ export async function approveRegistrationRequest(requestId: string): Promise<Reg
   return apiFetch(`/auth/registration-requests/${requestId}/approve`, { method: 'POST' })
 }
 
-export async function rejectRegistrationRequest(requestId: string, reason: string): Promise<RegistrationRequest> {
-  return apiFetch(`/auth/registration-requests/${requestId}/reject?reason=${encodeURIComponent(reason)}`, { method: 'POST' })
+export async function rejectRegistrationRequest(
+  requestId: string,
+  reason: string
+): Promise<RegistrationRequest> {
+  return apiFetch(
+    `/auth/registration-requests/${requestId}/reject?reason=${encodeURIComponent(reason)}`,
+    { method: 'POST' }
+  )
 }
 
 export async function logout(): Promise<void> {
@@ -257,7 +295,10 @@ export async function getMe(): Promise<Me> {
   return apiFetch('/auth/me')
 }
 
-export async function apiFetch<T = unknown>(path: string, options: ApiRequestOptions = {}): Promise<T> {
+export async function apiFetch<T = unknown>(
+  path: string,
+  options: ApiRequestOptions = {}
+): Promise<T> {
   try {
     return await httpClient.request<T>(path, options)
   } catch (error: unknown) {
@@ -268,7 +309,6 @@ export async function apiFetch<T = unknown>(path: string, options: ApiRequestOpt
     throw error
   }
 }
-
 
 export async function apiFetchBlob(path: string, options: ApiRequestOptions = {}): Promise<Blob> {
   return httpClient.requestBlob(path, options)
@@ -294,7 +334,9 @@ export async function getUserSessions(userId: string): Promise<AdminSession[]> {
   return apiFetch(`/auth/users/${userId}/sessions`)
 }
 
-export async function requestAdminPasswordReset(userId: string): Promise<{ ok: boolean; reset_token: string | null }> {
+export async function requestAdminPasswordReset(
+  userId: string
+): Promise<{ ok: boolean; reset_token: string | null }> {
   return apiFetch(`/auth/users/${userId}/password-reset`, { method: 'POST' })
 }
 
@@ -311,7 +353,9 @@ export async function getMfaStatus(): Promise<{ enabled: boolean }> {
   return apiFetch('/auth/mfa/status')
 }
 
-export async function performMfaStepUp(code: string): Promise<{ mfa_verified: boolean; step_up_expires_at: string }> {
+export async function performMfaStepUp(
+  code: string
+): Promise<{ mfa_verified: boolean; step_up_expires_at: string }> {
   return apiFetch('/auth/mfa/step-up', { method: 'POST', body: JSON.stringify({ code }) })
 }
 
@@ -319,7 +363,10 @@ export async function provisionMfa(): Promise<{ secret: string; otpauth_uri: str
   return apiFetch('/auth/mfa/provision', { method: 'POST' })
 }
 
-export async function enableMfa(secret: string, code: string): Promise<{ recovery_codes: string[] }> {
+export async function enableMfa(
+  secret: string,
+  code: string
+): Promise<{ recovery_codes: string[] }> {
   return apiFetch('/auth/mfa/enable', { method: 'POST', body: JSON.stringify({ secret, code }) })
 }
 
@@ -330,17 +377,22 @@ export async function disableMfa(password: string, code: string): Promise<{ enab
 export async function changePassword(currentPassword: string, newPassword: string): Promise<void> {
   await apiFetch('/auth/change-password', {
     method: 'POST',
-    body: JSON.stringify({ current_password: currentPassword, new_password: newPassword })
+    body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
   })
 }
 
-export async function requestPasswordReset(username: string): Promise<{ ok: boolean; reset_token: null }> {
-  return apiFetch('/auth/password-reset/request', { method: 'POST', body: JSON.stringify({ username }) })
+export async function requestPasswordReset(
+  username: string
+): Promise<{ ok: boolean; reset_token: null }> {
+  return apiFetch('/auth/password-reset/request', {
+    method: 'POST',
+    body: JSON.stringify({ username }),
+  })
 }
 
 export async function confirmPasswordReset(token: string, newPassword: string): Promise<void> {
   await apiFetch('/auth/password-reset/confirm', {
     method: 'POST',
-    body: JSON.stringify({ token, new_password: newPassword })
+    body: JSON.stringify({ token, new_password: newPassword }),
   })
 }

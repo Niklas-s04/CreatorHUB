@@ -55,6 +55,7 @@ describe('apiFetch step-up retry flow', () => {
   })
 
   afterEach(() => {
+    vi.useRealTimers()
     setStepUpHandler(null)
     vi.unstubAllGlobals()
   })
@@ -78,7 +79,9 @@ describe('apiFetch step-up retry flow', () => {
     const stepUp = vi.fn().mockResolvedValue(undefined)
     setStepUpHandler(stepUp)
 
-    await expect(apiFetch('/sensitive', { method: 'POST', body: JSON.stringify({ value: 1 }) })).resolves.toEqual({
+    await expect(
+      apiFetch('/sensitive', { method: 'POST', body: JSON.stringify({ value: 1 }) })
+    ).resolves.toEqual({
       ok: true,
     })
 
@@ -105,7 +108,9 @@ describe('apiFetch step-up retry flow', () => {
       .mockResolvedValueOnce(textResponse('ok'))
       .mockResolvedValueOnce(jsonResponse({ admin_username: 'admin', needs_password_setup: true }))
       .mockResolvedValueOnce(textResponse('ok'))
-      .mockResolvedValueOnce(jsonResponse({ id: 'request-1', username: 'new-user', status: 'pending' }))
+      .mockResolvedValueOnce(
+        jsonResponse({ id: 'request-1', username: 'new-user', status: 'pending' })
+      )
 
     await login('admin', 'secret', ' 123456 ')
     await expect(getBootstrapStatus('bootstrap-token')).resolves.toEqual({
@@ -120,7 +125,9 @@ describe('apiFetch step-up retry flow', () => {
     const loginBody = fetchMock.mock.calls[0]?.[1]?.body
     expect(loginBody).toBeInstanceOf(URLSearchParams)
     expect((loginBody as URLSearchParams).get('otp')).toBe('123456')
-    expect(fetchMock.mock.calls[1]?.[1]?.headers).toEqual({ 'X-Bootstrap-Token': 'bootstrap-token' })
+    expect(fetchMock.mock.calls[1]?.[1]?.headers).toEqual({
+      'X-Bootstrap-Token': 'bootstrap-token',
+    })
     expect(getToken()).toBe('1')
   })
 
@@ -132,6 +139,26 @@ describe('apiFetch step-up retry flow', () => {
     expect(getToken()).toBeNull()
   })
 
+  it('times out direct auth requests instead of leaving the UI busy forever', async () => {
+    vi.useFakeTimers()
+    const fetchMock = vi.mocked(fetch)
+    fetchMock.mockImplementationOnce((_input, init) => {
+      const signal = init?.signal
+      return new Promise<Response>((_resolve, reject) => {
+        signal?.addEventListener('abort', () => {
+          reject(new DOMException('Aborted', 'AbortError'))
+        })
+      })
+    })
+
+    const request = setupAdminPassword('new-password', 'bootstrap-token')
+    const assertion = expect(request).rejects.toThrow('Anfrage hat zu lange gedauert')
+    await vi.advanceTimersByTimeAsync(12_000)
+
+    await assertion
+    vi.useRealTimers()
+  })
+
   it('adds CSRF headers to unsafe apiFetch requests and supports blobs', async () => {
     const fetchMock = vi.mocked(fetch)
     document.cookie = 'creatorhub_csrf=csrf-token'
@@ -139,7 +166,9 @@ describe('apiFetch step-up retry flow', () => {
       .mockResolvedValueOnce(jsonResponse({ ok: true }))
       .mockResolvedValueOnce(new Response('file-content', { status: 200 }))
 
-    await expect(apiFetch('/write', { method: 'POST', body: JSON.stringify({ ok: true }) })).resolves.toEqual({
+    await expect(
+      apiFetch('/write', { method: 'POST', body: JSON.stringify({ ok: true }) })
+    ).resolves.toEqual({
       ok: true,
     })
     await expect(apiFetchBlob('/export')).resolves.toMatchObject({ size: 12 })
@@ -200,11 +229,17 @@ describe('apiFetch step-up retry flow', () => {
     await requestPasswordReset('admin')
     await confirmPasswordReset('token', 'new-password')
 
-    const calls = fetchMock.mock.calls.map(call => [call[0], call[1]?.method ?? 'GET'])
+    const calls = fetchMock.mock.calls.map((call) => [call[0], call[1]?.method ?? 'GET'])
     expect(calls).toContainEqual(['/api/v1/auth/registration-requests', 'GET'])
-    expect(calls).toContainEqual(['/api/v1/auth/registration-requests?status_filter=pending', 'GET'])
+    expect(calls).toContainEqual([
+      '/api/v1/auth/registration-requests?status_filter=pending',
+      'GET',
+    ])
     expect(calls).toContainEqual(['/api/v1/auth/registration-requests/request-1/approve', 'POST'])
-    expect(calls).toContainEqual(['/api/v1/auth/registration-requests/request-1/reject?reason=missing%20info', 'POST'])
+    expect(calls).toContainEqual([
+      '/api/v1/auth/registration-requests/request-1/reject?reason=missing%20info',
+      'POST',
+    ])
     expect(calls).toContainEqual(['/api/v1/auth/users/user-1/lock?minutes=15', 'POST'])
     expect(calls).toContainEqual(['/api/v1/auth/mfa/step-up', 'POST'])
     expect(calls).toContainEqual(['/api/v1/auth/password-reset/confirm', 'POST'])

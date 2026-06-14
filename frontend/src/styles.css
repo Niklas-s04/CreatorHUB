@@ -493,6 +493,34 @@ caption{ text-align:left; color: var(--muted); padding: 0 0 8px; }
   font-weight: 600;
   margin-bottom: 20px;
 }
+.app-logo{
+  display:inline-flex;
+  align-items:center;
+  gap: 10px;
+  min-width:0;
+  color: inherit;
+  font-weight: 800;
+  letter-spacing: 0;
+}
+
+.app-logo img{
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+  object-fit: contain;
+  display:block;
+}
+
+.app-logo.compact{
+  width: 100%;
+  height: 100%;
+  justify-content:center;
+}
+
+.app-logo.compact img{
+  width: 100%;
+  height: 100%;
+}
 
 .sidebar-nav{
   display:flex;
@@ -870,9 +898,8 @@ caption{ text-align:left; color: var(--muted); padding: 0 0 8px; }
   display:flex;
   align-items:center;
   justify-content:center;
-  font-weight: 800;
-  color: #ffffff;
-  background: linear-gradient(135deg, rgba(69,208,139,.9), rgba(0,123,255,.72));
+  padding: 8px;
+  background: rgba(255,255,255,.94);
   box-shadow: 0 16px 40px rgba(0,0,0,.22);
 }
 

@@ -50,7 +50,7 @@ def _fallback_email_result(
     language_code = str((creator_settings or {}).get("language_code") or "de")
     artist_name = str((creator_settings or {}).get("artist_name") or "Creator")
     clarification = {
-        "de": f"Danke fuer deine Nachricht. Ich bin {artist_name} und brauche noch eine kurze Klarstellung, bevor ich verbindlich antworte.",
+        "de": f"Danke für deine Nachricht. Ich bin {artist_name} und brauche noch eine kurze Klarstellung, bevor ich verbindlich antworte.",
         "en": f"Thanks for your message. I am {artist_name} and need one short clarification before I can respond in detail.",
     }
     return {
