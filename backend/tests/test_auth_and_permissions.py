@@ -6,6 +6,7 @@ import pyotp
 from sqlalchemy.orm import Session
 
 from app.api import deps
+from app.api.routers.auth import _validate_password_strength
 from app.core.config import settings
 from app.core.security import hash_token
 from app.models.audit import AuditLog
@@ -19,6 +20,20 @@ from tests.factories import DEFAULT_PASSWORD, create_tokens_for_user, create_use
 
 def _auth_header(token: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
+
+
+def test_password_strength_accepts_eight_character_password() -> None:
+    assert _validate_password_strength("Abcdef1!") == "Abcdef1!"
+
+
+def test_password_strength_rejects_shorter_than_eight_characters() -> None:
+    try:
+        _validate_password_strength("Abcd1!")
+    except Exception as exc:
+        assert getattr(exc, "status_code", None) == 400
+        assert getattr(exc, "detail", "") == "Password must be at least 8 characters"
+    else:
+        raise AssertionError("Expected short password to be rejected")
 
 
 def test_login_success_sets_auth_and_csrf_cookies(client, db_session: Session) -> None:

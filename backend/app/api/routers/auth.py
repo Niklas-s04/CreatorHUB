@@ -111,8 +111,8 @@ def _validate_username(username: str) -> str:
 
 def _validate_password_strength(password: str) -> str:
     candidate = password.strip()
-    if len(candidate) < 12:
-        raise HTTPException(status_code=400, detail="Password must be at least 12 characters")
+    if len(candidate) < 8:
+        raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
     checks = [
         any(c.islower() for c in candidate),
         any(c.isupper() for c in candidate),
