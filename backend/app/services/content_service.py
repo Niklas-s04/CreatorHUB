@@ -1048,7 +1048,7 @@ def create_platform_profile(
     profile = ContentPlatformProfile(
         platform=payload.platform,
         name=payload.name.strip(),
-        schema_json=payload.schema_json,
+        schema_json=payload.profile_schema,
         is_active=payload.is_active,
         is_system=payload.is_system,
         owner_user_id=actor.id,
@@ -1086,7 +1086,7 @@ def update_platform_profile(
     if not profile:
         raise NotFoundError("Platform profile not found")
 
-    updates = payload.model_dump(exclude_unset=True)
+    updates = payload.model_dump(exclude_unset=True, by_alias=True)
     before: dict[str, str | int | bool | None] = {}
     after: dict[str, str | int | bool | None] = {}
     with transaction_boundary(db):

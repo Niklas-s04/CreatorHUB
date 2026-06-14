@@ -4,7 +4,7 @@ import uuid
 from datetime import date, datetime
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.models.product import ProductCondition, ProductStatus, TransactionType, ValueSource
 from app.models.workflow import WorkflowStatus
@@ -51,6 +51,8 @@ class ProductUpdate(BaseModel):
 
 
 class ProductOut(ProductBase):
+    model_config = ConfigDict(from_attributes=True)
+
     id: uuid.UUID
     status_changed_at: datetime
     reviewed_by_id: uuid.UUID | None
@@ -58,9 +60,6 @@ class ProductOut(ProductBase):
     reviewed_at: datetime | None
     created_at: datetime
     updated_at: datetime
-
-    class Config:
-        from_attributes = True
 
 
 class ProductTransactionCreate(BaseModel):
@@ -73,11 +72,10 @@ class ProductTransactionCreate(BaseModel):
 
 
 class ProductTransactionOut(ProductTransactionCreate):
+    model_config = ConfigDict(from_attributes=True)
+
     id: uuid.UUID
     product_id: uuid.UUID
-
-    class Config:
-        from_attributes = True
 
 
 class ProductValueHistoryCreate(BaseModel):
@@ -88,11 +86,10 @@ class ProductValueHistoryCreate(BaseModel):
 
 
 class ProductValueHistoryOut(ProductValueHistoryCreate):
+    model_config = ConfigDict(from_attributes=True)
+
     id: uuid.UUID
     product_id: uuid.UUID
-
-    class Config:
-        from_attributes = True
 
 
 class ProductStatusChange(BaseModel):

@@ -3,12 +3,14 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.models.user import UserRole
 
 
 class UserOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: uuid.UUID
     username: str
     role: UserRole
@@ -19,9 +21,6 @@ class UserOut(BaseModel):
     last_activity_at: datetime | None = None
     active_sessions: int = 0
     permissions: list[str] = Field(default_factory=list)
-
-    class Config:
-        from_attributes = True
 
 
 class UserCreate(BaseModel):

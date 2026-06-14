@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from app.models.registration_request import RegistrationRequestStatus
 
@@ -115,6 +115,8 @@ class RegisterRequestIn(BaseModel):
 
 
 class RegisterRequestOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: uuid.UUID
     username: str
     status: RegistrationRequestStatus
@@ -122,6 +124,3 @@ class RegisterRequestOut(BaseModel):
     reviewed_by_user_id: uuid.UUID | None = None
     reviewed_by_username: str | None = None
     rejection_reason: str | None = None
-
-    class Config:
-        from_attributes = True

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import warnings
 from io import BytesIO
 
 import pytest
@@ -32,3 +33,11 @@ def test_image_bomb_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
 
     with pytest.raises(ValueError, match="pixel count|validation failed"):
         validate_upload_file("image.png", _png_bytes(width=2, height=2), "image")
+
+
+def test_image_validation_does_not_use_deprecated_pillow_pixel_api() -> None:
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", DeprecationWarning)
+        result = validate_upload_file("image.png", _png_bytes(), "image")
+
+    assert result.perceptual_hash is not None

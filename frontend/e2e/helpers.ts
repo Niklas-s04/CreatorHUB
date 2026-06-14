@@ -3,8 +3,9 @@ import crypto from 'node:crypto'
 import { expect, Page } from '@playwright/test'
 
 export const E2E_ADMIN_USER = process.env.E2E_ADMIN_USER || 'admin'
-export const E2E_ADMIN_PASSWORD = process.env.E2E_ADMIN_PASSWORD || 'Admin!Pass12345'
-export const E2E_BOOTSTRAP_TOKEN = process.env.E2E_BOOTSTRAP_TOKEN || ''
+export const E2E_ADMIN_PASSWORD = process.env.E2E_ADMIN_PASSWORD || 'test_admin_password_1234567890'
+export const E2E_BOOTSTRAP_TOKEN =
+  process.env.E2E_BOOTSTRAP_TOKEN || 'test_bootstrap_token_1234567890'
 
 export function uniqueSuffix(prefix: string): string {
   const stamp = Date.now().toString(36)

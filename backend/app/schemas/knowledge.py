@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.models.knowledge import (
     KnowledgeDocType,
@@ -49,6 +49,8 @@ class KnowledgeDocUpdate(BaseModel):
 
 
 class KnowledgeDocVersionOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: uuid.UUID
     version_number: int
     type: KnowledgeDocType
@@ -71,21 +73,19 @@ class KnowledgeDocVersionOut(BaseModel):
     change_note: str | None
     created_at: datetime
 
-    class Config:
-        from_attributes = True
-
 
 class KnowledgeDocDraftLinkOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: uuid.UUID
     email_draft_id: uuid.UUID
     linked_at: datetime
     linked_by_name: str | None
 
-    class Config:
-        from_attributes = True
-
 
 class KnowledgeDocOut(KnowledgeDocCreate):
+    model_config = ConfigDict(from_attributes=True)
+
     id: uuid.UUID
     current_version: int
     reviewed_by_id: uuid.UUID | None
@@ -96,6 +96,3 @@ class KnowledgeDocOut(KnowledgeDocCreate):
     updated_at: datetime
     versions: list[KnowledgeDocVersionOut] = Field(default_factory=list)
     draft_links: list[KnowledgeDocDraftLinkOut] = Field(default_factory=list)
-
-    class Config:
-        from_attributes = True

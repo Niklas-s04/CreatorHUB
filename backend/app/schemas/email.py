@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.models.ai_settings import CreatorAiTone
 from app.models.email import (
@@ -44,6 +44,8 @@ class EmailRefineRequest(BaseModel):
 
 
 class EmailThreadOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: uuid.UUID
     subject: str | None
     raw_body: str
@@ -51,11 +53,10 @@ class EmailThreadOut(BaseModel):
     created_at: datetime
     updated_at: datetime
 
-    class Config:
-        from_attributes = True
-
 
 class EmailDraftOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: uuid.UUID
     thread_id: uuid.UUID
     parent_draft_id: uuid.UUID | None
@@ -86,20 +87,16 @@ class EmailDraftOut(BaseModel):
     created_at: datetime
     updated_at: datetime
 
-    class Config:
-        from_attributes = True
-
 
 class EmailThreadMessageOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: uuid.UUID
     thread_id: uuid.UUID
     role: EmailThreadMessageRole
     content: str | None
     payload: dict[str, Any] | None
     created_at: datetime
-
-    class Config:
-        from_attributes = True
 
 
 class EmailDraftApprovalRequest(BaseModel):
@@ -137,6 +134,8 @@ class EmailTemplateUpdate(BaseModel):
 
 
 class EmailTemplateOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: uuid.UUID
     thread_id: uuid.UUID | None
     name: str
@@ -149,11 +148,10 @@ class EmailTemplateOut(BaseModel):
     created_at: datetime
     updated_at: datetime
 
-    class Config:
-        from_attributes = True
-
 
 class EmailDraftVersionOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: uuid.UUID
     draft_id: uuid.UUID
     version_number: int
@@ -166,11 +164,10 @@ class EmailDraftVersionOut(BaseModel):
     created_at: datetime
     updated_at: datetime
 
-    class Config:
-        from_attributes = True
-
 
 class EmailDraftSuggestionOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: uuid.UUID
     draft_id: uuid.UUID
     suggestion_type: EmailDraftSuggestionType
@@ -183,9 +180,6 @@ class EmailDraftSuggestionOut(BaseModel):
     decided_by_name: str | None
     created_at: datetime
     updated_at: datetime
-
-    class Config:
-        from_attributes = True
 
 
 class EmailKnowledgeEvidenceOut(BaseModel):
@@ -223,6 +217,8 @@ class CreatorAiProfileInput(BaseModel):
 
 
 class CreatorAiProfileOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: uuid.UUID
     owner_user_id: uuid.UUID | None
     profile_name: str
@@ -245,9 +241,6 @@ class CreatorAiProfileOut(BaseModel):
     last_used_at: datetime | None
     created_at: datetime
     updated_at: datetime
-
-    class Config:
-        from_attributes = True
 
 
 class CreatorAiSettingsPreviewOut(BaseModel):

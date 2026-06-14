@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, ConfigDict, EmailStr
 
 from app.models.deal import DealDraftStatus
 from app.models.workflow import WorkflowStatus
@@ -26,6 +26,8 @@ class DealDraftBase(BaseModel):
 
 
 class DealDraftOut(DealDraftBase):
+    model_config = ConfigDict(from_attributes=True)
+
     id: uuid.UUID
     thread_id: uuid.UUID | None
     reviewed_by_id: uuid.UUID | None
@@ -33,9 +35,6 @@ class DealDraftOut(DealDraftBase):
     reviewed_at: datetime | None
     created_at: datetime
     updated_at: datetime
-
-    class Config:
-        from_attributes = True
 
 
 class DealDraftIntakeRequest(BaseModel):

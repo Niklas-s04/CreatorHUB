@@ -4,7 +4,7 @@ import uuid
 from datetime import date, datetime
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.models.content import (
     ChecklistPhase,
@@ -67,6 +67,8 @@ class ContentItemUpdate(BaseModel):
 
 
 class ContentItemRevisionOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: uuid.UUID
     revision_number: int
     changed_fields: list[str]
@@ -81,11 +83,10 @@ class ContentItemRevisionOut(BaseModel):
     changed_by_name: str | None
     created_at: datetime
 
-    class Config:
-        from_attributes = True
-
 
 class ContentItemOut(ContentItemCreate):
+    model_config = ConfigDict(from_attributes=True)
+
     id: uuid.UUID
     reviewed_by_id: uuid.UUID | None
     reviewed_by_name: str | None
@@ -102,9 +103,6 @@ class ContentItemOut(ContentItemCreate):
     revisions: list[ContentItemRevisionOut] = Field(default_factory=list)
     created_at: datetime
     updated_at: datetime
-
-    class Config:
-        from_attributes = True
 
 
 class ContentTaskCreate(BaseModel):
@@ -139,6 +137,8 @@ class ContentTaskUpdate(BaseModel):
 
 
 class ContentTaskOut(ContentTaskCreate):
+    model_config = ConfigDict(from_attributes=True)
+
     id: uuid.UUID
     notified_at: datetime | None = None
     escalated_at: datetime | None = None
@@ -146,9 +146,6 @@ class ContentTaskOut(ContentTaskCreate):
     is_overdue: bool
     created_at: datetime
     updated_at: datetime
-
-    class Config:
-        from_attributes = True
 
 
 class ContentTaskViewCreate(BaseModel):
@@ -165,6 +162,8 @@ class ContentTaskViewOut(ContentTaskViewCreate):
 
 
 class ContentTaskFilterParams(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     content_item_id: uuid.UUID | None = None
     assignee_user_id: uuid.UUID | None = None
     assignee_role: UserRole | None = None
@@ -172,38 +171,38 @@ class ContentTaskFilterParams(BaseModel):
     status: TaskStatus | None = None
     overdue_only: bool = False
 
-    class Config:
-        from_attributes = True
-
 
 class ContentPlatformProfileCreate(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
     platform: ContentPlatform
     name: str
-    schema_json: dict[str, Any] = Field(default_factory=dict)
+    profile_schema: dict[str, Any] = Field(default_factory=dict, alias="schema_json")
     is_active: bool = True
     is_system: bool = False
 
 
 class ContentPlatformProfileUpdate(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
     name: str | None = None
-    schema_json: dict[str, Any] | None = None
+    profile_schema: dict[str, Any] | None = Field(default=None, alias="schema_json")
     is_active: bool | None = None
 
 
 class ContentPlatformProfileOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
+
     id: uuid.UUID
     platform: ContentPlatform
     name: str
-    schema_json: dict[str, Any]
+    profile_schema: dict[str, Any] = Field(alias="schema_json")
     is_active: bool
     is_system: bool
     owner_user_id: uuid.UUID | None
     version: int
     created_at: datetime
     updated_at: datetime
-
-    class Config:
-        from_attributes = True
 
 
 class ContentChecklistTemplateItemCreate(BaseModel):
@@ -217,13 +216,12 @@ class ContentChecklistTemplateItemCreate(BaseModel):
 
 
 class ContentChecklistTemplateItemOut(ContentChecklistTemplateItemCreate):
+    model_config = ConfigDict(from_attributes=True)
+
     id: uuid.UUID
     template_id: uuid.UUID
     created_at: datetime
     updated_at: datetime
-
-    class Config:
-        from_attributes = True
 
 
 class ContentChecklistTemplateCreate(BaseModel):
@@ -246,6 +244,8 @@ class ContentChecklistTemplateUpdate(BaseModel):
 
 
 class ContentChecklistTemplateOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: uuid.UUID
     name: str
     description: str | None
@@ -258,9 +258,6 @@ class ContentChecklistTemplateOut(BaseModel):
     items: list[ContentChecklistTemplateItemOut] = Field(default_factory=list)
     created_at: datetime
     updated_at: datetime
-
-    class Config:
-        from_attributes = True
 
 
 class ContentTemplateApplyRequest(BaseModel):

@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 from typing import Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from app.models.asset import AssetKind, AssetOwnerType, AssetReviewState, AssetSource
 from app.models.workflow import WorkflowStatus
@@ -58,12 +58,11 @@ class AssetUpdate(BaseModel):
 
 
 class AssetOut(AssetBase):
+    model_config = ConfigDict(from_attributes=True)
+
     id: uuid.UUID
     reviewed_by_id: uuid.UUID | None
     reviewed_by_name: Optional[str]
     reviewed_at: Optional[datetime]
     created_at: datetime
     updated_at: datetime
-
-    class Config:
-        from_attributes = True
