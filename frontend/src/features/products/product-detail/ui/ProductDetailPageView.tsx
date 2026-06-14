@@ -162,8 +162,8 @@ export default function ProductDetailPageView() {
   const canReadEmail = hasPermission('email.read')
 
   const primary = useMemo(() => {
-    const approved = effectiveAssets.filter(asset => asset.reviewState === 'approved')
-    return approved.find(asset => asset.isPrimary) || approved[0] || null
+    const approved = effectiveAssets.filter((asset) => asset.reviewState === 'approved')
+    return approved.find((asset) => asset.isPrimary) || approved[0] || null
   }, [effectiveAssets])
   const primaryThumb = useThumb(primary ? String(primary.id) : null)
 
@@ -200,7 +200,7 @@ export default function ProductDetailPageView() {
 
       setValueHistory(
         asArray(vhRaw)
-          .map(item => {
+          .map((item) => {
             if (!isRecord(item)) return null
             return {
               id: String(item.id || ''),
@@ -215,19 +215,25 @@ export default function ProductDetailPageView() {
 
       const loadDeferred = async () => {
         const contentRaw = canReadContent
-          ? await apiFetch<unknown>(`/content/items?product_id=${id}&limit=12&offset=0&sort_by=updated_at&sort_order=desc`)
+          ? await apiFetch<unknown>(
+              `/content/items?product_id=${id}&limit=12&offset=0&sort_by=updated_at&sort_order=desc`
+            )
           : null
         const auditRaw = canViewAudit
-          ? await apiFetch<unknown>(`/audit?entity_type=product&entity_id=${id}&limit=12&offset=0&sort_by=created_at&sort_order=desc`)
+          ? await apiFetch<unknown>(
+              `/audit?entity_type=product&entity_id=${id}&limit=12&offset=0&sort_by=created_at&sort_order=desc`
+            )
           : null
         const emailRaw = canReadEmail
-          ? await apiFetch<unknown>('/email/threads?limit=20&offset=0&sort_by=updated_at&sort_order=desc')
+          ? await apiFetch<unknown>(
+              '/email/threads?limit=20&offset=0&sort_by=updated_at&sort_order=desc'
+            )
           : null
 
         const contentItems = parsePageItems(contentRaw)
         setContentLinks(
           contentItems
-            .map(item => {
+            .map((item) => {
               if (!isRecord(item)) return null
               return {
                 id: String(item.id || ''),
@@ -244,7 +250,7 @@ export default function ProductDetailPageView() {
         const audits = parsePageItems(auditRaw)
         setAuditTimeline(
           audits
-            .map(item => {
+            .map((item) => {
               if (!isRecord(item)) return null
               return {
                 id: String(item.id || ''),
@@ -259,11 +265,11 @@ export default function ProductDetailPageView() {
 
         const threads = parsePageItems(emailRaw)
         const keywords = [product.title, product.brand, product.model]
-          .map(value => (value || '').trim().toLowerCase())
-          .filter(value => value.length >= 3)
+          .map((value) => (value || '').trim().toLowerCase())
+          .filter((value) => value.length >= 3)
 
         const relatedThreads = threads
-          .map(item => {
+          .map((item) => {
             if (!isRecord(item)) return null
             return {
               id: String(item.id || ''),
@@ -274,10 +280,10 @@ export default function ProductDetailPageView() {
             }
           })
           .filter((item): item is EmailThreadRef => Boolean(item && item.id))
-          .filter(thread => {
+          .filter((thread) => {
             if (!keywords.length) return false
             const hay = `${thread.subject || ''} ${thread.raw_body}`.toLowerCase()
-            return keywords.some(keyword => hay.includes(keyword))
+            return keywords.some((keyword) => hay.includes(keyword))
           })
           .slice(0, 10)
 
@@ -285,7 +291,9 @@ export default function ProductDetailPageView() {
       }
 
       if ('requestIdleCallback' in window) {
-        ;(window as Window & { requestIdleCallback: (callback: () => void) => number }).requestIdleCallback(() => {
+        ;(
+          window as Window & { requestIdleCallback: (callback: () => void) => number }
+        ).requestIdleCallback(() => {
           void loadDeferred()
         })
       } else {
@@ -319,9 +327,13 @@ export default function ProductDetailPageView() {
           condition: masterForm.condition,
           storage_location: masterForm.storage_location.trim() || null,
           serial_number: masterForm.serial_number.trim() || null,
-          purchase_price: masterForm.purchase_price ? Number(masterForm.purchase_price.replace(',', '.')) : null,
+          purchase_price: masterForm.purchase_price
+            ? Number(masterForm.purchase_price.replace(',', '.'))
+            : null,
           purchase_date: masterForm.purchase_date || null,
-          current_value: masterForm.current_value ? Number(masterForm.current_value.replace(',', '.')) : null,
+          current_value: masterForm.current_value
+            ? Number(masterForm.current_value.replace(',', '.'))
+            : null,
           currency: masterForm.currency.trim() || 'EUR',
           notes_md: masterForm.notes_md || null,
         }),
@@ -436,7 +448,11 @@ export default function ProductDetailPageView() {
       if (typeof response.job_id === 'string' || typeof response.job_id === 'number') {
         setJobId(String(response.job_id))
       } else {
-        setErr(language === 'en' ? 'Invalid job response from server' : 'Ungültige Job-Antwort vom Server')
+        setErr(
+          language === 'en'
+            ? 'Invalid job response from server'
+            : 'Ungültige Job-Antwort vom Server'
+        )
       }
     } catch (e: unknown) {
       setErr(getErrorMessage(e))
@@ -477,11 +493,7 @@ export default function ProductDetailPageView() {
     if (!canReviewAsset) return
     const prev = optimisticAssets ?? assets
     setOptimisticAssets(
-      prev.map(asset =>
-        asset.id === assetId
-          ? { ...asset, reviewState: state }
-          : asset
-      )
+      prev.map((asset) => (asset.id === assetId ? { ...asset, reviewState: state } : asset))
     )
     try {
       await reviewMutation.mutateAsync({ assetId, state })
@@ -498,7 +510,7 @@ export default function ProductDetailPageView() {
     if (!canReviewAsset) return
     const prev = optimisticAssets ?? assets
     setOptimisticAssets(
-      prev.map(asset => ({
+      prev.map((asset) => ({
         ...asset,
         isPrimary: asset.id === assetId,
       }))
@@ -529,7 +541,9 @@ export default function ProductDetailPageView() {
     return (
       <div className="container">
         <h2>{language === 'en' ? 'Product' : 'Produkt'}</h2>
-        <div className="muted">{language === 'en' ? 'Product data not available.' : 'Produktdaten nicht verfügbar.'}</div>
+        <div className="muted">
+          {language === 'en' ? 'Product data not available.' : 'Produktdaten nicht verfügbar.'}
+        </div>
       </div>
     )
   }
@@ -539,18 +553,34 @@ export default function ProductDetailPageView() {
       <div className="page-header">
         <div>
           <h2 className="page-title">Smart Product Workspace</h2>
-          <div className="page-subtitle">{language === 'en' ? 'All product-related tasks, data and relationships in one workspace.' : 'Alle produktbezogenen Aufgaben, Daten und Bezüge in einer Oberfläche.'}</div>
+          <div className="page-subtitle">
+            {language === 'en'
+              ? 'All product-related tasks, data and relationships in one workspace.'
+              : 'Alle produktbezogenen Aufgaben, Daten und Bezüge in einer Oberfläche.'}
+          </div>
         </div>
         <span className="muted small">ID {product.id}</span>
       </div>
 
       <div className="context-nav">
-        <a className="context-link" href="#stammdaten">{language === 'en' ? 'Master data' : 'Stammdaten'}</a>
-        <a className="context-link" href="#assets">Assets</a>
-        <a className="context-link" href="#wert">{language === 'en' ? 'Value history' : 'Wertverlauf'}</a>
-        <a className="context-link" href="#content">Content</a>
-        <a className="context-link" href="#audit">Audit</a>
-        <a className="context-link" href="#email">{language === 'en' ? 'Email' : 'E-Mail'}</a>
+        <a className="context-link" href="#stammdaten">
+          {language === 'en' ? 'Master data' : 'Stammdaten'}
+        </a>
+        <a className="context-link" href="#assets">
+          Assets
+        </a>
+        <a className="context-link" href="#wert">
+          {language === 'en' ? 'Value history' : 'Wertverlauf'}
+        </a>
+        <a className="context-link" href="#content">
+          Content
+        </a>
+        <a className="context-link" href="#audit">
+          Audit
+        </a>
+        <a className="context-link" href="#email">
+          {language === 'en' ? 'Email' : 'E-Mail'}
+        </a>
       </div>
 
       <section className="card" id="quick-actions">
@@ -558,13 +588,27 @@ export default function ProductDetailPageView() {
           <h3>Quick Actions</h3>
         </div>
         <div className="control-row">
-          <Link className="btn" to="/operations">Operations Inbox</Link>
-          <Link className="btn" to="/assets">Asset Reviews</Link>
-          <Link className="btn" to="/content">Content Plan</Link>
-          <Link className="btn" to="/email">Communication</Link>
-          <button className="btn primary" onClick={() => {
-            <h3>{language === 'en' ? 'Value history & transactions' : 'Wertverlauf & Transaktionen'}</h3>
-          }} disabled={!canManageContent}>
+          <Link className="btn" to="/operations">
+            Operations Inbox
+          </Link>
+          <Link className="btn" to="/assets">
+            Asset Reviews
+          </Link>
+          <Link className="btn" to="/content">
+            Content Plan
+          </Link>
+          <Link className="btn" to="/email">
+            Communication
+          </Link>
+          <button
+            className="btn primary"
+            onClick={() => {
+              ;<h3>
+                {language === 'en' ? 'Value history & transactions' : 'Wertverlauf & Transaktionen'}
+              </h3>
+            }}
+            disabled={!canManageContent}
+          >
             {language === 'en' ? 'Prepare content reference' : 'Content-Bezug vorbereiten'}
           </button>
         </div>
@@ -575,31 +619,72 @@ export default function ProductDetailPageView() {
       <section className="card" id="stammdaten">
         <div className="card-head">
           <h3>{language === 'en' ? 'Master data' : 'Stammdaten'}</h3>
-          <button className="btn primary" onClick={saveMasterData} disabled={!canWriteProduct || masterSaving}>
-            {masterSaving ? (language === 'en' ? 'Saving…' : 'Speichert…') : (language === 'en' ? 'Save master data' : 'Stammdaten speichern')}
+          <button
+            className="btn primary"
+            onClick={saveMasterData}
+            disabled={!canWriteProduct || masterSaving}
+          >
+            {masterSaving
+              ? language === 'en'
+                ? 'Saving…'
+                : 'Speichert…'
+              : language === 'en'
+                ? 'Save master data'
+                : 'Stammdaten speichern'}
           </button>
         </div>
 
         <div className="grid deal-fields-grid-large">
           <div>
             <div className="field-label">{language === 'en' ? 'Title' : 'Titel'}</div>
-            <input className="w100" value={masterForm.title} onChange={event => setMasterForm(prev => ({ ...prev, title: event.target.value }))} />
+            <input
+              aria-label={language === 'en' ? 'Title' : 'Titel'}
+              className="w100"
+              value={masterForm.title}
+              onChange={(event) =>
+                setMasterForm((prev) => ({ ...prev, title: event.target.value }))
+              }
+            />
           </div>
           <div>
             <div className="field-label">Brand</div>
-            <input className="w100" value={masterForm.brand} onChange={event => setMasterForm(prev => ({ ...prev, brand: event.target.value }))} />
+            <input
+              className="w100"
+              value={masterForm.brand}
+              onChange={(event) =>
+                setMasterForm((prev) => ({ ...prev, brand: event.target.value }))
+              }
+            />
           </div>
           <div>
             <div className="field-label">Model</div>
-            <input className="w100" value={masterForm.model} onChange={event => setMasterForm(prev => ({ ...prev, model: event.target.value }))} />
+            <input
+              className="w100"
+              value={masterForm.model}
+              onChange={(event) =>
+                setMasterForm((prev) => ({ ...prev, model: event.target.value }))
+              }
+            />
           </div>
           <div>
             <div className="field-label">{language === 'en' ? 'Category' : 'Kategorie'}</div>
-            <input className="w100" value={masterForm.category} onChange={event => setMasterForm(prev => ({ ...prev, category: event.target.value }))} />
+            <input
+              className="w100"
+              value={masterForm.category}
+              onChange={(event) =>
+                setMasterForm((prev) => ({ ...prev, category: event.target.value }))
+              }
+            />
           </div>
           <div>
             <div className="field-label">Condition</div>
-            <select className="w100" value={masterForm.condition} onChange={event => setMasterForm(prev => ({ ...prev, condition: event.target.value }))}>
+            <select
+              className="w100"
+              value={masterForm.condition}
+              onChange={(event) =>
+                setMasterForm((prev) => ({ ...prev, condition: event.target.value }))
+              }
+            >
               <option value="new">new</option>
               <option value="very_good">very_good</option>
               <option value="good">good</option>
@@ -609,33 +694,81 @@ export default function ProductDetailPageView() {
           </div>
           <div>
             <div className="field-label">Storage</div>
-            <input className="w100" value={masterForm.storage_location} onChange={event => setMasterForm(prev => ({ ...prev, storage_location: event.target.value }))} />
+            <input
+              className="w100"
+              value={masterForm.storage_location}
+              onChange={(event) =>
+                setMasterForm((prev) => ({ ...prev, storage_location: event.target.value }))
+              }
+            />
           </div>
           <div>
-            <div className="field-label">{language === 'en' ? 'Serial number' : 'Seriennummer'}</div>
-            <input className="w100" value={masterForm.serial_number} onChange={event => setMasterForm(prev => ({ ...prev, serial_number: event.target.value }))} />
+            <div className="field-label">
+              {language === 'en' ? 'Serial number' : 'Seriennummer'}
+            </div>
+            <input
+              className="w100"
+              value={masterForm.serial_number}
+              onChange={(event) =>
+                setMasterForm((prev) => ({ ...prev, serial_number: event.target.value }))
+              }
+            />
           </div>
           <div>
             <div className="field-label">{language === 'en' ? 'Currency' : 'Währung'}</div>
-            <input className="w100" value={masterForm.currency} onChange={event => setMasterForm(prev => ({ ...prev, currency: event.target.value }))} />
+            <input
+              className="w100"
+              value={masterForm.currency}
+              onChange={(event) =>
+                setMasterForm((prev) => ({ ...prev, currency: event.target.value }))
+              }
+            />
           </div>
           <div>
             <div className="field-label">{language === 'en' ? 'Purchase price' : 'Kaufpreis'}</div>
-            <input className="w100" value={masterForm.purchase_price} onChange={event => setMasterForm(prev => ({ ...prev, purchase_price: event.target.value }))} />
+            <input
+              className="w100"
+              value={masterForm.purchase_price}
+              onChange={(event) =>
+                setMasterForm((prev) => ({ ...prev, purchase_price: event.target.value }))
+              }
+            />
           </div>
           <div>
             <div className="field-label">{language === 'en' ? 'Purchase date' : 'Kaufdatum'}</div>
-            <input className="w100" type="date" value={masterForm.purchase_date} onChange={event => setMasterForm(prev => ({ ...prev, purchase_date: event.target.value }))} />
+            <input
+              className="w100"
+              type="date"
+              value={masterForm.purchase_date}
+              onChange={(event) =>
+                setMasterForm((prev) => ({ ...prev, purchase_date: event.target.value }))
+              }
+            />
           </div>
           <div>
-            <div className="field-label">{language === 'en' ? 'Current value' : 'Aktueller Wert'}</div>
-            <input className="w100" value={masterForm.current_value} onChange={event => setMasterForm(prev => ({ ...prev, current_value: event.target.value }))} />
+            <div className="field-label">
+              {language === 'en' ? 'Current value' : 'Aktueller Wert'}
+            </div>
+            <input
+              className="w100"
+              value={masterForm.current_value}
+              onChange={(event) =>
+                setMasterForm((prev) => ({ ...prev, current_value: event.target.value }))
+              }
+            />
           </div>
         </div>
 
         <div className="section-gap">
           <div className="field-label">{language === 'en' ? 'Notes' : 'Notizen'}</div>
-          <textarea rows={6} value={masterForm.notes_md} onChange={event => setMasterForm(prev => ({ ...prev, notes_md: event.target.value }))} />
+          <textarea
+            aria-label={language === 'en' ? 'Notes' : 'Notizen'}
+            rows={6}
+            value={masterForm.notes_md}
+            onChange={(event) =>
+              setMasterForm((prev) => ({ ...prev, notes_md: event.target.value }))
+            }
+          />
         </div>
 
         <hr />
@@ -643,22 +776,42 @@ export default function ProductDetailPageView() {
         <div className="row">
           <div className="grow">
             <div className="field-label">Status</div>
-            <select className="w100" value={status} onChange={event => setStatus(event.target.value)}>
-              {PRODUCT_STATUS_OPTIONS.map(option => (
-                <option key={option} value={option}>{option}</option>
+            <select
+              className="w100"
+              value={status}
+              onChange={(event) => setStatus(event.target.value)}
+            >
+              {PRODUCT_STATUS_OPTIONS.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
               ))}
             </select>
           </div>
           <div>
             <div className="field-label">{language === 'en' ? 'Date' : 'Datum'}</div>
-            <input type="date" value={txDate} onChange={event => setTxDate(event.target.value)} />
+            <input type="date" value={txDate} onChange={(event) => setTxDate(event.target.value)} />
           </div>
           <div>
             <div className="field-label">{language === 'en' ? 'Amount' : 'Betrag'}</div>
-            <input value={amount} onChange={event => setAmount(event.target.value)} placeholder={language === 'en' ? 'e.g. 120' : 'z.B. 120'} />
+            <input
+              value={amount}
+              onChange={(event) => setAmount(event.target.value)}
+              placeholder={language === 'en' ? 'e.g. 120' : 'z.B. 120'}
+            />
           </div>
-          <button className="btn primary" onClick={applyStatusChange} disabled={!canWriteProduct || statusSaving}>
-            {statusSaving ? (language === 'en' ? 'Saving…' : 'Speichert…') : (language === 'en' ? 'Apply status' : 'Status anwenden')}
+          <button
+            className="btn primary"
+            onClick={applyStatusChange}
+            disabled={!canWriteProduct || statusSaving}
+          >
+            {statusSaving
+              ? language === 'en'
+                ? 'Saving…'
+                : 'Speichert…'
+              : language === 'en'
+                ? 'Apply status'
+                : 'Status anwenden'}
           </button>
         </div>
       </section>
@@ -670,20 +823,31 @@ export default function ProductDetailPageView() {
         </div>
 
         <div className="row">
-          <input type="file" disabled={!canUploadAsset} onChange={event => {
-            const file = event.target.files?.[0]
-            if (file) {
-              void upload(file)
-            }
-          }} />
-          <input className="grow" value={imageQuery} onChange={event => setImageQuery(event.target.value)} placeholder={language === 'en' ? 'Search image source…' : 'Bildquelle suchen…'} />
-          <select value={imageSource} onChange={event => setImageSource(event.target.value)}>
+          <input
+            type="file"
+            disabled={!canUploadAsset}
+            onChange={(event) => {
+              const file = event.target.files?.[0]
+              if (file) {
+                void upload(file)
+              }
+            }}
+          />
+          <input
+            className="grow"
+            value={imageQuery}
+            onChange={(event) => setImageQuery(event.target.value)}
+            placeholder={language === 'en' ? 'Search image source…' : 'Bildquelle suchen…'}
+          />
+          <select value={imageSource} onChange={(event) => setImageSource(event.target.value)}>
             <option value="auto">auto</option>
             <option value="wikimedia">wikimedia</option>
             <option value="bing">bing</option>
             <option value="manufacturer">manufacturer</option>
           </select>
-          <button className="btn" onClick={startImageHunt} disabled={!canSearchImages}>Search</button>
+          <button className="btn" onClick={startImageHunt} disabled={!canSearchImages}>
+            Search
+          </button>
         </div>
         {jobStatus && <div className="muted small mt8">Job: {jobStatus}</div>}
 
@@ -695,14 +859,26 @@ export default function ProductDetailPageView() {
             decoding="async"
             fetchPriority="low"
             sizes="(max-width: 900px) 100vw, 640px"
-            alt={product.title ? (language === 'en' ? `Preview for ${product.title}` : `Preview für ${product.title}`) : (language === 'en' ? 'Product preview' : 'Produkt-Preview')}
+            alt={
+              product.title
+                ? language === 'en'
+                  ? `Preview for ${product.title}`
+                  : `Preview für ${product.title}`
+                : language === 'en'
+                  ? 'Product preview'
+                  : 'Produkt-Preview'
+            }
             width={640}
             height={360}
           />
-        ) : <div className="muted mt12">{language === 'en' ? 'No preview available.' : 'Kein Preview vorhanden.'}</div>}
+        ) : (
+          <div className="muted mt12">
+            {language === 'en' ? 'No preview available.' : 'Kein Preview vorhanden.'}
+          </div>
+        )}
 
         <div className="grid mt12">
-          {effectiveAssets.map(asset => (
+          {effectiveAssets.map((asset) => (
             <AssetCard
               key={asset.id}
               asset={asset}
@@ -711,7 +887,9 @@ export default function ProductDetailPageView() {
               onPrimary={setPrimary}
             />
           ))}
-          {!effectiveAssets.length && <div className="muted">{language === 'en' ? 'No assets.' : 'Keine Assets.'}</div>}
+          {!effectiveAssets.length && (
+            <div className="muted">{language === 'en' ? 'No assets.' : 'Keine Assets.'}</div>
+          )}
         </div>
       </section>
 
@@ -721,37 +899,71 @@ export default function ProductDetailPageView() {
         </div>
 
         <div className="row">
-          <input type="date" value={vhDate} onChange={event => setVhDate(event.target.value)} />
-          <input value={vhValue} onChange={event => setVhValue(event.target.value)} placeholder="Wert" />
-          <input value={vhCurrency} onChange={event => setVhCurrency(event.target.value)} placeholder={language === 'en' ? 'Currency' : 'Währung'} />
-          <button className="btn" onClick={addValueEntry} disabled={!canWriteProduct || !vhValue || vhSaving}>
-            {vhSaving ? (language === 'en' ? 'Saving…' : 'Speichert…') : (language === 'en' ? 'Add value point' : 'Wertpunkt hinzufügen')}
+          <input type="date" value={vhDate} onChange={(event) => setVhDate(event.target.value)} />
+          <input
+            value={vhValue}
+            onChange={(event) => setVhValue(event.target.value)}
+            placeholder="Wert"
+          />
+          <input
+            value={vhCurrency}
+            onChange={(event) => setVhCurrency(event.target.value)}
+            placeholder={language === 'en' ? 'Currency' : 'Währung'}
+          />
+          <button
+            className="btn"
+            onClick={addValueEntry}
+            disabled={!canWriteProduct || !vhValue || vhSaving}
+          >
+            {vhSaving
+              ? language === 'en'
+                ? 'Saving…'
+                : 'Speichert…'
+              : language === 'en'
+                ? 'Add value point'
+                : 'Wertpunkt hinzufügen'}
           </button>
         </div>
 
         <div className="grid mt12">
           <div className="card tight">
-            <div className="title-strong">{language === 'en' ? 'Value history' : 'Wertverlauf'}</div>
+            <div className="title-strong">
+              {language === 'en' ? 'Value history' : 'Wertverlauf'}
+            </div>
             {workspaceLoading && !valueHistory.length && <ListSkeleton rows={3} />}
-            {valueHistory.map(entry => (
+            {valueHistory.map((entry) => (
               <div key={entry.id} className="row between mt8">
                 <span>{entry.date}</span>
-                <span>{entry.value} {entry.currency}</span>
+                <span>
+                  {entry.value} {entry.currency}
+                </span>
                 <span className="muted small">{entry.source}</span>
               </div>
             ))}
-            {!workspaceLoading && !valueHistory.length && <div className="muted mt8">{language === 'en' ? 'No value entries.' : 'Keine Werteinträge.'}</div>}
+            {!workspaceLoading && !valueHistory.length && (
+              <div className="muted mt8">
+                {language === 'en' ? 'No value entries.' : 'Keine Werteinträge.'}
+              </div>
+            )}
           </div>
           <div className="card tight">
-            <div className="title-strong">{language === 'en' ? 'Transactions' : 'Transaktionen'}</div>
-            {txs.map(tx => (
+            <div className="title-strong">
+              {language === 'en' ? 'Transactions' : 'Transaktionen'}
+            </div>
+            {txs.map((tx) => (
               <div key={tx.id} className="row between mt8">
                 <span>{tx.txType}</span>
                 <span>{tx.txDate}</span>
-                <span>{tx.amount ?? ''} {tx.currency}</span>
+                <span>
+                  {tx.amount ?? ''} {tx.currency}
+                </span>
               </div>
             ))}
-            {!txs.length && <div className="muted mt8">{language === 'en' ? 'No transactions.' : 'Keine Transaktionen.'}</div>}
+            {!txs.length && (
+              <div className="muted mt8">
+                {language === 'en' ? 'No transactions.' : 'Keine Transaktionen.'}
+              </div>
+            )}
           </div>
         </div>
       </section>
@@ -759,18 +971,32 @@ export default function ProductDetailPageView() {
       <section className="card" id="content">
         <div className="card-head">
           <h3>{language === 'en' ? 'Content references' : 'Content-Bezüge'}</h3>
-          <Link className="btn" to="/content">{language === 'en' ? 'Open in content module' : 'Im Content-Modul öffnen'}</Link>
+          <Link className="btn" to="/content">
+            {language === 'en' ? 'Open in content module' : 'Im Content-Modul öffnen'}
+          </Link>
         </div>
 
         <div className="row">
           <input
             className="grow"
             value={contentTitle}
-            onChange={event => setContentTitle(event.target.value)}
-            placeholder={language === 'en' ? 'New content reference title…' : 'Neuer Content-Bezug Titel…'}
+            onChange={(event) => setContentTitle(event.target.value)}
+            placeholder={
+              language === 'en' ? 'New content reference title…' : 'Neuer Content-Bezug Titel…'
+            }
           />
-          <button className="btn primary" onClick={createContentReference} disabled={!canManageContent || !contentTitle.trim() || contentSaving}>
-            {contentSaving ? (language === 'en' ? 'Creating…' : 'Erstellt…') : (language === 'en' ? 'Create reference' : 'Bezug anlegen')}
+          <button
+            className="btn primary"
+            onClick={createContentReference}
+            disabled={!canManageContent || !contentTitle.trim() || contentSaving}
+          >
+            {contentSaving
+              ? language === 'en'
+                ? 'Creating…'
+                : 'Erstellt…'
+              : language === 'en'
+                ? 'Create reference'
+                : 'Bezug anlegen'}
           </button>
         </div>
 
@@ -787,10 +1013,12 @@ export default function ProductDetailPageView() {
           <tbody>
             {workspaceLoading && !contentLinks.length && (
               <tr>
-                <td colSpan={5}><ListSkeleton rows={2} /></td>
+                <td colSpan={5}>
+                  <ListSkeleton rows={2} />
+                </td>
               </tr>
             )}
-            {contentLinks.map(item => (
+            {contentLinks.map((item) => (
               <tr key={item.id}>
                 <td>{item.title || (language === 'en' ? 'Untitled' : 'Ohne Titel')}</td>
                 <td>{item.status}</td>
@@ -801,7 +1029,11 @@ export default function ProductDetailPageView() {
             ))}
             {!workspaceLoading && !contentLinks.length && (
               <tr>
-                <td colSpan={5} className="muted">{language === 'en' ? 'No content references available.' : 'Keine Content-Bezüge vorhanden.'}</td>
+                <td colSpan={5} className="muted">
+                  {language === 'en'
+                    ? 'No content references available.'
+                    : 'Keine Content-Bezüge vorhanden.'}
+                </td>
               </tr>
             )}
           </tbody>
@@ -810,37 +1042,67 @@ export default function ProductDetailPageView() {
 
       <section className="card" id="audit">
         <div className="card-head">
-          <h3>{language === 'en' ? 'Audit timeline (product level)' : 'Audit-Timeline (Produktebene)'}</h3>
-          {canViewAudit ? <Link className="btn" to="/audit">{language === 'en' ? 'Full audit' : 'Vollständiges Audit'}</Link> : null}
+          <h3>
+            {language === 'en' ? 'Audit timeline (product level)' : 'Audit-Timeline (Produktebene)'}
+          </h3>
+          {canViewAudit ? (
+            <Link className="btn" to="/audit">
+              {language === 'en' ? 'Full audit' : 'Vollständiges Audit'}
+            </Link>
+          ) : null}
         </div>
 
-        {!canViewAudit && <div className="muted">{language === 'en' ? 'No permission for audit timeline.' : 'Keine Berechtigung für Audit-Timeline.'}</div>}
+        {!canViewAudit && (
+          <div className="muted">
+            {language === 'en'
+              ? 'No permission for audit timeline.'
+              : 'Keine Berechtigung für Audit-Timeline.'}
+          </div>
+        )}
 
         {canViewAudit && (
           <div className="stack">
             {workspaceLoading && !auditTimeline.length && <ListSkeleton rows={3} />}
-            {auditTimeline.map(item => (
+            {auditTimeline.map((item) => (
               <div className="card tight" key={item.id}>
                 <div className="row between">
                   <strong>{item.action}</strong>
                   <span className="muted small">{formatDate(item.created_at)}</span>
                 </div>
                 <div className="muted small">{item.description || '—'}</div>
-                <div className="muted small">{language === 'en' ? 'Actor' : 'Akteur'}: {item.actor_name || 'system'}</div>
+                <div className="muted small">
+                  {language === 'en' ? 'Actor' : 'Akteur'}: {item.actor_name || 'system'}
+                </div>
               </div>
             ))}
-            {!workspaceLoading && !auditTimeline.length && <div className="muted">{language === 'en' ? 'No product-related audit entries.' : 'Keine produktbezogenen Audit-Einträge.'}</div>}
+            {!workspaceLoading && !auditTimeline.length && (
+              <div className="muted">
+                {language === 'en'
+                  ? 'No product-related audit entries.'
+                  : 'Keine produktbezogenen Audit-Einträge.'}
+              </div>
+            )}
           </div>
         )}
       </section>
 
       <section className="card" id="email">
         <div className="card-head">
-          <h3>{language === 'en' ? 'Email references for this product' : 'E-Mail-Bezug zum Produkt'}</h3>
-          <Link className="btn" to="/email">{language === 'en' ? 'Open communication' : 'Communication öffnen'}</Link>
+          <h3>
+            {language === 'en' ? 'Email references for this product' : 'E-Mail-Bezug zum Produkt'}
+          </h3>
+          <Link className="btn" to="/email">
+            {language === 'en' ? 'Open communication' : 'Communication öffnen'}
+          </Link>
         </div>
 
-        {!canReadEmail && <div className="muted">{language === 'en' ? 'No permission for email references.' : 'Keine Berechtigung für E-Mail-Bezug.'}</div>}
+        {!canReadEmail && (
+          <div className="muted">
+            {language === 'en'
+              ? 'No permission for email references.'
+              : 'Keine Berechtigung für E-Mail-Bezug.'}
+          </div>
+        )}
 
         {canReadEmail && (
           <table className="status-table">
@@ -855,10 +1117,12 @@ export default function ProductDetailPageView() {
             <tbody>
               {workspaceLoading && !emailRefs.length && (
                 <tr>
-                  <td colSpan={3}><ListSkeleton rows={2} /></td>
+                  <td colSpan={3}>
+                    <ListSkeleton rows={2} />
+                  </td>
                 </tr>
               )}
-              {emailRefs.map(thread => (
+              {emailRefs.map((thread) => (
                 <tr key={thread.id}>
                   <td>{thread.subject || (language === 'en' ? 'No subject' : 'Ohne Betreff')}</td>
                   <td>{thread.detected_intent}</td>
@@ -867,7 +1131,11 @@ export default function ProductDetailPageView() {
               ))}
               {!workspaceLoading && !emailRefs.length && (
                 <tr>
-                  <td colSpan={3} className="muted">{language === 'en' ? 'No directly detected email references.' : 'Keine direkt erkannten E-Mail-Bezüge.'}</td>
+                  <td colSpan={3} className="muted">
+                    {language === 'en'
+                      ? 'No directly detected email references.'
+                      : 'Keine direkt erkannten E-Mail-Bezüge.'}
+                  </td>
                 </tr>
               )}
             </tbody>
@@ -877,7 +1145,10 @@ export default function ProductDetailPageView() {
 
       {jobResult?.candidates?.length ? (
         <div className="card">
-          <div className="muted small">{language === 'en' ? 'Last image search' : 'Letzte Bildsuche'}: {jobResult.query} • {jobResult.count} {language === 'en' ? 'candidates' : 'Kandidaten'}</div>
+          <div className="muted small">
+            {language === 'en' ? 'Last image search' : 'Letzte Bildsuche'}: {jobResult.query} •{' '}
+            {jobResult.count} {language === 'en' ? 'candidates' : 'Kandidaten'}
+          </div>
         </div>
       ) : null}
     </div>

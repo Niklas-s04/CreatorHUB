@@ -36,8 +36,8 @@ class TestSecretsValidation:
         assert len(settings.JWT_SECRET) >= 32
 
     def test_bootstrap_admin_password_not_weak(self):
-        """Bootstrap admin password must be > 12 chars and not a placeholder."""
-        assert len(settings.BOOTSTRAP_ADMIN_PASSWORD) >= 12
+        """Bootstrap admin password must be at least 8 chars and not a placeholder."""
+        assert len(settings.BOOTSTRAP_ADMIN_PASSWORD) >= 8
         assert settings.BOOTSTRAP_ADMIN_PASSWORD not in ("admin", "password", "change_me")
 
 

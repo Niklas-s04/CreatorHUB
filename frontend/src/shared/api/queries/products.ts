@@ -112,7 +112,8 @@ export function useProductAssetsQuery(id: string | undefined) {
     staleTime: 45_000,
     queryFn: async () => {
       const data = await apiFetch<unknown>(`/assets?owner_type=product&owner_id=${id}&include_pending=true`)
-      return parseProductAssetsDtoArray(data).map(toProductAssetVm).filter(asset => asset.id)
+      const items = isRecord(data) && Array.isArray(data.items) ? data.items : data
+      return parseProductAssetsDtoArray(items).map(toProductAssetVm).filter(asset => asset.id)
     },
   })
 }

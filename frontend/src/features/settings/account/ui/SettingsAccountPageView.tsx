@@ -70,7 +70,9 @@ export default function SettingsPage() {
   })
 
   useUnsavedChangesWarning(
-    changePasswordForm.formState.isDirty || mfaEnableForm.formState.isDirty || mfaDisableForm.formState.isDirty
+    changePasswordForm.formState.isDirty ||
+      mfaEnableForm.formState.isDirty ||
+      mfaDisableForm.formState.isDirty
   )
 
   async function load() {
@@ -79,7 +81,11 @@ export default function SettingsPage() {
       setErrKind('technical')
       setLoading(true)
       const d = await apiFetch<unknown>('/knowledge')
-      setDocs(parseKnowledgeDocsPage(d).map(toKnowledgeDocVm).filter(doc => Boolean(doc.id)))
+      setDocs(
+        parseKnowledgeDocsPage(d)
+          .map(toKnowledgeDocVm)
+          .filter((doc) => Boolean(doc.id))
+      )
       const [sessionRows, loginRows, mfa] = await Promise.all([
         getMySessions(),
         getLoginHistory(20),
@@ -96,7 +102,9 @@ export default function SettingsPage() {
     }
   }
 
-  useEffect(() => { load() }, [])
+  useEffect(() => {
+    load()
+  }, [])
 
   async function onChangePassword(values: ChangePasswordFormValues) {
     try {
@@ -246,220 +254,337 @@ export default function SettingsPage() {
 
       {!loading && !err && (
         <>
-      <div className="card section-gap">
-        <h3>{t('settings.appLanguageCardTitle')}</h3>
-        <div className="muted">{t('settings.appLanguageCardBody')}</div>
-        <div className="section-gap">
-          <label htmlFor="app-language-select" className="field-label">{t('settings.appLanguageLabel')}</label>
-          <select
-            id="app-language-select"
-            className="w100"
-            value={language}
-            onChange={event => setLanguage(event.target.value === 'en' ? 'en' : 'de')}
-          >
-            <option value="de">{t('settings.languageGerman')}</option>
-            <option value="en">{t('settings.languageEnglish')}</option>
-          </select>
-          <div className="muted small mt8">{t('settings.languageDescription')}</div>
-        </div>
-      </div>
+          <div className="card section-gap">
+            <h3>{t('settings.appLanguageCardTitle')}</h3>
+            <div className="muted">{t('settings.appLanguageCardBody')}</div>
+            <div className="section-gap">
+              <label htmlFor="app-language-select" className="field-label">
+                {t('settings.appLanguageLabel')}
+              </label>
+              <select
+                id="app-language-select"
+                className="w100"
+                value={language}
+                onChange={(event) => setLanguage(event.target.value === 'en' ? 'en' : 'de')}
+              >
+                <option value="de">{t('settings.languageGerman')}</option>
+                <option value="en">{t('settings.languageEnglish')}</option>
+              </select>
+              <div className="muted small mt8">{t('settings.languageDescription')}</div>
+            </div>
+          </div>
 
-      <div className="card section-gap">
-        <h3>{t('settings.accountSecurity')}</h3>
-        <div className="muted">MFA: {mfaEnabled ? t('settings.mfaActive') : t('settings.mfaInactive')}</div>
+          <div className="card section-gap">
+            <h3>{t('settings.accountSecurity')}</h3>
+            <div className="muted">
+              MFA: {mfaEnabled ? t('settings.mfaActive') : t('settings.mfaInactive')}
+            </div>
 
-        <div className="section-gap">
-          <label htmlFor="settings-current-password" className="field-label">{t('settings.currentPassword')}</label>
-          <input
-            id="settings-current-password"
-            className="full-width"
-            type="password"
-            {...changePasswordForm.register('currentPassword')}
-            aria-invalid={Boolean(changePasswordForm.formState.errors.currentPassword?.message)}
-            aria-describedby={changePasswordForm.formState.errors.currentPassword?.message ? 'settings-current-password-error' : undefined}
-          />
-          {changePasswordForm.formState.errors.currentPassword?.message && (
-            <div id="settings-current-password-error" className="error mt8" role="alert">{changePasswordForm.formState.errors.currentPassword.message}</div>
-          )}
-          <label htmlFor="settings-new-password" className="field-label mt8">{t('settings.newPassword')}</label>
-          <input
-            id="settings-new-password"
-            className="full-width"
-            type="password"
-            {...changePasswordForm.register('newPassword')}
-            aria-invalid={Boolean(changePasswordForm.formState.errors.newPassword?.message)}
-            aria-describedby={changePasswordForm.formState.errors.newPassword?.message ? 'settings-new-password-error' : undefined}
-          />
-          {changePasswordForm.formState.errors.newPassword?.message && (
-            <div id="settings-new-password-error" className="error mt8" role="alert">{changePasswordForm.formState.errors.newPassword.message}</div>
-          )}
-          <button
-            className="btn mt8"
-            onClick={changePasswordForm.handleSubmit(onChangePassword)}
-            disabled={!changePasswordForm.formState.isDirty || !changePasswordForm.formState.isValid}
-          >
-            {language === 'en' ? 'Change password' : 'Passwort ändern'}
-          </button>
-        </div>
-
-        <div className="section-gap">
-          <div className="field-label">{language === 'en' ? 'Set up MFA' : 'MFA einrichten'}</div>
-          <button className="btn" onClick={onProvisionMfa}>{language === 'en' ? 'Create TOTP secret' : 'TOTP-Secret erzeugen'}</button>
-          {!!mfaSecret && <div className="muted mt8">{language === 'en' ? 'Secret' : 'Secret'}: {mfaSecret}</div>}
-          {!!mfaSecret && (
-            <>
-              <label htmlFor="settings-mfa-enable-code" className="field-label mt8">{t('settings.totpCode')}</label>
+            <div className="section-gap">
+              <label htmlFor="settings-current-password" className="field-label">
+                {t('settings.currentPassword')}
+              </label>
               <input
-                id="settings-mfa-enable-code"
+                id="settings-current-password"
                 className="full-width"
-                {...mfaEnableForm.register('code')}
-                aria-invalid={Boolean(mfaEnableForm.formState.errors.code?.message)}
-                aria-describedby={mfaEnableForm.formState.errors.code?.message ? 'settings-mfa-enable-code-error' : undefined}
+                type="password"
+                {...changePasswordForm.register('currentPassword')}
+                aria-invalid={Boolean(changePasswordForm.formState.errors.currentPassword?.message)}
+                aria-describedby={
+                  changePasswordForm.formState.errors.currentPassword?.message
+                    ? 'settings-current-password-error'
+                    : undefined
+                }
               />
-              {mfaEnableForm.formState.errors.code?.message && (
-                <div id="settings-mfa-enable-code-error" className="error mt8" role="alert">{mfaEnableForm.formState.errors.code.message}</div>
+              {changePasswordForm.formState.errors.currentPassword?.message && (
+                <div id="settings-current-password-error" className="error mt8" role="alert">
+                  {changePasswordForm.formState.errors.currentPassword.message}
+                </div>
+              )}
+              <label htmlFor="settings-new-password" className="field-label mt8">
+                {t('settings.newPassword')}
+              </label>
+              <input
+                id="settings-new-password"
+                className="full-width"
+                type="password"
+                {...changePasswordForm.register('newPassword')}
+                aria-invalid={Boolean(changePasswordForm.formState.errors.newPassword?.message)}
+                aria-describedby={
+                  changePasswordForm.formState.errors.newPassword?.message
+                    ? 'settings-new-password-error'
+                    : undefined
+                }
+              />
+              {changePasswordForm.formState.errors.newPassword?.message && (
+                <div id="settings-new-password-error" className="error mt8" role="alert">
+                  {changePasswordForm.formState.errors.newPassword.message}
+                </div>
               )}
               <button
                 className="btn mt8"
-                onClick={mfaEnableForm.handleSubmit(onEnableMfa)}
-                disabled={!mfaSecret || !mfaEnableForm.formState.isDirty || !mfaEnableForm.formState.isValid}
+                onClick={changePasswordForm.handleSubmit(onChangePassword)}
+                disabled={
+                  !changePasswordForm.formState.isDirty || !changePasswordForm.formState.isValid
+                }
               >
-                {language === 'en' ? 'Enable MFA' : 'MFA aktivieren'}
+                {language === 'en' ? 'Change password' : 'Passwort ändern'}
               </button>
-            </>
-          )}
-          {!!recoveryCodes.length && <div className="muted mt8">{language === 'en' ? 'Recovery codes' : 'Recovery-Codes'}: {recoveryCodes.join(', ')}</div>}
-        </div>
+            </div>
 
-        {mfaEnabled && (
-          <div className="section-gap">
-            <div className="field-label">{language === 'en' ? 'Disable MFA' : 'MFA deaktivieren'}</div>
-            <label htmlFor="settings-mfa-disable-password" className="sr-only">{t('settings.mfaPassword')}</label>
+            <div className="section-gap">
+              <div className="field-label">
+                {language === 'en' ? 'Set up MFA' : 'MFA einrichten'}
+              </div>
+              <button className="btn" onClick={onProvisionMfa}>
+                {language === 'en' ? 'Create TOTP secret' : 'TOTP-Secret erzeugen'}
+              </button>
+              {!!mfaSecret && (
+                <div className="muted mt8">
+                  {language === 'en' ? 'Secret' : 'Secret'}: {mfaSecret}
+                </div>
+              )}
+              {!!mfaSecret && (
+                <>
+                  <label htmlFor="settings-mfa-enable-code" className="field-label mt8">
+                    {t('settings.totpCode')}
+                  </label>
+                  <input
+                    id="settings-mfa-enable-code"
+                    className="full-width"
+                    {...mfaEnableForm.register('code')}
+                    aria-invalid={Boolean(mfaEnableForm.formState.errors.code?.message)}
+                    aria-describedby={
+                      mfaEnableForm.formState.errors.code?.message
+                        ? 'settings-mfa-enable-code-error'
+                        : undefined
+                    }
+                  />
+                  {mfaEnableForm.formState.errors.code?.message && (
+                    <div id="settings-mfa-enable-code-error" className="error mt8" role="alert">
+                      {mfaEnableForm.formState.errors.code.message}
+                    </div>
+                  )}
+                  <button
+                    className="btn mt8"
+                    onClick={mfaEnableForm.handleSubmit(onEnableMfa)}
+                    disabled={!mfaSecret}
+                  >
+                    {language === 'en' ? 'Enable MFA' : 'MFA aktivieren'}
+                  </button>
+                </>
+              )}
+              {!!recoveryCodes.length && (
+                <div className="muted mt8">
+                  {language === 'en' ? 'Recovery codes' : 'Recovery-Codes'}:{' '}
+                  {recoveryCodes.join(', ')}
+                </div>
+              )}
+            </div>
+
+            {mfaEnabled && (
+              <div className="section-gap">
+                <div className="field-label">
+                  {language === 'en' ? 'Disable MFA' : 'MFA deaktivieren'}
+                </div>
+                <label htmlFor="settings-mfa-disable-password" className="sr-only">
+                  {t('settings.mfaPassword')}
+                </label>
+                <input
+                  id="settings-mfa-disable-password"
+                  className="full-width"
+                  type="password"
+                  placeholder={language === 'en' ? 'Password' : 'Passwort'}
+                  {...mfaDisableForm.register('password')}
+                  aria-invalid={Boolean(mfaDisableForm.formState.errors.password?.message)}
+                  aria-describedby={
+                    mfaDisableForm.formState.errors.password?.message
+                      ? 'settings-mfa-disable-password-error'
+                      : undefined
+                  }
+                />
+                {mfaDisableForm.formState.errors.password?.message && (
+                  <div id="settings-mfa-disable-password-error" className="error mt8" role="alert">
+                    {mfaDisableForm.formState.errors.password.message}
+                  </div>
+                )}
+                <label htmlFor="settings-mfa-disable-code" className="sr-only">
+                  {t('settings.mfaDisableCode')}
+                </label>
+                <input
+                  id="settings-mfa-disable-code"
+                  className="full-width mt8"
+                  placeholder={
+                    language === 'en' ? 'TOTP or recovery code' : 'TOTP oder Recovery-Code'
+                  }
+                  {...mfaDisableForm.register('code')}
+                  aria-invalid={Boolean(mfaDisableForm.formState.errors.code?.message)}
+                  aria-describedby={
+                    mfaDisableForm.formState.errors.code?.message
+                      ? 'settings-mfa-disable-code-error'
+                      : undefined
+                  }
+                />
+                {mfaDisableForm.formState.errors.code?.message && (
+                  <div id="settings-mfa-disable-code-error" className="error mt8" role="alert">
+                    {mfaDisableForm.formState.errors.code.message}
+                  </div>
+                )}
+                <button
+                  className="btn danger mt8"
+                  onClick={mfaDisableForm.handleSubmit(onDisableMfa)}
+                  disabled={!mfaDisableForm.formState.isDirty || !mfaDisableForm.formState.isValid}
+                >
+                  {language === 'en' ? 'Disable MFA' : 'MFA deaktivieren'}
+                </button>
+              </div>
+            )}
+          </div>
+
+          <div className="card section-gap">
+            <h3>{language === 'en' ? 'Active sessions' : 'Aktive Sessions'}</h3>
+            {!sessions.length && (
+              <div className="muted">{language === 'en' ? 'No sessions.' : 'Keine Sessions.'}</div>
+            )}
+            {!!sessions.length && (
+              <table>
+                <caption className="sr-only">
+                  {language === 'en' ? 'List of active sessions' : 'Liste aktiver Sitzungen'}
+                </caption>
+                <thead>
+                  <tr>
+                    <th scope="col">{language === 'en' ? 'Device' : 'Gerät'}</th>
+                    <th scope="col">IP</th>
+                    <th scope="col">{language === 'en' ? 'Last activity' : 'Letzte Aktivität'}</th>
+                    <th scope="col">{language === 'en' ? 'Expires' : 'Ablauf'}</th>
+                    <th scope="col">{language === 'en' ? 'Action' : 'Aktion'}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sessions.map((s) => (
+                    <tr key={s.id}>
+                      <td>
+                        {s.device_label || (language === 'en' ? 'Unknown' : 'Unbekannt')}
+                        {s.is_current ? (language === 'en' ? ' (current)' : ' (aktuell)') : ''}
+                      </td>
+                      <td>{s.ip_address || '-'}</td>
+                      <td>{new Date(s.last_activity_at).toLocaleString()}</td>
+                      <td>{new Date(s.expires_at).toLocaleString()}</td>
+                      <td>
+                        {!s.is_current && (
+                          <button
+                            className="btn danger"
+                            onClick={() => onRevokeSession(s.id)}
+                            aria-label={
+                              language === 'en'
+                                ? `End session on ${s.device_label || 'Unknown'}`
+                                : `Session auf ${s.device_label || 'Unbekannt'} beenden`
+                            }
+                          >
+                            {language === 'en' ? 'End' : 'Beenden'}
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+
+          <div className="card section-gap">
+            <h3>{language === 'en' ? 'Login history' : 'Anmeldehistorie'}</h3>
+            {!history.length && (
+              <div className="muted">{language === 'en' ? 'No entries.' : 'Keine Einträge.'}</div>
+            )}
+            {!!history.length && (
+              <table>
+                <caption className="sr-only">
+                  {language === 'en' ? 'Login history' : 'Anmeldehistorie'}
+                </caption>
+                <thead>
+                  <tr>
+                    <th scope="col">{language === 'en' ? 'Time' : 'Zeit'}</th>
+                    <th scope="col">IP</th>
+                    <th scope="col">Status</th>
+                    <th scope="col">{language === 'en' ? 'Note' : 'Hinweis'}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {history.map((h) => (
+                    <tr key={h.id}>
+                      <td>{new Date(h.occurred_at).toLocaleString()}</td>
+                      <td>{h.ip_address || '-'}</td>
+                      <td>
+                        {h.success
+                          ? language === 'en'
+                            ? 'Success'
+                            : 'Erfolg'
+                          : language === 'en'
+                            ? 'Failure'
+                            : 'Fehler'}
+                        {h.suspicious
+                          ? language === 'en'
+                            ? ' (suspicious)'
+                            : ' (verdächtig)'
+                          : ''}
+                      </td>
+                      <td>{h.reason || '-'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+
+          <div className="card section-gap">
+            <h3>{language === 'en' ? 'Delete account' : 'Account löschen'}</h3>
+            <div className="muted">
+              {language === 'en'
+                ? 'Deletion becomes permanent after 30 days. All active sessions end immediately.'
+                : 'Die Löschung wird nach 30 Tagen endgültig ausgeführt. Alle aktiven Sessions werden sofort beendet.'}
+            </div>
+            <label htmlFor="settings-delete-account-confirm" className="field-label mt8">
+              {t('settings.confirmation')}
+            </label>
             <input
-              id="settings-mfa-disable-password"
+              id="settings-delete-account-confirm"
               className="full-width"
-              type="password"
-              placeholder={language === 'en' ? 'Password' : 'Passwort'}
-              {...mfaDisableForm.register('password')}
-              aria-invalid={Boolean(mfaDisableForm.formState.errors.password?.message)}
-              aria-describedby={mfaDisableForm.formState.errors.password?.message ? 'settings-mfa-disable-password-error' : undefined}
+              value={deleteConfirmation}
+              onChange={(event) => setDeleteConfirmation(event.target.value)}
+              placeholder={language === 'en' ? 'DELETE' : 'LÖSCHEN'}
+              autoComplete="off"
+              spellCheck={false}
             />
-            {mfaDisableForm.formState.errors.password?.message && (
-              <div id="settings-mfa-disable-password-error" className="error mt8" role="alert">{mfaDisableForm.formState.errors.password.message}</div>
-            )}
-            <label htmlFor="settings-mfa-disable-code" className="sr-only">{t('settings.mfaDisableCode')}</label>
-            <input
-              id="settings-mfa-disable-code"
-              className="full-width mt8"
-              placeholder={language === 'en' ? 'TOTP or recovery code' : 'TOTP oder Recovery-Code'}
-              {...mfaDisableForm.register('code')}
-              aria-invalid={Boolean(mfaDisableForm.formState.errors.code?.message)}
-              aria-describedby={mfaDisableForm.formState.errors.code?.message ? 'settings-mfa-disable-code-error' : undefined}
-            />
-            {mfaDisableForm.formState.errors.code?.message && (
-              <div id="settings-mfa-disable-code-error" className="error mt8" role="alert">{mfaDisableForm.formState.errors.code.message}</div>
-            )}
             <button
               className="btn danger mt8"
-              onClick={mfaDisableForm.handleSubmit(onDisableMfa)}
-              disabled={!mfaDisableForm.formState.isDirty || !mfaDisableForm.formState.isValid}
+              onClick={() => {
+                void onDeleteAccount()
+              }}
+              disabled={
+                deleteConfirmation.trim().toUpperCase() !==
+                (language === 'en' ? 'DELETE' : 'LÖSCHEN')
+              }
             >
-              {language === 'en' ? 'Disable MFA' : 'MFA deaktivieren'}
+              {language === 'en' ? 'Schedule account deletion' : 'Account zur Löschung anmelden'}
             </button>
           </div>
-        )}
-      </div>
 
-      <div className="card section-gap">
-        <h3>{language === 'en' ? 'Active sessions' : 'Aktive Sessions'}</h3>
-        {!sessions.length && <div className="muted">{language === 'en' ? 'No sessions.' : 'Keine Sessions.'}</div>}
-        {!!sessions.length && (
-          <table>
-            <caption className="sr-only">{language === 'en' ? 'List of active sessions' : 'Liste aktiver Sitzungen'}</caption>
-            <thead>
-              <tr>
-                <th scope="col">{language === 'en' ? 'Device' : 'Gerät'}</th>
-                <th scope="col">IP</th>
-                <th scope="col">{language === 'en' ? 'Last activity' : 'Letzte Aktivität'}</th>
-                <th scope="col">{language === 'en' ? 'Expires' : 'Ablauf'}</th>
-                <th scope="col">{language === 'en' ? 'Action' : 'Aktion'}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {sessions.map(s => (
-                <tr key={s.id}>
-                  <td>{s.device_label || (language === 'en' ? 'Unknown' : 'Unbekannt')}{s.is_current ? (language === 'en' ? ' (current)' : ' (aktuell)') : ''}</td>
-                  <td>{s.ip_address || '-'}</td>
-                  <td>{new Date(s.last_activity_at).toLocaleString()}</td>
-                  <td>{new Date(s.expires_at).toLocaleString()}</td>
-                  <td>{!s.is_current && <button className="btn danger" onClick={() => onRevokeSession(s.id)} aria-label={language === 'en' ? `End session on ${s.device_label || 'Unknown'}` : `Session auf ${s.device_label || 'Unbekannt'} beenden`}>{language === 'en' ? 'End' : 'Beenden'}</button>}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
-
-      <div className="card section-gap">
-        <h3>{language === 'en' ? 'Login history' : 'Anmeldehistorie'}</h3>
-        {!history.length && <div className="muted">{language === 'en' ? 'No entries.' : 'Keine Einträge.'}</div>}
-        {!!history.length && (
-          <table>
-            <caption className="sr-only">{language === 'en' ? 'Login history' : 'Anmeldehistorie'}</caption>
-            <thead>
-              <tr>
-                <th scope="col">{language === 'en' ? 'Time' : 'Zeit'}</th>
-                <th scope="col">IP</th>
-                <th scope="col">Status</th>
-                <th scope="col">{language === 'en' ? 'Note' : 'Hinweis'}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {history.map(h => (
-                <tr key={h.id}>
-                  <td>{new Date(h.occurred_at).toLocaleString()}</td>
-                  <td>{h.ip_address || '-'}</td>
-                  <td>{h.success ? (language === 'en' ? 'Success' : 'Erfolg') : (language === 'en' ? 'Failure' : 'Fehler')}{h.suspicious ? (language === 'en' ? ' (suspicious)' : ' (verdächtig)') : ''}</td>
-                  <td>{h.reason || '-'}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
-
-      <div className="card section-gap">
-        <h3>{language === 'en' ? 'Delete account' : 'Account löschen'}</h3>
-        <div className="muted">
-          {language === 'en'
-            ? 'Deletion becomes permanent after 30 days. All active sessions end immediately.'
-            : 'Die Löschung wird nach 30 Tagen endgültig ausgeführt. Alle aktiven Sessions werden sofort beendet.'}
-        </div>
-        <label htmlFor="settings-delete-account-confirm" className="field-label mt8">{t('settings.confirmation')}</label>
-        <input
-          id="settings-delete-account-confirm"
-          className="full-width"
-          value={deleteConfirmation}
-          onChange={event => setDeleteConfirmation(event.target.value)}
-          placeholder={language === 'en' ? 'DELETE' : 'LÖSCHEN'}
-          autoComplete="off"
-          spellCheck={false}
-        />
-        <button
-          className="btn danger mt8"
-          onClick={() => {
-            void onDeleteAccount()
-          }}
-          disabled={deleteConfirmation.trim().toUpperCase() !== (language === 'en' ? 'DELETE' : 'LÖSCHEN')}
-        >
-          {language === 'en' ? 'Schedule account deletion' : 'Account zur Löschung anmelden'}
-        </button>
-      </div>
-
-      <div className="section-gap">
-        {docs.map(d => <DocEditor key={d.id} doc={d} onSave={save} />)}
-        {!docs.length && <EmptyState title={language === 'en' ? 'No documents' : 'Keine Dokumente'} message={language === 'en' ? 'There are currently no knowledge documents.' : 'Es sind aktuell keine Wissensdokumente vorhanden.'} />}
-      </div>
+          <div className="section-gap">
+            {docs.map((d) => (
+              <DocEditor key={d.id} doc={d} onSave={save} />
+            ))}
+            {!docs.length && (
+              <EmptyState
+                title={language === 'en' ? 'No documents' : 'Keine Dokumente'}
+                message={
+                  language === 'en'
+                    ? 'There are currently no knowledge documents.'
+                    : 'Es sind aktuell keine Wissensdokumente vorhanden.'
+                }
+              />
+            )}
+          </div>
         </>
       )}
     </div>
@@ -486,7 +611,8 @@ function DocEditor({ doc, onSave }: DocEditorProps) {
       sourceName: doc.sourceName,
       sourceUrl: doc.sourceUrl,
       sourceType: (doc.sourceType as KnowledgeDocFormValues['sourceType']) || 'internal',
-      sourceReviewStatus: (doc.sourceReviewStatus as KnowledgeDocFormValues['sourceReviewStatus']) || 'pending',
+      sourceReviewStatus:
+        (doc.sourceReviewStatus as KnowledgeDocFormValues['sourceReviewStatus']) || 'pending',
       sourceReviewNote: doc.sourceReviewNote,
       originSummary: doc.originSummary,
       trustLevel: (doc.trustLevel as KnowledgeDocFormValues['trustLevel']) || 'medium',
@@ -504,7 +630,8 @@ function DocEditor({ doc, onSave }: DocEditorProps) {
       sourceName: doc.sourceName,
       sourceUrl: doc.sourceUrl,
       sourceType: (doc.sourceType as KnowledgeDocFormValues['sourceType']) || 'internal',
-      sourceReviewStatus: (doc.sourceReviewStatus as KnowledgeDocFormValues['sourceReviewStatus']) || 'pending',
+      sourceReviewStatus:
+        (doc.sourceReviewStatus as KnowledgeDocFormValues['sourceReviewStatus']) || 'pending',
       sourceReviewNote: doc.sourceReviewNote,
       originSummary: doc.originSummary,
       trustLevel: (doc.trustLevel as KnowledgeDocFormValues['trustLevel']) || 'medium',
@@ -552,14 +679,19 @@ function DocEditor({ doc, onSave }: DocEditorProps) {
           <div className="pill">{doc.type}</div>
           <div className="title-strong mt8">{doc.title}</div>
           <div className="muted mt8">
-            Version {doc.currentVersion} • Quelle-Review: {doc.sourceReviewStatus} • Vertrauen: {doc.trustLevel}
+            Version {doc.currentVersion} • Quelle-Review: {doc.sourceReviewStatus} • Vertrauen:{' '}
+            {doc.trustLevel}
             {doc.isOutdated ? ' • Veraltet' : ''}
           </div>
         </div>
-        <button className="btn" onClick={handleSubmit(submit)} disabled={!isDirty || !isValid}>Speichern</button>
+        <button className="btn" onClick={handleSubmit(submit)} disabled={!isDirty || !isValid}>
+          Speichern
+        </button>
       </div>
       <div className="section-gap">
-        <label htmlFor={`knowledge-title-${doc.id}`} className="field-label">Titel</label>
+        <label htmlFor={`knowledge-title-${doc.id}`} className="field-label">
+          Titel
+        </label>
         <input
           id={`knowledge-title-${doc.id}`}
           className="full-width"
@@ -567,77 +699,141 @@ function DocEditor({ doc, onSave }: DocEditorProps) {
           aria-invalid={Boolean(errors.title?.message)}
           aria-describedby={errors.title?.message ? `knowledge-title-${doc.id}-error` : undefined}
         />
-        {errors.title?.message && <div id={`knowledge-title-${doc.id}-error`} className="error mt8" role="alert">{errors.title.message}</div>}
+        {errors.title?.message && (
+          <div id={`knowledge-title-${doc.id}-error`} className="error mt8" role="alert">
+            {errors.title.message}
+          </div>
+        )}
       </div>
       <div className="section-gap">
-        <label htmlFor={`knowledge-content-${doc.id}`} className="field-label">Inhalt</label>
+        <label htmlFor={`knowledge-content-${doc.id}`} className="field-label">
+          Inhalt
+        </label>
         <textarea
           id={`knowledge-content-${doc.id}`}
           className="full-width"
           {...register('content')}
           rows={10}
           aria-invalid={Boolean(errors.content?.message)}
-          aria-describedby={errors.content?.message ? `knowledge-content-${doc.id}-error` : undefined}
+          aria-describedby={
+            errors.content?.message ? `knowledge-content-${doc.id}-error` : undefined
+          }
         />
-        {errors.content?.message && <div id={`knowledge-content-${doc.id}-error`} className="error mt8" role="alert">{errors.content.message}</div>}
+        {errors.content?.message && (
+          <div id={`knowledge-content-${doc.id}-error`} className="error mt8" role="alert">
+            {errors.content.message}
+          </div>
+        )}
       </div>
 
       <div className="section-gap">
         <h4>Quellenverwaltung</h4>
-        <label htmlFor={`knowledge-source-name-${doc.id}`} className="field-label">Quelle</label>
-        <input id={`knowledge-source-name-${doc.id}`} className="full-width" {...register('sourceName')} />
-        <label htmlFor={`knowledge-source-url-${doc.id}`} className="field-label mt8">Quellen-URL</label>
-        <input id={`knowledge-source-url-${doc.id}`} className="full-width" {...register('sourceUrl')} />
-        <label htmlFor={`knowledge-source-type-${doc.id}`} className="field-label mt8">Herkunftstyp</label>
-        <select id={`knowledge-source-type-${doc.id}`} className="full-width" {...register('sourceType')}>
+        <label htmlFor={`knowledge-source-name-${doc.id}`} className="field-label">
+          Quelle
+        </label>
+        <input
+          id={`knowledge-source-name-${doc.id}`}
+          className="full-width"
+          {...register('sourceName')}
+        />
+        <label htmlFor={`knowledge-source-url-${doc.id}`} className="field-label mt8">
+          Quellen-URL
+        </label>
+        <input
+          id={`knowledge-source-url-${doc.id}`}
+          className="full-width"
+          {...register('sourceUrl')}
+        />
+        <label htmlFor={`knowledge-source-type-${doc.id}`} className="field-label mt8">
+          Herkunftstyp
+        </label>
+        <select
+          id={`knowledge-source-type-${doc.id}`}
+          className="full-width"
+          {...register('sourceType')}
+        >
           <option value="internal">intern</option>
           <option value="external">extern</option>
           <option value="customer">kundenseitig</option>
           <option value="legal">rechtlich</option>
           <option value="other">sonstiges</option>
         </select>
-        <label htmlFor={`knowledge-source-review-${doc.id}`} className="field-label mt8">Review-Status Quelle</label>
-        <select id={`knowledge-source-review-${doc.id}`} className="full-width" {...register('sourceReviewStatus')}>
+        <label htmlFor={`knowledge-source-review-${doc.id}`} className="field-label mt8">
+          Review-Status Quelle
+        </label>
+        <select
+          id={`knowledge-source-review-${doc.id}`}
+          className="full-width"
+          {...register('sourceReviewStatus')}
+        >
           <option value="pending">offen</option>
           <option value="approved">freigegeben</option>
           <option value="rejected">abgelehnt</option>
           <option value="needs_update">Update nötig</option>
         </select>
-        <label htmlFor={`knowledge-trust-${doc.id}`} className="field-label mt8">Vertrauensgrad</label>
+        <label htmlFor={`knowledge-trust-${doc.id}`} className="field-label mt8">
+          Vertrauensgrad
+        </label>
         <select id={`knowledge-trust-${doc.id}`} className="full-width" {...register('trustLevel')}>
           <option value="low">niedrig</option>
           <option value="medium">mittel</option>
           <option value="high">hoch</option>
           <option value="verified">verifiziert</option>
         </select>
-        <label htmlFor={`knowledge-origin-summary-${doc.id}`} className="field-label mt8">Herkunftszusammenfassung</label>
-        <textarea id={`knowledge-origin-summary-${doc.id}`} className="full-width" rows={3} {...register('originSummary')} />
-        <label htmlFor={`knowledge-source-note-${doc.id}`} className="field-label mt8">Review-Notiz zur Quelle</label>
-        <textarea id={`knowledge-source-note-${doc.id}`} className="full-width" rows={3} {...register('sourceReviewNote')} />
+        <label htmlFor={`knowledge-origin-summary-${doc.id}`} className="field-label mt8">
+          Herkunftszusammenfassung
+        </label>
+        <textarea
+          id={`knowledge-origin-summary-${doc.id}`}
+          className="full-width"
+          rows={3}
+          {...register('originSummary')}
+        />
+        <label htmlFor={`knowledge-source-note-${doc.id}`} className="field-label mt8">
+          Review-Notiz zur Quelle
+        </label>
+        <textarea
+          id={`knowledge-source-note-${doc.id}`}
+          className="full-width"
+          rows={3}
+          {...register('sourceReviewNote')}
+        />
       </div>
 
       <div className="section-gap">
         <h4>Veralterung</h4>
-        <label className="field-label" htmlFor={`knowledge-outdated-${doc.id}`}>Als veraltet markieren</label>
+        <label className="field-label" htmlFor={`knowledge-outdated-${doc.id}`}>
+          Als veraltet markieren
+        </label>
         <input id={`knowledge-outdated-${doc.id}`} type="checkbox" {...register('isOutdated')} />
-        <label htmlFor={`knowledge-outdated-reason-${doc.id}`} className="field-label mt8">Grund</label>
+        <label htmlFor={`knowledge-outdated-reason-${doc.id}`} className="field-label mt8">
+          Grund
+        </label>
         <textarea
           id={`knowledge-outdated-reason-${doc.id}`}
           className="full-width"
           rows={3}
           {...register('outdatedReason')}
           aria-invalid={Boolean(errors.outdatedReason?.message)}
-          aria-describedby={errors.outdatedReason?.message ? `knowledge-outdated-reason-${doc.id}-error` : undefined}
+          aria-describedby={
+            errors.outdatedReason?.message ? `knowledge-outdated-reason-${doc.id}-error` : undefined
+          }
         />
         {errors.outdatedReason?.message && (
-          <div id={`knowledge-outdated-reason-${doc.id}-error`} className="error mt8" role="alert">{errors.outdatedReason.message}</div>
+          <div id={`knowledge-outdated-reason-${doc.id}-error`} className="error mt8" role="alert">
+            {errors.outdatedReason.message}
+          </div>
         )}
-        {doc.outdatedAt && <div className="muted mt8">Seit: {new Date(doc.outdatedAt).toLocaleString()}</div>}
+        {doc.outdatedAt && (
+          <div className="muted mt8">Seit: {new Date(doc.outdatedAt).toLocaleString()}</div>
+        )}
       </div>
 
       <div className="section-gap">
         <h4>Versionshistorie</h4>
-        {!doc.versions.length && <div className="muted">Noch keine Versionshistorie vorhanden.</div>}
+        {!doc.versions.length && (
+          <div className="muted">Noch keine Versionshistorie vorhanden.</div>
+        )}
         {!!doc.versions.length && (
           <table>
             <thead>
@@ -649,7 +845,7 @@ function DocEditor({ doc, onSave }: DocEditorProps) {
               </tr>
             </thead>
             <tbody>
-              {doc.versions.map(version => (
+              {doc.versions.map((version) => (
                 <tr key={version.id}>
                   <td>{version.versionNumber}</td>
                   <td>{version.createdAt ? new Date(version.createdAt).toLocaleString() : '-'}</td>
@@ -675,7 +871,7 @@ function DocEditor({ doc, onSave }: DocEditorProps) {
               </tr>
             </thead>
             <tbody>
-              {doc.draftLinks.map(link => (
+              {doc.draftLinks.map((link) => (
                 <tr key={link.id}>
                   <td>{link.emailDraftId}</td>
                   <td>{link.linkedAt ? new Date(link.linkedAt).toLocaleString() : '-'}</td>

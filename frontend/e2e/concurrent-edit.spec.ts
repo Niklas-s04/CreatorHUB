@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test'
 
-import { loginAsAdmin, logout, uniqueSuffix } from './helpers'
+import { csrfHeaders, loginAsAdmin, logout, uniqueSuffix } from './helpers'
 
 test.describe('Concurrent edit E2E', () => {
   test('last write is persisted when two sessions edit the same product notes', async ({
@@ -11,6 +11,7 @@ test.describe('Concurrent edit E2E', () => {
 
     await loginAsAdmin(page)
     const createResponse = await page.request.post('/api/products', {
+      headers: await csrfHeaders(page),
       data: { title: productTitle },
     })
     expect(createResponse.status()).toBe(200)
@@ -24,19 +25,19 @@ test.describe('Concurrent edit E2E', () => {
     await page.goto(`/products/${productId}`)
     await editorPage.goto(`/products/${productId}`)
 
-    const notesA = page.locator('.product-main textarea')
-    const notesB = editorPage.locator('.product-main textarea')
+    const notesA = page.getByLabel('Notizen')
+    const notesB = editorPage.getByLabel('Notizen')
 
     await notesA.fill('Version A')
-    await page.getByRole('button', { name: 'Speichern' }).first().click()
+    await page.getByRole('button', { name: 'Stammdaten speichern' }).click()
     await expect(notesA).toHaveValue('Version A')
 
     await notesB.fill('Version B')
-    await editorPage.getByRole('button', { name: 'Speichern' }).first().click()
+    await editorPage.getByRole('button', { name: 'Stammdaten speichern' }).click()
     await expect(notesB).toHaveValue('Version B')
 
     await page.reload()
-    await expect(page.locator('.product-main textarea')).toHaveValue('Version B')
+    await expect(page.getByLabel('Notizen')).toHaveValue('Version B')
 
     await editorContext.close()
     await logout(page)

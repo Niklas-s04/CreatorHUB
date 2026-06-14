@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { apiFetch } from '../../../../api'
 import { useAuthz } from '../../../../shared/hooks/useAuthz'
@@ -179,7 +179,13 @@ type CreatorAiSettingsPreview = {
 
 type AnswersState = Record<number, string>
 
-type ThreadsResponse = EmailThreadSummary[]
+type ThreadsResponse = EmailThreadSummary[] | {
+  items?: EmailThreadSummary[]
+}
+
+function getThreadsItems(input: ThreadsResponse): EmailThreadSummary[] {
+  return Array.isArray(input) ? input : input.items ?? []
+}
 
 const toneOptions: { value: EmailTone; label: string }[] = [
   { value: 'short', label: 'short' },
@@ -247,8 +253,9 @@ export default function EmailPage() {
   const [raw, setRaw] = useState('')
   const [tone, setTone] = useState<EmailTone>('neutral')
 
-  const [threads, setThreads] = useState<ThreadsResponse>([])
+  const [threads, setThreads] = useState<EmailThreadSummary[]>([])
   const [threadsLoading, setThreadsLoading] = useState(false)
+  const threadsRequestRef = useRef(0)
   const [threadSearchInput, setThreadSearchInput] = useState('')
   const [threadsPageSize, setThreadsPageSize] = useState(20)
   const [threadsOffset, setThreadsOffset] = useState(0)
@@ -257,6 +264,7 @@ export default function EmailPage() {
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null)
   const [threadDetail, setThreadDetail] = useState<EmailThreadDetail | null>(null)
   const [threadLoading, setThreadLoading] = useState(false)
+  const threadDetailRequestRef = useRef(0)
   const [activeDraftId, setActiveDraftId] = useState<string | null>(null)
   const [compareDraftId, setCompareDraftId] = useState<string | null>(null)
 
@@ -333,22 +341,29 @@ export default function EmailPage() {
   }, [threadDetail?.deal_draft?.id, threadDetail?.id])
 
   async function loadThreads() {
+    const requestId = threadsRequestRef.current + 1
+    threadsRequestRef.current = requestId
     setThreadsLoading(true)
     try {
       const data = await apiFetch(
         `/email/threads?limit=${threadsPageSize}&offset=${threadsOffset}&sort_by=updated_at&sort_order=desc`
       ) as ThreadsResponse
-      setThreads(data)
-      if (selectedThreadId && data.some(thread => thread.id === selectedThreadId)) {
+      if (requestId !== threadsRequestRef.current) return
+      const items = getThreadsItems(data)
+      setThreads(items)
+      if (selectedThreadId && items.some(thread => thread.id === selectedThreadId)) {
         return
       }
-      if (data.length) {
-        await selectThread(data[0].id)
+      if (items.length) {
+        await selectThread(items[0].id)
       }
     } catch (e: unknown) {
+      if (requestId !== threadsRequestRef.current) return
       setErr(getErrorMessage(e))
     } finally {
-      setThreadsLoading(false)
+      if (requestId === threadsRequestRef.current) {
+        setThreadsLoading(false)
+      }
     }
   }
 
@@ -461,16 +476,22 @@ export default function EmailPage() {
   }
 
   async function loadThreadDetail(id: string, focusDraftId?: string) {
+    const requestId = threadDetailRequestRef.current + 1
+    threadDetailRequestRef.current = requestId
     setThreadLoading(true)
     try {
       const detail = await apiFetch(`/email/threads/${id}`) as EmailThreadDetail
+      if (requestId !== threadDetailRequestRef.current) return
       setThreadDetail(detail)
       const fallback = detail.drafts.length ? detail.drafts[0].id : null
       setActiveDraftId(focusDraftId || fallback)
     } catch (e: unknown) {
+      if (requestId !== threadDetailRequestRef.current) return
       setErr(getErrorMessage(e))
     } finally {
-      setThreadLoading(false)
+      if (requestId === threadDetailRequestRef.current) {
+        setThreadLoading(false)
+      }
     }
   }
 

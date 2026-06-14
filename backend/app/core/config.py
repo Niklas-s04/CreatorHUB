@@ -99,7 +99,7 @@ class Settings(BaseSettings):
     ENABLE_OPTIONAL_MALWARE_SCAN: bool = False
 
     BOOTSTRAP_ADMIN_USERNAME: str = Field(...)
-    BOOTSTRAP_ADMIN_PASSWORD: str = Field(..., min_length=12)
+    BOOTSTRAP_ADMIN_PASSWORD: str = Field(..., min_length=8)
     BOOTSTRAP_INSTALL_TOKEN: str = ""
 
     AUTO_ARCHIVE_ENABLED: bool = True

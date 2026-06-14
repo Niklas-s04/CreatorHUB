@@ -253,8 +253,16 @@ async def upload_asset(
     except BusinessRuleViolation as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    # Avoid duplicates by hash and reuse the existing asset.
-    existing = db.query(Asset).filter(Asset.hash == stored.sha256).first()
+    # Avoid duplicate rows for the same owner, but allow the same file on different products.
+    existing = (
+        db.query(Asset)
+        .filter(
+            Asset.hash == stored.sha256,
+            Asset.owner_type == owner_type,
+            Asset.owner_id == owner_id,
+        )
+        .first()
+    )
     if existing:
         # Do not create a duplicate database row.
         return existing
@@ -273,7 +281,15 @@ def create_web_asset(
 ) -> AssetOut:
     existing = None
     if payload.hash:
-        existing = db.query(Asset).filter(Asset.hash == payload.hash).first()
+        existing = (
+            db.query(Asset)
+            .filter(
+                Asset.hash == payload.hash,
+                Asset.owner_type == payload.owner_type,
+                Asset.owner_id == payload.owner_id,
+            )
+            .first()
+        )
     if existing:
         return existing
     data = payload.model_dump()

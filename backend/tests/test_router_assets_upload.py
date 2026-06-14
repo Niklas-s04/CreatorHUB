@@ -84,6 +84,34 @@ def test_upload_deduplicates_by_hash(client, app, db_session: Session) -> None:
     assert first.json()["id"] == second.json()["id"]
 
 
+def test_upload_allows_same_hash_for_different_owner(client, app, db_session: Session) -> None:
+    admin = create_user(db_session, username="assets_admin_dup_owner", role=UserRole.admin)
+    app.dependency_overrides[deps.get_current_user] = lambda: admin
+
+    first = client.post(
+        "/api/assets/upload",
+        data={
+            "owner_type": "product",
+            "owner_id": str(uuid.uuid4()),
+            "kind": "image",
+        },
+        files={"file": ("item.png", _png_bytes(), "image/png")},
+    )
+    assert first.status_code == 200
+
+    second = client.post(
+        "/api/assets/upload",
+        data={
+            "owner_type": "product",
+            "owner_id": str(uuid.uuid4()),
+            "kind": "image",
+        },
+        files={"file": ("item-copy.png", _png_bytes(), "image/png")},
+    )
+    assert second.status_code == 200
+    assert first.json()["id"] != second.json()["id"]
+
+
 def test_upload_starts_in_quarantine_state(client, app, db_session: Session) -> None:
     admin = create_user(db_session, username="assets_admin_quarantine", role=UserRole.admin)
     app.dependency_overrides[deps.get_current_user] = lambda: admin

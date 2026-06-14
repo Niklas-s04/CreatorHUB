@@ -101,7 +101,7 @@ test.describe('Content Hub planning E2E', () => {
 
     await page.getByRole('tab', { name: /Checkliste|Checklist/i }).click()
     await expect(page.getByText(/Publish ready/i)).toBeVisible({ timeout: 15_000 })
-    await expect(page.getByText(/(No|Nein)/i)).toBeVisible({ timeout: 15_000 })
+    await expect(page.getByText(/Publish ready: (No|Nein)/i)).toBeVisible({ timeout: 15_000 })
     await expect(page.getByText(/Required checklist tasks are open/i)).toBeVisible({
       timeout: 15_000,
     })

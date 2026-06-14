@@ -32,7 +32,8 @@ RUN pip install --no-cache-dir --no-index --find-links=/wheels -r /app/requireme
 	&& rm -rf /wheels
 
 COPY . /app
-RUN chown -R app:app /app
+RUN mkdir -p /data/uploads /data/cache /data/exports /data/logs \
+	&& chown -R app:app /app /data
 
 USER app
 

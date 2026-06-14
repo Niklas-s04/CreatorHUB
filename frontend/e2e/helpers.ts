@@ -48,6 +48,17 @@ export function generateTotpCode(secret: string, time = Date.now()): string {
 export async function gotoLogin(page: Page): Promise<void> {
   await page.goto('/login')
   await expect(page.getByRole('heading', { name: 'Login' })).toBeVisible()
+  await acceptNecessaryCookies(page)
+}
+
+export async function acceptNecessaryCookies(page: Page): Promise<void> {
+  const banner = page.locator('.cookie-consent')
+  const visible = await banner.isVisible({ timeout: 2000 }).catch(() => false)
+  if (!visible) return
+
+  const button = page.getByRole('button', { name: /necessary only|nur notwendige cookies/i })
+  await button.click()
+  await expect(banner).toBeHidden()
 }
 
 async function submitLogin(page: Page, username: string, password: string): Promise<void> {
@@ -77,7 +88,7 @@ export async function login(page: Page, username: string, password: string): Pro
   await submitLogin(page, username, password)
 
   const onProtectedRoute = await page
-    .waitForURL(/\/(dashboard|admin|products|assets|content|email|settings)/, { timeout: 2500 })
+    .waitForURL(/\/($|dashboard|admin|products|assets|content|email|settings)/, { timeout: 2500 })
     .then(() => true)
     .catch(() => false)
 
@@ -87,13 +98,13 @@ export async function login(page: Page, username: string, password: string): Pro
       .isVisible()
       .catch(() => false)
 
-    if (setupVisible || E2E_BOOTSTRAP_TOKEN) {
+    if (setupVisible) {
       await setupAdminPassword(page, password)
     }
   }
 
   const reachedProtected = await page
-    .waitForURL(/\/(dashboard|admin|products|assets|content|email|settings)/, { timeout: 10000 })
+    .waitForURL(/\/($|dashboard|admin|products|assets|content|email|settings)/, { timeout: 10000 })
     .then(() => true)
     .catch(() => false)
 
@@ -118,6 +129,11 @@ export async function loginAsAdmin(page: Page): Promise<void> {
   await login(page, E2E_ADMIN_USER, E2E_ADMIN_PASSWORD)
 }
 
+export async function csrfHeaders(page: Page): Promise<Record<string, string>> {
+  const csrf = (await page.context().cookies()).find((cookie) => cookie.name === 'creatorhub_csrf')
+  return csrf ? { 'X-CSRF-Token': csrf.value } : {}
+}
+
 export async function logout(page: Page): Promise<void> {
   await page.getByRole('button', { name: 'Logout' }).click()
   await expect(page).toHaveURL(/\/login/)
@@ -128,20 +144,24 @@ export async function registerViaUi(page: Page, username: string, password: stri
   await page.getByRole('button', { name: 'Registrieren' }).click()
 
   const form = page.locator('form')
-  await form.locator('input').nth(0).fill(username)
+  await form.getByLabel('Username').fill(username)
   const pwInputs = form.locator('input[type="password"]')
   await pwInputs.nth(0).fill(password)
   await pwInputs.nth(1).fill(password)
 
   await page.getByRole('button', { name: 'Anfrage senden' }).click()
-  await expect(page.getByText('Registrierungsanfrage wurde an den Admin gesendet.')).toBeVisible()
+  await expect(
+    page.getByRole('main').getByText(/Registrierungsanfrage (wurde an den Admin gesendet|gesendet)/)
+  ).toBeVisible()
 }
 
 export async function approveRegistrationAsAdmin(page: Page, username: string): Promise<void> {
   await loginAsAdmin(page)
   await page.goto('/admin')
 
-  const row = page.locator('tr', { hasText: username })
+  const row = page
+    .locator('tr', { hasText: username })
+    .filter({ has: page.getByRole('button', { name: 'Freigeben' }) })
   await expect(row).toBeVisible({ timeout: 15000 })
   await row.getByRole('button', { name: 'Freigeben' }).click()
   await expect(row).toHaveCount(0)

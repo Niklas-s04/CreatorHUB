@@ -1,5 +1,3 @@
-version: "3.9"
-
 services:
   db:
     image: postgres:16-alpine
@@ -68,6 +66,12 @@ services:
       backend:
         condition: service_healthy
     command: ["python", "-m", "app.workers.run_worker"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "from app.workers.queue import redis_conn; redis_conn.ping()"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
 
   frontend:
     build:

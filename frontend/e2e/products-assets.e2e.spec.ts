@@ -16,27 +16,33 @@ test.describe('Products + Assets E2E', () => {
 
     await page.getByRole('button', { name: '+ Produkt' }).click()
     await page.getByPlaceholder('Titel*').fill(productTitle)
-    await page.getByRole('button', { name: 'Speichern' }).click()
+    await page.getByRole('button', { name: 'Speichern', exact: true }).click()
 
     await expect(page.getByRole('link', { name: productTitle })).toBeVisible({ timeout: 15000 })
     await page.getByRole('link', { name: productTitle }).click()
 
-    await expect(page.locator('.title-strong', { hasText: productTitle })).toBeVisible({
+    await expect(page.getByLabel('Titel').first()).toHaveValue(productTitle, {
       timeout: 15000,
     })
 
-    const notesArea = page.locator('.product-main textarea')
-    await notesArea.fill('E2E-Notiz: aktualisiert')
-    await page.getByRole('button', { name: 'Speichern' }).first().click()
+    await page.getByLabel('Notizen').fill('E2E-Notiz: aktualisiert')
+    await page.getByRole('button', { name: 'Stammdaten speichern' }).click()
+    await expect(page.getByLabel('Notizen')).toHaveValue('E2E-Notiz: aktualisiert')
+    await page.waitForTimeout(500)
 
-    await page.locator('.product-main select').selectOption('sold')
+    const statusSelect = page.getByRole('combobox').nth(2)
+    await statusSelect.selectOption('sold')
+    await expect(statusSelect).toHaveValue('sold')
     await page.getByPlaceholder('z.B. 120').fill('123')
-    await page.getByRole('button', { name: 'Apply' }).click()
-    await expect(page.locator('.product-main .pill', { hasText: 'sold' })).toBeVisible({
+    await expect(page.getByPlaceholder('z.B. 120')).toHaveValue('123')
+    await page.getByRole('button', { name: /Status anwenden|Apply/ }).click()
+    await expect(
+      page.getByText(/Status active -> sold|Product status changed: active -> sold/).first()
+    ).toBeVisible({
       timeout: 15000,
     })
 
-    const uploadInput = page.locator('.product-side input[type="file"]').first()
+    const uploadInput = page.locator('input[type="file"]').first()
     await uploadInput.setInputFiles({
       name: 'e2e.png',
       mimeType: 'image/png',

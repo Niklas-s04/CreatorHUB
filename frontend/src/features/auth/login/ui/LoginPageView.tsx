@@ -2,10 +2,22 @@ import React, { useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useNavigate } from 'react-router-dom'
-import { confirmPasswordReset, getBootstrapStatus, login, requestPasswordReset, requestRegistration, setupAdminPassword } from '../../../../api'
+import {
+  confirmPasswordReset,
+  getBootstrapStatus,
+  login,
+  requestPasswordReset,
+  requestRegistration,
+  setupAdminPassword,
+} from '../../../../api'
 import { authFormSchema, type AuthFormValues } from '../../../../shared/forms/schemas'
 import { useUnsavedChangesWarning } from '../../../../shared/forms/useUnsavedChangesWarning'
-import { getErrorKind, getErrorMessage, getValidationFieldErrors, type ErrorKind } from '../../../../shared/lib/errors'
+import {
+  getErrorKind,
+  getErrorMessage,
+  getValidationFieldErrors,
+  type ErrorKind,
+} from '../../../../shared/lib/errors'
 import { InlineHint } from '../../../../shared/ui/states/InlineHint'
 import { useToast } from '../../../../shared/ui/toast/ToastProvider'
 import { useI18n } from '../../../../shared/i18n/i18n'
@@ -66,8 +78,7 @@ export default function LoginPage() {
           setMode('setup')
           setValue('username', status.admin_username, { shouldDirty: false })
         }
-      } catch {
-      }
+      } catch {}
     })()
   }, [setValue])
 
@@ -148,38 +159,66 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="login-shell">
+    <main className="login-shell">
       <div className="card login-card">
         <div className="page-header no-margin">
-          <h2 className="page-title">{t('login.title')}</h2>
+          <h1 className="page-title">{t('login.title')}</h1>
           <span className="muted small">{t('login.brandSubline')}</span>
         </div>
 
         {mode !== 'setup' && (
           <div className="mode-switch">
-            <button className={`btn ${mode === 'login' ? 'primary' : ''}`} type="button" onClick={() => setMode('login')}>{t('login.modeLogin')}</button>
-            <button className={`btn ${mode === 'register' ? 'primary' : ''}`} type="button" onClick={() => setMode('register')}>{t('login.modeRegister')}</button>
-            <button className={`btn ${mode === 'reset' ? 'primary' : ''}`} type="button" onClick={() => setMode('reset')}>{t('login.modeReset')}</button>
+            <button
+              className={`btn ${mode === 'login' ? 'primary' : ''}`}
+              type="button"
+              onClick={() => setMode('login')}
+            >
+              {t('login.modeLogin')}
+            </button>
+            <button
+              className={`btn ${mode === 'register' ? 'primary' : ''}`}
+              type="button"
+              onClick={() => setMode('register')}
+            >
+              {t('login.modeRegister')}
+            </button>
+            <button
+              className={`btn ${mode === 'reset' ? 'primary' : ''}`}
+              type="button"
+              onClick={() => setMode('reset')}
+            >
+              {t('login.modeReset')}
+            </button>
           </div>
         )}
 
         <div className="section-gap">
-          <label htmlFor="auth-bootstrap-token" className="field-label">{t('login.bootstrapTokenLabel')}</label>
+          <label htmlFor="auth-bootstrap-token" className="field-label">
+            {t('login.bootstrapTokenLabel')}
+          </label>
           <input
             id="auth-bootstrap-token"
             className="w100"
             {...register('bootstrapToken')}
             aria-invalid={Boolean(errors.bootstrapToken?.message)}
-            aria-describedby={errors.bootstrapToken?.message ? 'auth-bootstrap-token-error' : undefined}
-            onChange={e => {
+            aria-describedby={
+              errors.bootstrapToken?.message ? 'auth-bootstrap-token-error' : undefined
+            }
+            onChange={(e) => {
               const value = e.target.value
               setValue('bootstrapToken', value, { shouldValidate: true, shouldDirty: true })
               localStorage.setItem('bootstrap_token', value)
             }}
             placeholder={t('login.bootstrapTokenPlaceholder')}
           />
-          {errors.bootstrapToken?.message && <div id="auth-bootstrap-token-error" className="error mt8" role="alert">{errors.bootstrapToken.message}</div>}
-          <button className="btn mt8" type="button" onClick={checkBootstrap}>{t('login.checkBootstrap')}</button>
+          {errors.bootstrapToken?.message && (
+            <div id="auth-bootstrap-token-error" className="error mt8" role="alert">
+              {errors.bootstrapToken.message}
+            </div>
+          )}
+          <button className="btn mt8" type="button" onClick={checkBootstrap}>
+            {t('login.checkBootstrap')}
+          </button>
         </div>
 
         {mode === 'setup' ? (
@@ -193,7 +232,9 @@ export default function LoginPage() {
         <form onSubmit={handleSubmit(onSubmit)} className="stack">
           <input type="hidden" {...register('mode')} />
           <div>
-            <label htmlFor="auth-username" className="field-label">{t('login.username')}</label>
+            <label htmlFor="auth-username" className="field-label">
+              {t('login.username')}
+            </label>
             {mode === 'setup' ? (
               <input id="auth-username" className="w100" value={adminUsername} disabled readOnly />
             ) : (
@@ -205,11 +246,17 @@ export default function LoginPage() {
                 aria-describedby={errors.username?.message ? 'auth-username-error' : undefined}
               />
             )}
-            {errors.username?.message && <div id="auth-username-error" className="error mt8" role="alert">{errors.username.message}</div>}
+            {errors.username?.message && (
+              <div id="auth-username-error" className="error mt8" role="alert">
+                {errors.username.message}
+              </div>
+            )}
           </div>
 
           <div>
-            <label htmlFor="auth-password" className="field-label">{t('login.password')}</label>
+            <label htmlFor="auth-password" className="field-label">
+              {t('login.password')}
+            </label>
             <input
               id="auth-password"
               className="w100"
@@ -218,19 +265,32 @@ export default function LoginPage() {
               aria-invalid={Boolean(errors.password?.message)}
               aria-describedby={errors.password?.message ? 'auth-password-error' : undefined}
             />
-            {errors.password?.message && <div id="auth-password-error" className="error mt8" role="alert">{errors.password.message}</div>}
+            {errors.password?.message && (
+              <div id="auth-password-error" className="error mt8" role="alert">
+                {errors.password.message}
+              </div>
+            )}
           </div>
 
           {mode === 'login' && (
             <div>
-              <label htmlFor="auth-otp" className="field-label">{t('login.otp')}</label>
-              <input id="auth-otp" className="w100" {...register('otp')} placeholder={t('login.otpPlaceholder')} />
+              <label htmlFor="auth-otp" className="field-label">
+                {t('login.otp')}
+              </label>
+              <input
+                id="auth-otp"
+                className="w100"
+                {...register('otp')}
+                placeholder={t('login.otpPlaceholder')}
+              />
             </div>
           )}
 
           {(mode === 'setup' || mode === 'register' || mode === 'reset') && (
             <div>
-              <label htmlFor="auth-password2" className="field-label">{t('login.passwordRepeat')}</label>
+              <label htmlFor="auth-password2" className="field-label">
+                {t('login.passwordRepeat')}
+              </label>
               <input
                 id="auth-password2"
                 className="w100"
@@ -239,25 +299,50 @@ export default function LoginPage() {
                 aria-invalid={Boolean(errors.password2?.message)}
                 aria-describedby={errors.password2?.message ? 'auth-password2-error' : undefined}
               />
-              {errors.password2?.message && <div id="auth-password2-error" className="error mt8" role="alert">{errors.password2.message}</div>}
+              {errors.password2?.message && (
+                <div id="auth-password2-error" className="error mt8" role="alert">
+                  {errors.password2.message}
+                </div>
+              )}
             </div>
           )}
 
           {mode === 'reset' && (
             <div>
-              <label htmlFor="auth-reset-token" className="field-label">{t('login.resetToken')}</label>
-              <input id="auth-reset-token" className="w100" {...register('resetToken')} placeholder={t('login.resetTokenPlaceholder')} />
+              <label htmlFor="auth-reset-token" className="field-label">
+                {t('login.resetToken')}
+              </label>
+              <input
+                id="auth-reset-token"
+                className="w100"
+                {...register('resetToken')}
+                placeholder={t('login.resetTokenPlaceholder')}
+              />
             </div>
           )}
 
           {err && <InlineHint type={errKind} message={err} />}
-          {msg && <div className="muted" role="status" aria-live="polite">{msg}</div>}
+          {msg && (
+            <div className="muted" role="status" aria-live="polite">
+              {msg}
+            </div>
+          )}
 
           <button className="btn primary w100" disabled={busy}>
-            {busy ? '...' : mode === 'setup' ? t('login.submitSetup') : mode === 'register' ? t('login.submitRegister') : mode === 'reset' ? (resetToken.trim() ? t('login.submitResetConfirm') : t('login.submitResetRequest')) : t('login.submitLogin')}
+            {busy
+              ? '...'
+              : mode === 'setup'
+                ? t('login.submitSetup')
+                : mode === 'register'
+                  ? t('login.submitRegister')
+                  : mode === 'reset'
+                    ? resetToken.trim()
+                      ? t('login.submitResetConfirm')
+                      : t('login.submitResetRequest')
+                    : t('login.submitLogin')}
           </button>
         </form>
       </div>
-    </div>
+    </main>
   )
 }

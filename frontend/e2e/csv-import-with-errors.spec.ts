@@ -1,17 +1,18 @@
 import { expect, test } from '@playwright/test'
 
-import { loginAsAdmin } from './helpers'
+import { csrfHeaders, loginAsAdmin } from './helpers'
 
 test.describe('CSV Import E2E', () => {
   test('rejects malformed CSV payloads with a helpful error', async ({ page }) => {
     await loginAsAdmin(page)
 
     const response = await page.request.post('/api/products/import/csv', {
+      headers: await csrfHeaders(page),
       data: {
         csv_text: 'title;brand\nCamera;Canon\nBrokenRow',
         delimiter: ';',
         quotechar: '"',
-        column_map: { title: 'title', brand: 'brand' },
+        column_map: { brand: 'brand' },
         defaults: {
           condition: 'good',
           current_value: 120,
@@ -25,6 +26,6 @@ test.describe('CSV Import E2E', () => {
 
     expect(response.status()).toBe(400)
     const body = await response.json()
-    expect(String(body.detail)).toContain('missing_required_field_mappings')
+    expect(String(body.message ?? body.detail)).toContain('missing_required_field_mappings')
   })
 })
