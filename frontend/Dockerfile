@@ -13,7 +13,7 @@ RUN npm run build
 # Run stage
 FROM nginxinc/nginx-unprivileged:1.27-alpine
 COPY --from=build /app/dist /usr/share/nginx/html
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+COPY --chown=101:0 --chmod=644 nginx.conf /etc/nginx/conf.d/default.conf
 
 HEALTHCHECK --interval=20s --timeout=3s --start-period=15s --retries=5 \
 	CMD wget -q -O - http://127.0.0.1/healthz >/dev/null 2>&1 || exit 1
