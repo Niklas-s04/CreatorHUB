@@ -30,6 +30,17 @@ class StoredFile:
     perceptual_hash: str | None = None
 
 
+@dataclass(frozen=True)
+class UploadValidationResult:
+    safe_filename: str
+    sha256: str
+    extension: str
+    mime_type: str
+    width: int | None = None
+    height: int | None = None
+    perceptual_hash: str | None = None
+
+
 def _ensure_dirs() -> None:
     Path(settings.UPLOADS_DIR).mkdir(parents=True, exist_ok=True)
     Path(settings.CACHE_DIR).mkdir(parents=True, exist_ok=True)
@@ -153,14 +164,7 @@ def save_upload(owner_folder: str, filename: str, data: bytes) -> StoredFile:
     )
 
 
-def save_upload_validated(
-    owner_folder: str,
-    filename: str,
-    data: bytes,
-    expected_kind: str,
-    base_dir: str | None = None,
-) -> StoredFile:
-    _ensure_dirs()
+def validate_upload_file(filename: str, data: bytes, expected_kind: str) -> UploadValidationResult:
     safe_name = _sanitize_filename(filename)
     sha = sha256_bytes(data)
 
@@ -201,25 +205,44 @@ def save_upload_validated(
 
     _optional_malware_scan(data)
 
+    return UploadValidationResult(
+        safe_filename=safe_name,
+        sha256=sha,
+        extension=detected_ext,
+        mime_type=detected_mime,
+        width=width,
+        height=height,
+        perceptual_hash=perceptual_hash,
+    )
+
+
+def save_upload_validated(
+    owner_folder: str,
+    filename: str,
+    data: bytes,
+    expected_kind: str,
+    base_dir: str | None = None,
+) -> StoredFile:
+    _ensure_dirs()
+    validation = validate_upload_file(filename, data, expected_kind)
+
     root = Path(base_dir or settings.UPLOADS_DIR)
     folder = root / owner_folder
     folder.mkdir(parents=True, exist_ok=True)
-    storage_key = f"{sha[:20]}_{secrets.token_hex(8)}{detected_ext}"
+    storage_key = f"{validation.sha256[:20]}_{secrets.token_hex(8)}{validation.extension}"
     path = folder / storage_key
     path.write_bytes(data)
-
-    mime = detected_mime
 
     return StoredFile(
         local_path=str(path),
         size_bytes=len(data),
-        sha256=sha,
-        safe_filename=safe_name,
-        extension=detected_ext,
-        width=width,
-        height=height,
-        mime_type=mime,
-        perceptual_hash=perceptual_hash,
+        sha256=validation.sha256,
+        safe_filename=validation.safe_filename,
+        extension=validation.extension,
+        width=validation.width,
+        height=validation.height,
+        mime_type=validation.mime_type,
+        perceptual_hash=validation.perceptual_hash,
     )
 
 

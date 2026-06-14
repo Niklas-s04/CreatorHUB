@@ -1,31 +1,40 @@
+# Environment and secrets
 .env
-*.pyc
-node_modules/
-dist/
-build/
-uploads/
-.cache/
+.env.*
+.env*
+!.env.example
+!.env.test.example
 
 # Python
+*.pyc
 __pycache__/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
 .coverage
 coverage.xml
-.env*
+htmlcov/
+
+# Node/frontend
+node_modules/
+dist/
+build/
+frontend/coverage/
+frontend/playwright-report/
+frontend/test-results/
+
+# Runtime data and generated files
+uploads/
+.cache/
+backend/.coverage
+backend/coverage.xml
+backend/htmlcov/
 *.log
 debug*.py
 run_tests.py
 test_*.txt
 test_*.log
 final_*.log
-
-
-# Frontend/E2E
-frontend/coverage/
-frontend/playwright-report/
-frontend/test-results/
 
 # OS/Editor
 .DS_Store

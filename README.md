@@ -44,6 +44,8 @@ The project combines product lifecycle workflows, media review, content task tra
 - `docs/audit-data-policy.md` audit logging scope and redaction rules
 - `docs/privacy-policy-technical.md` privacy, retention, and deletion handling
 - `.env.example` environment template
+- `.env.test.example` local Docker smoke-test environment template
+- `scripts/validate-secrets.sh` pre-deploy secret validation
 
 ## Prerequisites
 
@@ -51,6 +53,7 @@ The project combines product lifecycle workflows, media review, content task tra
 - Node.js 20 or newer
 - PostgreSQL
 - Redis
+- Bash for release/CI helper scripts
 - Optional: Ollama for local AI features
 
 ## Quick Start
@@ -72,9 +75,12 @@ At minimum, local development needs:
 - `DATABASE_URL`
 - `REDIS_URL`
 - `JWT_SECRET`
+- `POSTGRES_PASSWORD`
+- `BOOTSTRAP_ADMIN_PASSWORD`
 - `CORS_ORIGINS`
 
 Production also requires strong secret values and explicit cookie/domain settings.
+Do not commit `.env`, `.env.test`, generated secrets, database dumps, uploads, or coverage artifacts.
 
 ### 3. Start the backend
 
@@ -106,13 +112,36 @@ npm run dev
 
 The frontend runs on `http://localhost:3000` by default.
 
+## Docker Smoke Test
+
+For a local release smoke test, create a disposable `.env.test` from the checked-in template:
+
+```bash
+cp .env.test.example .env.test
+cp .env.test .env
+bash scripts/validate-secrets.sh
+docker-compose up --build
+```
+
+Then verify:
+
+- Backend readiness: `http://localhost:8000/health/ready`
+- Frontend health: `http://localhost:3000/healthz`
+- Browser DevTools cookies include Secure, HttpOnly where applicable, and SameSite=Strict.
+- Browser DevTools console has no unexpected CSP violations.
+
+The `.env.test.example` values are non-production examples only.
+
 ## Security and Operations
 
 - Authentication uses secure cookies and CSRF protection.
 - Audit logging is state-change only and redacts sensitive fields.
 - External requests are validated centrally to reduce SSRF risk.
 - Uploads are validated by file type, signature, size, and image dimensions.
+- Account deletion immediately deactivates the account, revokes active sessions, and schedules hard deletion after the configured grace period.
+- Deleted-user purge anonymizes audit logs and records compliance audit events.
 - Production deployments should use explicit secrets, explicit origins, and restrictive host settings.
+- Run `bash scripts/validate-secrets.sh` before deployment. It fails on missing or weak required secrets.
 
 ## Common Commands
 
@@ -138,15 +167,28 @@ cd backend
 ../.venv/Scripts/python.exe -m ruff check app tests
 ../.venv/Scripts/python.exe -m ruff format --check app tests
 ../.venv/Scripts/python.exe -m mypy --config-file mypy.ini
-../.venv/Scripts/python.exe -m pytest --cov=app --cov-report=term-missing
+../.venv/Scripts/python.exe -m pytest tests --cov --cov-fail-under=70
 ../.venv/Scripts/python.exe -m pip_audit -r requirements.txt
 ```
+
+### Release Verification
+
+```bash
+bash scripts/validate-secrets.sh
+cd backend
+../.venv/Scripts/python.exe -m ruff check app tests
+../.venv/Scripts/python.exe -m ruff format --check app tests
+../.venv/Scripts/python.exe -m pytest tests --cov --cov-fail-under=70
+```
+
+The Phase 1 security foundation release was verified with the backend suite passing at 70%+ coverage.
 
 ## API Overview
 
 Main route groups:
 
 - `/api/v1/auth`
+- `DELETE /api/v1/user/account`
 - `/api/v1/products`
 - `/api/v1/assets`
 - `/api/v1/content`

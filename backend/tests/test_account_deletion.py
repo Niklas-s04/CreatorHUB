@@ -76,10 +76,10 @@ class TestDeleteAccountEndpoint:
         response = client.delete("/api/v1/user/account")
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
-    def test_delete_account_marks_user_soft_deleted(
+    def test_user_soft_deleted_is_inactive(
         self, db_session: Session, client, user_for_deletion, monkeypatch
     ):
-        """DELETE should schedule account deletion while keeping grace-period restore possible."""
+        """DELETE should schedule account deletion and deactivate the account immediately."""
         user, token = user_for_deletion
 
         # Mock require_sensitive_action to always succeed
@@ -111,7 +111,7 @@ class TestDeleteAccountEndpoint:
 
         # Verify user is soft-deleted
         db_session.refresh(user)
-        assert user.is_active is True
+        assert user.is_active is False
         assert user.deletion_requested_at is not None
         assert isinstance(user.deletion_requested_at, datetime)
 
@@ -180,6 +180,8 @@ class TestDeleteAccountEndpoint:
             or "requested account deletion" in (audit_log.description or "").lower()
             or "deletion" in (audit_log.description or "").lower()
         )
+        assert audit_log.meta is not None
+        assert audit_log.meta["event_code"] == "USER_REQUESTED_DELETION"
 
     def test_delete_account_clears_cookies(self, db_session: Session, client, user_for_deletion):
         """DELETE should clear auth cookies."""
@@ -198,10 +200,10 @@ class TestDeleteAccountEndpoint:
             "set-cookie" in response.headers or "Set-Cookie" in response.headers or True
         )  # Flexible check
 
-    def test_delete_then_cancel_with_relogin_restores_account(
+    def test_delete_account_blocks_relogin_during_grace_period(
         self, db_session: Session, client, user_for_deletion
     ):
-        """A deletion request can be canceled after re-authenticating during grace period."""
+        """Sprint-strict deletion deactivates the user, so re-login is blocked."""
         user, token = user_for_deletion
 
         delete_response = client.delete(
@@ -214,23 +216,10 @@ class TestDeleteAccountEndpoint:
             "/api/v1/auth/token",
             data={"username": user.username, "password": "test_password_123"},
         )
-        assert relogin_response.status_code == status.HTTP_200_OK
-        relogin_token = relogin_response.json()["access_token"]
-        csrf_token = relogin_response.cookies.get("creatorhub_csrf")
-        assert csrf_token
-
-        cancel_response = client.post(
-            "/api/v1/auth/users/me/account-deletion/cancel",
-            headers={
-                "Authorization": f"Bearer {relogin_token}",
-                "x-csrf-token": csrf_token,
-            },
-        )
-        assert cancel_response.status_code == status.HTTP_200_OK
-
+        assert relogin_response.status_code == status.HTTP_401_UNAUTHORIZED
         db_session.refresh(user)
-        assert user.is_active is True
-        assert user.deletion_requested_at is None
+        assert user.is_active is False
+        assert user.deletion_requested_at is not None
 
     def test_delete_account_idempotence_check(self, db_session: Session, client, user_for_deletion):
         """Attempting to delete an already-deleted account should fail gracefully."""
@@ -456,6 +445,16 @@ class TestPurgeDeletedUsers:
         )
         assert audit_log_count_after > audit_log_count_before
         assert result["users_purged"] == 3
+        permanent_delete_events = (
+            db_session.query(AuditLog)
+            .filter(AuditLog.action == "auth.user.permanently_deleted")
+            .all()
+        )
+        assert len(permanent_delete_events) == 3
+        assert all(
+            event.meta and event.meta["event_code"] == "USER_PERMANENTLY_DELETED"
+            for event in permanent_delete_events
+        )
 
     def test_purge_handles_errors_gracefully(self, db_session: Session):
         """Purge should continue even if one user fails to delete."""

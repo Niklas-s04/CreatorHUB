@@ -26,6 +26,7 @@ def test_account_deletion_request_flow(db_session):
     result = request_account_deletion(db_session, user=user)
     assert result["grace_period_days"] == 30
     assert user.deletion_requested_at is not None
+    assert user.is_active is False
 
     # Check audit log exists
     audit = (
@@ -42,6 +43,7 @@ def test_account_deletion_request_flow(db_session):
     result2 = cancel_account_deletion(db_session, user=user)
     assert result2["account_restored"] is True
     assert user.deletion_requested_at is None
+    assert user.is_active is True
 
 
 def test_hard_delete_after_grace_period(db_session):

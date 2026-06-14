@@ -40,6 +40,7 @@ def main() -> int:
 
     _check_secret(errors, "JWT_SECRET", 32, "JWT signing secret")
     _check_secret(errors, "BOOTSTRAP_ADMIN_PASSWORD", 12, "bootstrap admin password")
+    _check_secret(errors, "POSTGRES_PASSWORD", 1, "database password")
     _check_not_placeholder(errors, "JWT_SECRET", {"change_me", "default", "test", "secret"})
     _check_not_placeholder(errors, "BOOTSTRAP_ADMIN_PASSWORD", {"admin", "password"})
 

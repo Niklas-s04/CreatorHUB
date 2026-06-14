@@ -109,6 +109,21 @@ def purge_deleted_users(
                 # Hard-delete the user
                 db.delete(user)
                 stats["users_purged"] += 1
+                record_audit_log(
+                    db=db,
+                    actor=None,
+                    actor_label="system:purge-deleted-users",
+                    action="auth.user.permanently_deleted",
+                    entity_type="User",
+                    entity_id=str(user_id),
+                    description="User permanently deleted after account deletion grace period.",
+                    metadata={
+                        "event_code": "USER_PERMANENTLY_DELETED",
+                        "deletion_requested_at": user.deletion_requested_at.isoformat()
+                        if user.deletion_requested_at
+                        else None,
+                    },
+                )
 
                 # Commit this user's deletion atomically
                 db.commit()

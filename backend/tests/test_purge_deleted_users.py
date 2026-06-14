@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy.orm import Session
@@ -46,3 +47,28 @@ def test_purge_deleted_users_removes_expired_user_data(db_session: Session) -> N
         db_session.query(AuditLog).filter(AuditLog.actor_name.like("[deleted-user-%")).first()
     )
     assert anonymized is not None
+
+
+def test_purge_deleted_users_daemon_uses_configured_interval(monkeypatch) -> None:
+    from app.core.config import settings
+    from app.services import purge_deleted_users_daemon as daemon
+
+    calls: list[object] = []
+    monkeypatch.setattr(settings, "PURGE_DELETED_USERS_INTERVAL_HOURS", 2)
+    monkeypatch.setattr(
+        daemon,
+        "purge_deleted_users",
+        lambda grace_period_days: calls.append(grace_period_days) or {"users_purged": 0},
+    )
+
+    async def fake_sleep(seconds: float) -> None:
+        calls.append(seconds)
+        if calls.count(seconds) >= 2:
+            raise asyncio.CancelledError
+
+    monkeypatch.setattr(daemon.asyncio, "sleep", fake_sleep)
+
+    asyncio.run(daemon.purge_deleted_users_daemon())
+
+    assert 7200 in calls
+    assert settings.ACCOUNT_DELETION_GRACE_PERIOD_DAYS in calls

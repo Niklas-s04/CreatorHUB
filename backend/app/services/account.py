@@ -52,7 +52,9 @@ def request_account_deletion(
 
     resolved_grace_period_days = grace_period_days or settings.ACCOUNT_DELETION_GRACE_PERIOD_DAYS
     now = datetime.now(timezone.utc)
+    was_active = bool(user.is_active)
     user.deletion_requested_at = now
+    user.is_active = False
 
     active_sessions = (
         db.query(AuthSession)
@@ -70,9 +72,10 @@ def request_account_deletion(
         entity_type="User",
         entity_id=str(user.id),
         description=f"User {user.username} requested account deletion",
-        before={"deletion_requested_at": None},
-        after={"deletion_requested_at": now.isoformat()},
+        before={"deletion_requested_at": None, "is_active": was_active},
+        after={"deletion_requested_at": now.isoformat(), "is_active": False},
         metadata={
+            "event_code": "USER_REQUESTED_DELETION",
             "reason": "GDPR account deletion request",
             "grace_period_days": resolved_grace_period_days,
             "client_ip": actor_ip,
@@ -117,7 +120,9 @@ def cancel_account_deletion(
         raise ValueError("No account deletion request to cancel")
 
     previous_deletion_requested_at = user.deletion_requested_at
+    was_active = bool(user.is_active)
     user.deletion_requested_at = None
+    user.is_active = True
 
     # Audit-Log: USER_CANCELED_DELETION
     record_audit_log(
@@ -127,8 +132,11 @@ def cancel_account_deletion(
         entity_type="User",
         entity_id=str(user.id),
         description=f"User {user.username} canceled account deletion",
-        before={"deletion_requested_at": previous_deletion_requested_at.isoformat()},
-        after={"deletion_requested_at": None},
+        before={
+            "deletion_requested_at": previous_deletion_requested_at.isoformat(),
+            "is_active": was_active,
+        },
+        after={"deletion_requested_at": None, "is_active": True},
         metadata={
             "reason": "User canceled GDPR deletion request",
             "client_ip": actor_ip,
