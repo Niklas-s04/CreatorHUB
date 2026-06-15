@@ -20,7 +20,7 @@ class User(Base, UUIDMixin, TimestampMixin):
 
     username: Mapped[str] = mapped_column(String(64), unique=True, index=True)
     hashed_password: Mapped[str] = mapped_column(String(256))
-    role: Mapped[UserRole] = mapped_column(Enum(UserRole), default=UserRole.admin)
+    role: Mapped[UserRole] = mapped_column(Enum(UserRole))
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     needs_password_setup: Mapped[bool] = mapped_column(Boolean, default=False)
     failed_login_attempts: Mapped[int] = mapped_column(Integer, default=0)

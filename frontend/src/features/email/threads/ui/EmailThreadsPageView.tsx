@@ -164,15 +164,15 @@ type CreatorAiSettingsPreview = {
   profile_name: string | null
   missing_required: string[]
   applied_settings: {
-    clear_name: string
-    artist_name: string
-    channel_link: string
+    clear_name: string | null
+    artist_name: string | null
+    channel_link: string | null
     themes: string[]
     platforms: string[]
     short_description: string
-    tone: string
+    tone: string | null
     target_audience: string
-    language_code: string
+    language_code: string | null
     content_focus: string[]
   }
 }
@@ -1010,7 +1010,9 @@ export default function EmailPage() {
                 disabled={profilesLoading}
               >
                 <option value="">
-                  {language === 'en' ? 'Fallback (auto)' : 'Fallback (auto)'}
+                  {language === 'en'
+                    ? 'Auto / configured default'
+                    : 'Auto / konfigurierter Default'}
                 </option>
                 {creatorProfiles.map((profile) => (
                   <option key={profile.id} value={profile.id}>
@@ -1464,13 +1466,14 @@ export default function EmailPage() {
                       </div>
                       <div className="muted small">
                         {language === 'en' ? 'Profile' : 'Profil'}:{' '}
-                        {settingsPreview.profile_name || '(Fallback)'}
+                        {settingsPreview.profile_name ||
+                          (language === 'en' ? '(not configured)' : '(nicht konfiguriert)')}
                       </div>
                       {!!settingsPreview.missing_required.length && (
                         <div className="error small">
                           {language === 'en'
-                            ? 'Missing required fields (fallback active)'
-                            : 'Fehlende Pflichtfelder (Fallback aktiv)'}
+                            ? 'Missing required fields. AI generation is blocked until the profile is complete.'
+                            : 'Fehlende Pflichtfelder. AI-Generierung ist blockiert, bis das Profil vollständig ist.'}
                           : {settingsPreview.missing_required.join(', ')}
                         </div>
                       )}

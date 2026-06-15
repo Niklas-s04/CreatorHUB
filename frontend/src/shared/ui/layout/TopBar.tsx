@@ -13,6 +13,10 @@ type DashboardSummary = {
   metrics: DashboardMetric[]
 }
 
+type MeSummary = {
+  username: string
+}
+
 type SearchHit = {
   id: string
   type: 'product' | 'asset' | 'content' | 'knowledge' | 'user'
@@ -41,6 +45,20 @@ function asString(value: unknown): string {
 
 function asNullableString(value: unknown): string | null {
   return typeof value === 'string' && value.trim() ? value : null
+}
+
+function getMetricCount(summary: DashboardSummary, key: string): number {
+  return summary.metrics.find((item) => item.key === key)?.count ?? 0
+}
+
+function getProfileInitials(username: string): string {
+  const clean = username.trim()
+  if (!clean) return 'CH'
+  const parts = clean.split(/[\s._-]+/).filter(Boolean)
+  if (parts.length >= 2) {
+    return `${parts[0][0]}${parts[1][0]}`.toUpperCase()
+  }
+  return clean.slice(0, 2).toUpperCase()
 }
 
 function parseSearchGroups(input: unknown): SearchGroup[] {
@@ -128,7 +146,9 @@ export default function TopBar({
   const [loading, setLoading] = useState(false)
   const [groups, setGroups] = useState<SearchGroup[]>([])
   const [activeKey, setActiveKey] = useState<string | null>(null)
-  const [pendingApprovalCount, setPendingApprovalCount] = useState(0)
+  const [notificationCount, setNotificationCount] = useState(0)
+  const [messageCount, setMessageCount] = useState(0)
+  const [profileInitials, setProfileInitials] = useState('?')
   const debouncedQuery = useDebouncedValue(query, 220)
 
   useEffect(() => {
@@ -170,11 +190,33 @@ export default function TopBar({
       try {
         const summary = await apiFetch<DashboardSummary>('/dashboard/summary')
         if (!active) return
-        const metric = summary.metrics.find((item) => item.key === 'pending_registration_requests')
-        setPendingApprovalCount(metric?.count ?? 0)
+        setNotificationCount(
+          getMetricCount(summary, 'pending_registration_requests') +
+            getMetricCount(summary, 'unreviewed_assets') +
+            getMetricCount(summary, 'overdue_tasks')
+        )
+        setMessageCount(getMetricCount(summary, 'risky_email_drafts'))
       } catch {
         if (!active) return
-        setPendingApprovalCount(0)
+        setNotificationCount(0)
+        setMessageCount(0)
+      }
+    })()
+    return () => {
+      active = false
+    }
+  }, [])
+
+  useEffect(() => {
+    let active = true
+    ;(async () => {
+      try {
+        const me = await apiFetch<MeSummary>('/auth/me')
+        if (!active) return
+        setProfileInitials(getProfileInitials(me.username))
+      } catch {
+        if (!active) return
+        setProfileInitials('?')
       }
     })()
     return () => {
@@ -357,24 +399,31 @@ export default function TopBar({
           <button
             type="button"
             className="topbar-icon-btn"
+            onClick={() => navigate('/operations')}
             aria-label={language === 'en' ? 'Notifications' : 'Benachrichtigungen'}
+            title={language === 'en' ? 'Open operations inbox' : 'Operations Inbox öffnen'}
           >
             🔔
-            {pendingApprovalCount > 0 && <span className="badge">{pendingApprovalCount}</span>}
+            {notificationCount > 0 && <span className="badge">{notificationCount}</span>}
           </button>
           <button
             type="button"
             className="topbar-icon-btn"
+            onClick={() => navigate('/email')}
             aria-label={language === 'en' ? 'Messages' : 'Nachrichten'}
+            title={language === 'en' ? 'Open email threads' : 'E-Mail Threads öffnen'}
           >
-            ✉<span className="badge">7</span>
+            <span aria-hidden="true">&#9993;</span>
+            {messageCount > 0 && <span className="badge">{messageCount}</span>}
           </button>
           <button
             type="button"
             className="topbar-profile"
+            onClick={() => navigate('/settings')}
             aria-label={language === 'en' ? 'Open profile' : 'Profil öffnen'}
+            title={language === 'en' ? 'Open settings' : 'Einstellungen öffnen'}
           >
-            NH
+            {profileInitials}
           </button>
         </div>
       </div>

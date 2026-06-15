@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Generator
 from datetime import date
+from pathlib import Path
 
 import pytest
 from fastapi import HTTPException
@@ -58,6 +59,7 @@ from app.schemas.email import (
 )
 from app.schemas.knowledge import KnowledgeDocCreate, KnowledgeDocUpdate
 from app.services import content_service, deal_service, knowledge_service
+from app.services.creator_ai_settings import resolve_effective_settings
 from app.services.errors import BusinessRuleViolation
 from app.services.sales_workflow import finalize_product_sale
 
@@ -105,6 +107,35 @@ def _create_email_thread(db: Session) -> EmailThread:
     db.commit()
     db.refresh(thread)
     return thread
+
+
+def _create_global_ai_profile(db: Session, admin: User) -> None:
+    email_router.upsert_global_default_profile(
+        payload=CreatorAiProfileInput(
+            profile_name="Global",
+            clear_name="Default Klarname",
+            artist_name="Default Artist",
+            channel_link="https://example.com/default",
+            themes=["default theme"],
+            platforms=["youtube"],
+            short_description="global profile",
+            tone=CreatorAiTone.professional,
+            target_audience="brands",
+            language_code="de",
+            content_focus=["sponsoring"],
+        ),
+        db=db,
+        current_user=admin,
+    )
+
+
+def test_user_role_has_no_implicit_admin_default() -> None:
+    assert User.__table__.c.role.default is None
+
+    migration = Path(__file__).resolve().parents[1] / "alembic" / "versions" / "0025.py"
+    migration_source = migration.read_text(encoding="utf-8")
+    assert "ALTER TABLE users ALTER COLUMN role DROP DEFAULT" in migration_source
+    assert "ALTER TABLE users ALTER COLUMN role SET DEFAULT 'admin'::userrole" in migration_source
 
 
 def test_knowledge_service_crud_and_audit(service_db: Session) -> None:
@@ -330,6 +361,7 @@ def test_ai_draft_requires_human_approval_by_default(
     service_db: Session, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     admin = _create_admin(service_db, username="hil_admin")
+    _create_global_ai_profile(service_db, admin)
 
     def _fake_generate(*_args, **_kwargs):
         return {
@@ -359,29 +391,106 @@ def test_ai_draft_requires_human_approval_by_default(
     assert draft.handoff_status == EmailHandoffStatus.blocked
 
 
+def test_creator_ai_settings_without_profile_has_no_fake_defaults(service_db: Session) -> None:
+    admin = _create_admin(service_db, username="ai_profile_missing_admin")
+
+    effective, source, profile = resolve_effective_settings(service_db, user=admin)
+
+    assert source == "unconfigured"
+    assert profile is None
+    assert effective["clear_name"] is None
+    assert effective["artist_name"] is None
+    assert effective["channel_link"] is None
+    assert effective["themes"] == []
+    assert effective["platforms"] == []
+    assert effective["missing_required"] == [
+        "clear_name",
+        "artist_name",
+        "channel_link",
+        "themes",
+        "platforms",
+    ]
+
+
+def test_email_draft_requires_complete_creator_ai_profile(
+    service_db: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    admin = _create_admin(service_db, username="ai_profile_required_admin")
+    calls = {"generate": 0}
+
+    def _fake_generate(*_args, **_kwargs):
+        calls["generate"] += 1
+        return {}
+
+    monkeypatch.setattr(email_router, "generate_email_draft", _fake_generate)
+
+    with pytest.raises(HTTPException) as exc:
+        email_router.create_draft(
+            payload=email_router.EmailDraftRequest(
+                subject="Hi",
+                raw_body="Need your rates",
+                tone=EmailTone.neutral,
+            ),
+            db=service_db,
+            current_user=admin,
+        )
+
+    assert exc.value.status_code == 400
+    assert "Creator AI profile is incomplete" in str(exc.value.detail)
+    assert service_db.query(EmailThread).count() == 0
+    assert calls["generate"] == 0
+
+
+def test_email_refine_requires_complete_creator_ai_profile(
+    service_db: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    admin = _create_admin(service_db, username="ai_profile_refine_required_admin")
+    thread = _create_email_thread(service_db)
+    draft = EmailDraft(
+        thread_id=thread.id,
+        tone=EmailTone.neutral,
+        draft_subject="AW: Anfrage",
+        draft_body="Original text",
+        risk_flags="[]",
+        risk_score=0,
+        risk_level=EmailRiskLevel.low,
+        approval_required=True,
+        approval_status=EmailApprovalStatus.pending,
+        approved=False,
+        handoff_status=EmailHandoffStatus.blocked,
+    )
+    service_db.add(draft)
+    service_db.commit()
+    calls = {"refine": 0}
+
+    def _fake_refine(*_args, **_kwargs):
+        calls["refine"] += 1
+        return {}
+
+    monkeypatch.setattr(email_router, "refine_email_draft", _fake_refine)
+
+    with pytest.raises(HTTPException) as exc:
+        email_router.refine_draft(
+            payload=email_router.EmailRefineRequest(
+                thread_id=thread.id,
+                draft_id=draft.id,
+                tone=EmailTone.neutral,
+            ),
+            db=service_db,
+            current_user=admin,
+        )
+
+    assert exc.value.status_code == 400
+    assert "Creator AI profile is incomplete" in str(exc.value.detail)
+    assert calls["refine"] == 0
+
+
 def test_creator_ai_settings_profile_preview_and_generation(
     service_db: Session, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     admin = _create_admin(service_db, username="ai_profile_admin")
 
-    default_profile = email_router.upsert_global_default_profile(
-        payload=CreatorAiProfileInput(
-            profile_name="Global",
-            clear_name="Default Klarname",
-            artist_name="Default Artist",
-            channel_link="https://example.com/default",
-            themes=["default theme"],
-            platforms=["youtube"],
-            short_description="global profile",
-            tone=CreatorAiTone.professional,
-            target_audience="brands",
-            language_code="de",
-            content_focus=["sponsoring"],
-        ),
-        db=service_db,
-        current_user=admin,
-    )
-    assert default_profile.is_global_default is True
+    _create_global_ai_profile(service_db, admin)
 
     profile = email_router.create_creator_profile(
         payload=CreatorAiProfileInput(
@@ -443,23 +552,7 @@ def test_creator_ai_settings_profile_preview_and_generation(
 def test_creator_ai_settings_preview_falls_back_to_global_default(service_db: Session) -> None:
     admin = _create_admin(service_db, username="ai_profile_fallback_admin")
 
-    email_router.upsert_global_default_profile(
-        payload=CreatorAiProfileInput(
-            profile_name="Global",
-            clear_name="Default Klarname",
-            artist_name="Default Artist",
-            channel_link="https://example.com/default",
-            themes=["default theme"],
-            platforms=["youtube"],
-            short_description="global profile",
-            tone=CreatorAiTone.professional,
-            target_audience="brands",
-            language_code="de",
-            content_focus=["sponsoring"],
-        ),
-        db=service_db,
-        current_user=admin,
-    )
+    _create_global_ai_profile(service_db, admin)
 
     preview = email_router.preview_creator_ai_settings(
         profile_id=None,

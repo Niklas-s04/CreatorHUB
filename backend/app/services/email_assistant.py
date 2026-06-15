@@ -79,11 +79,11 @@ def _build_system_prompt(
     creator_profile_block = settings_to_prompt_context(creator_settings or {})
     missing_required = list((creator_settings or {}).get("missing_required") or [])
     fallback_note = (
-        f"Missing creator settings fields were filled via fallback defaults: {', '.join(missing_required)}"
+        f"Missing creator settings fields should block generation: {', '.join(missing_required)}"
         if missing_required
         else "Creator settings are complete."
     )
-    source = str((creator_settings or {}).get("source") or "static_default")
+    source = str((creator_settings or {}).get("source") or "unconfigured")
 
     prompt = f"""You are a local email assistant for a creator business. Follow BRAND VOICE and POLICY.
 

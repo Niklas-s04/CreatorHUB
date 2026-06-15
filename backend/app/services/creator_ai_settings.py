@@ -36,18 +36,13 @@ ALLOWED_CONTENT_FOCUS = {
 
 LANGUAGE_PATTERN = re.compile(r"^[a-z]{2}(?:-[A-Z]{2})?$")
 
-STATIC_AI_DEFAULTS: dict[str, Any] = {
-    "clear_name": "Creator",
-    "artist_name": "Creator",
-    "channel_link": "https://example.com/channel",
-    "themes": ["content creation"],
-    "platforms": ["youtube"],
-    "short_description": "",
-    "tone": "neutral",
-    "target_audience": "",
-    "language_code": "de",
-    "content_focus": ["community"],
-}
+REQUIRED_AI_PROFILE_FIELDS = (
+    "clear_name",
+    "artist_name",
+    "channel_link",
+    "themes",
+    "platforms",
+)
 
 
 def _clean_text(value: str | None, *, max_len: int | None = None) -> str | None:
@@ -80,6 +75,53 @@ def _normalize_list(values: list[str] | None) -> list[str]:
 def _validate_url(url: str) -> bool:
     parsed = urlparse(url)
     return parsed.scheme in {"http", "https"} and bool(parsed.netloc)
+
+
+def _empty_effective_settings() -> dict[str, Any]:
+    return {
+        "clear_name": None,
+        "artist_name": None,
+        "channel_link": None,
+        "themes": [],
+        "platforms": [],
+        "short_description": "",
+        "tone": None,
+        "target_audience": "",
+        "language_code": None,
+        "content_focus": [],
+    }
+
+
+def _profile_to_settings(profile: CreatorAiProfile) -> dict[str, Any]:
+    return {
+        "clear_name": profile.clear_name,
+        "artist_name": profile.artist_name,
+        "channel_link": profile.channel_link,
+        "themes": list(profile.themes or []),
+        "platforms": list(profile.platforms or []),
+        "short_description": profile.short_description or "",
+        "tone": profile.tone.value,
+        "target_audience": profile.target_audience or "",
+        "language_code": profile.language_code,
+        "content_focus": list(profile.content_focus or []),
+    }
+
+
+def missing_required_ai_profile_fields(settings: dict[str, Any]) -> list[str]:
+    missing_required: list[str] = []
+    if not str(settings.get("clear_name") or "").strip():
+        missing_required.append("clear_name")
+    if not str(settings.get("artist_name") or "").strip():
+        missing_required.append("artist_name")
+    if not str(settings.get("channel_link") or "").strip():
+        missing_required.append("channel_link")
+    themes = settings.get("themes")
+    if not isinstance(themes, list) or not themes:
+        missing_required.append("themes")
+    platforms = settings.get("platforms")
+    if not isinstance(platforms, list) or not platforms:
+        missing_required.append("platforms")
+    return missing_required
 
 
 def validate_profile_data(payload: dict[str, Any]) -> dict[str, Any]:
@@ -154,7 +196,7 @@ def resolve_effective_settings(
     profile_id: uuid.UUID | None = None,
 ) -> tuple[dict[str, Any], str, CreatorAiProfile | None]:
     profile: CreatorAiProfile | None = None
-    source = "static_default"
+    source = "unconfigured"
 
     if profile_id:
         profile = (
@@ -194,62 +236,18 @@ def resolve_effective_settings(
         .first()
     )
 
-    effective: dict[str, Any] = dict(STATIC_AI_DEFAULTS)
+    effective: dict[str, Any] = _empty_effective_settings()
     if global_defaults:
-        effective.update(
-            {
-                "clear_name": global_defaults.clear_name,
-                "artist_name": global_defaults.artist_name,
-                "channel_link": global_defaults.channel_link,
-                "themes": list(global_defaults.themes or []),
-                "platforms": list(global_defaults.platforms or []),
-                "short_description": global_defaults.short_description or "",
-                "tone": global_defaults.tone.value,
-                "target_audience": global_defaults.target_audience or "",
-                "language_code": global_defaults.language_code,
-                "content_focus": list(global_defaults.content_focus or []),
-            }
-        )
-        if source == "static_default":
+        effective.update(_profile_to_settings(global_defaults))
+        if source == "unconfigured":
             source = "global_default"
 
     if profile:
-        effective.update(
-            {
-                "clear_name": profile.clear_name,
-                "artist_name": profile.artist_name,
-                "channel_link": profile.channel_link,
-                "themes": list(profile.themes or []),
-                "platforms": list(profile.platforms or []),
-                "short_description": profile.short_description or "",
-                "tone": profile.tone.value,
-                "target_audience": profile.target_audience or "",
-                "language_code": profile.language_code,
-                "content_focus": list(profile.content_focus or []),
-            }
-        )
+        effective.update(_profile_to_settings(profile))
         profile.last_used_at = utcnow()
 
-    missing_required: list[str] = []
-    if not str(effective.get("clear_name") or "").strip():
-        missing_required.append("clear_name")
-    if not str(effective.get("artist_name") or "").strip():
-        missing_required.append("artist_name")
-    if not str(effective.get("channel_link") or "").strip():
-        missing_required.append("channel_link")
-    themes = effective.get("themes")
-    if not isinstance(themes, list) or not themes:
-        missing_required.append("themes")
-    platforms = effective.get("platforms")
-    if not isinstance(platforms, list) or not platforms:
-        missing_required.append("platforms")
-    if missing_required:
-        fallback = dict(STATIC_AI_DEFAULTS)
-        fallback.update(effective)
-        effective = fallback
-
     effective["source"] = source
-    effective["missing_required"] = missing_required
+    effective["missing_required"] = missing_required_ai_profile_fields(effective)
     return effective, source, profile
 
 

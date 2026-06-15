@@ -48,7 +48,10 @@ from app.schemas.email import (
     EmailThreadOut,
 )
 from app.services.audit import record_audit_log
-from app.services.creator_ai_settings import resolve_effective_settings, validate_profile_data
+from app.services.creator_ai_settings import (
+    resolve_effective_settings,
+    validate_profile_data,
+)
 from app.services.domain_events import emit_domain_event
 from app.services.email_assistant import generate_email_draft, refine_email_draft
 from app.services.knowledge_service import link_docs_to_draft
@@ -69,6 +72,11 @@ HIGH_RISK_FLAGS = {
     "contains_phone_number",
 }
 
+INCOMPLETE_CREATOR_PROFILE_MESSAGE = (
+    "Creator AI profile is incomplete. Configure clear name, artist name, "
+    "channel link, themes and platforms."
+)
+
 
 def _normalize_risk_flags(raw_flags: Any) -> list[str]:
     if isinstance(raw_flags, list):
@@ -82,6 +90,16 @@ def _normalize_risk_flags(raw_flags: Any) -> list[str]:
     except (ValueError, TypeError):
         return []
     return []
+
+
+def _require_complete_creator_settings(settings: dict[str, Any]) -> None:
+    missing_required = list(settings.get("missing_required") or [])
+    if missing_required:
+        missing = ", ".join(missing_required)
+        raise HTTPException(
+            status_code=400,
+            detail=f"{INCOMPLETE_CREATOR_PROFILE_MESSAGE} Missing: {missing}",
+        )
 
 
 def _risk_profile(
@@ -506,19 +524,21 @@ def create_draft(
         thread = db.query(EmailThread).filter(EmailThread.id == payload.thread_id).first()
         if not thread:
             raise HTTPException(status_code=404, detail="Thread not found")
-    else:
-        thread = EmailThread(subject=payload.subject, raw_body=payload.raw_body)
-        db.add(thread)
-        db.commit()
-        db.refresh(thread)
-
-    template = _resolve_template(db, payload.template_id, thread.id)
 
     effective_settings, settings_source, profile = resolve_effective_settings(
         db,
         user=current_user,
         profile_id=payload.creator_profile_id,
     )
+    _require_complete_creator_settings(effective_settings)
+
+    if thread is None:
+        thread = EmailThread(subject=payload.subject, raw_body=payload.raw_body)
+        db.add(thread)
+        db.commit()
+        db.refresh(thread)
+
+    template = _resolve_template(db, payload.template_id, thread.id)
 
     result = generate_email_draft(
         db,
@@ -703,6 +723,7 @@ def refine_draft(
         user=current_user,
         profile_id=payload.creator_profile_id,
     )
+    _require_complete_creator_settings(effective_settings)
 
     result = refine_email_draft(
         db,

@@ -10,4 +10,11 @@ describe('errors', () => {
     ).toEqual({ name: 'required' })
     expect(getErrorKind({ detail: [] })).toBe('domain')
   })
+
+  it('unwraps incomplete creator profile API errors for email UI alerts', () => {
+    const detail =
+      'Creator AI profile is incomplete. Configure clear name, artist name, channel link, themes and platforms. Missing: clear_name'
+
+    expect(getErrorMessage(new Error(JSON.stringify({ detail })))).toBe(detail)
+  })
 })
