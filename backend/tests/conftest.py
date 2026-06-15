@@ -27,7 +27,7 @@ os.environ.setdefault(
     "DATABASE_URL", "postgresql+psycopg://creator:creator@localhost:5432/creator_suite_test"
 )
 os.environ.setdefault("REDIS_URL", "redis://localhost:6379/9")
-os.environ.setdefault("CORS_ORIGINS", "http://localhost:3000")
+os.environ.setdefault("CORS_ORIGINS", "http://localhost:31080")
 os.environ.setdefault("TRUSTED_HOSTS", "localhost,127.0.0.1,testserver")
 os.environ.setdefault("AUTH_COOKIE_SECURE", "false")
 os.environ.setdefault("AUTH_COOKIE_DOMAIN", "testserver.local")

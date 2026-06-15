@@ -72,7 +72,7 @@ def test_cors_config_valid(client) -> None:
     response = client.options(
         "/api/auth/token",
         headers={
-            "Origin": "http://localhost:3000",
+            "Origin": "http://localhost:31080",
             "Access-Control-Request-Method": "POST",
         },
     )

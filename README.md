@@ -91,7 +91,7 @@ cd backend
 ../.venv/Scripts/python.exe -m app.main
 ```
 
-The backend runs on `http://localhost:8000` by default.
+The backend runs on `http://localhost:31800` by default.
 
 ### 4. Start the worker
 
@@ -110,7 +110,7 @@ npm ci
 npm run dev
 ```
 
-The frontend runs on `http://localhost:3000` by default.
+The frontend runs on `http://localhost:31080` by default.
 
 ## Docker Smoke Test
 
@@ -125,8 +125,8 @@ docker-compose up --build
 
 Then verify:
 
-- Backend readiness: `http://localhost:8000/health/ready`
-- Frontend health: `http://localhost:3000/healthz`
+- Backend readiness: `http://localhost:31800/health/ready`
+- Frontend health: `http://localhost:31080/healthz`
 - Browser DevTools cookies include Secure, HttpOnly where applicable, and SameSite=Strict.
 - Browser DevTools console has no unexpected CSP violations.
 
@@ -215,15 +215,15 @@ API conventions:
 - If authentication fails, verify cookie domain, secure cookie settings, and CSRF handling.
 - If uploads fail, verify the file signature, allowed extension, and size limits.
 - If API calls fail from the frontend, verify the API base URL and CORS settings.
-- If the frontend is opened through a LAN IP such as `http://192.168.x.x:3000`, run a
+- If the frontend is opened through a LAN IP such as `http://192.168.x.x:31080`, run a
   LAN/dev profile: set `ENV=dev` or `ENV=test`, `AUTH_COOKIE_SECURE=false`, leave
   `AUTH_COOKIE_DOMAIN` empty, add the exact browser origin to `CORS_ORIGINS`, and add
   the LAN host/IP to `TRUSTED_HOSTS`. The frontend container must not force
   `upgrade-insecure-requests` in this HTTP profile, otherwise browser asset requests are
   upgraded to HTTPS on the HTTP-only Nginx port and the app can render as a blank page.
 - If you need another frontend port, set `FRONTEND_PORT`, for example
-  `FRONTEND_PORT=3001 docker compose up --build`. Use the same port in `CORS_ORIGINS`.
-- If Nginx logs `connect() failed ... upstream: "http://[...]:8000"`, rebuild the
+  `FRONTEND_PORT=32080 docker compose up --build`. Use the same port in `CORS_ORIGINS`.
+- If Nginx logs `connect() failed ... upstream: "http://[...]:31800"`, rebuild the
   frontend image so the Docker DNS resolver config with IPv6 disabled is active.
 - For production, use an HTTPS domain, `AUTH_COOKIE_SECURE=true`, an explicit
   `AUTH_COOKIE_DOMAIN`, and production-only `CORS_ORIGINS`/`TRUSTED_HOSTS` values.

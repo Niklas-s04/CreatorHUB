@@ -4,10 +4,10 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite --host 0.0.0.0 --port 3000",
+    "dev": "vite --host 0.0.0.0 --port 31080",
     "build": "vite build",
     "build:analyze": "vite build --mode analyze",
-    "preview": "vite preview --host 0.0.0.0 --port 3000",
+    "preview": "vite preview --host 0.0.0.0 --port 31080",
     "lint": "eslint . --max-warnings=0",
     "format": "prettier --write \"*.{js,ts,json,md}\" \"**/*.{json,md,yml,yaml}\" \"src/**/*.{ts,tsx,css}\" \"e2e/**/*.ts\" \"playwright.config.ts\"",
     "format:check": "prettier --check \"*.{js,ts,json,md}\" \"**/*.{json,md,yml,yaml}\" \"src/**/*.{ts,tsx,css}\" \"e2e/**/*.ts\" \"playwright.config.ts\"",

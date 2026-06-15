@@ -37,8 +37,8 @@ RUN mkdir -p /data/uploads /data/cache /data/exports /data/logs \
 
 USER app
 
-EXPOSE 8000
+EXPOSE 31800
 
-HEALTHCHECK --interval=30s --timeout=3s --start-period=20s --retries=3 CMD curl -fsS http://127.0.0.1:8000/health/live || exit 1
+HEALTHCHECK --interval=30s --timeout=3s --start-period=20s --retries=3 CMD curl -fsS http://127.0.0.1:31800/health/live || exit 1
 
 CMD ["python", "-m", "app.main"]

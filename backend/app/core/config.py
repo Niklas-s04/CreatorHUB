@@ -35,7 +35,7 @@ class Settings(BaseSettings):
     # Openverse base URL without an API key.
     OPENVERSE_API_BASE: str = "https://api.openverse.engineering/v1"
 
-    CORS_ORIGINS: str = "http://localhost:3000"
+    CORS_ORIGINS: str = "http://localhost:31080"
     TRUSTED_HOSTS: str = "localhost,127.0.0.1"
     MAX_REQUEST_BODY_BYTES: int = 20 * 1024 * 1024
     RATE_LIMIT_ENABLED: bool = True
