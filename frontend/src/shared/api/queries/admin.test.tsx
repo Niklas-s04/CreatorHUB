@@ -59,17 +59,89 @@ describe('admin queries and mutations', () => {
   it('loads admin collections and audit history', async () => {
     const queryClient = createQueryClient()
     ;(getRegistrationRequests as unknown as ReturnType<typeof vi.fn>)
-      .mockResolvedValueOnce([{ id: 'r1', username: 'new-user', status: 'pending', reviewed_at: null, reviewed_by_user_id: null, reviewed_by_username: null, rejection_reason: null }])
-      .mockResolvedValueOnce([{ id: 'r2', username: 'done-user', status: 'approved', reviewed_at: '2024-01-01T00:00:00Z', reviewed_by_user_id: 'a1', reviewed_by_username: 'admin', rejection_reason: null }])
-    ;(getUsers as unknown as ReturnType<typeof vi.fn>).mockResolvedValue([{ id: 'u1', username: 'alice', role: 'editor', is_active: true, needs_password_setup: false, mfa_enabled: false, locked_until: null, last_activity_at: null, active_sessions: 2, permissions: ['content.read'] }])
-    ;(getUserSessions as unknown as ReturnType<typeof vi.fn>).mockResolvedValue([{ id: 's1', created_at: '2024-01-01T00:00:00Z', last_activity_at: '2024-01-01T00:00:00Z', expires_at: '2024-01-02T00:00:00Z', idle_expires_at: '2024-01-01T01:00:00Z', ip_address: null, device_label: null, user_agent: null, mfa_verified: true, mfa_step_up_expires_at: '2024-01-01T00:05:00Z', is_current: false, revoked_at: null, revoked_reason: null }])
-    ;(apiFetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({ items: [{ id: 'a1', action: 'user.role_or_status.update', entity_type: 'user', entity_id: 'u1', description: null, actor_name: 'admin', before: null, after: null, meta: null, created_at: '2024-01-01T00:00:00Z' }] })
+      .mockResolvedValueOnce([
+        {
+          id: 'r1',
+          username: 'new-user',
+          status: 'pending',
+          reviewed_at: null,
+          reviewed_by_user_id: null,
+          reviewed_by_username: null,
+          rejection_reason: null,
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          id: 'r2',
+          username: 'done-user',
+          status: 'approved',
+          reviewed_at: '2024-01-01T00:00:00Z',
+          reviewed_by_user_id: 'a1',
+          reviewed_by_username: 'admin',
+          rejection_reason: null,
+        },
+      ])
+    ;(getUsers as unknown as ReturnType<typeof vi.fn>).mockResolvedValue([
+      {
+        id: 'u1',
+        username: 'alice',
+        role: 'editor',
+        is_active: true,
+        needs_password_setup: false,
+        mfa_enabled: false,
+        locked_until: null,
+        last_activity_at: null,
+        active_sessions: 2,
+        permissions: ['content.read'],
+      },
+    ])
+    ;(getUserSessions as unknown as ReturnType<typeof vi.fn>).mockResolvedValue([
+      {
+        id: 's1',
+        created_at: '2024-01-01T00:00:00Z',
+        last_activity_at: '2024-01-01T00:00:00Z',
+        expires_at: '2024-01-02T00:00:00Z',
+        idle_expires_at: '2024-01-01T01:00:00Z',
+        ip_address: null,
+        device_label: null,
+        user_agent: null,
+        mfa_verified: true,
+        mfa_step_up_expires_at: '2024-01-01T00:05:00Z',
+        is_current: false,
+        revoked_at: null,
+        revoked_reason: null,
+      },
+    ])
+    ;(apiFetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
+      items: [
+        {
+          id: 'a1',
+          action: 'user.role_or_status.update',
+          entity_type: 'user',
+          entity_id: 'u1',
+          description: null,
+          actor_name: 'admin',
+          before: null,
+          after: null,
+          meta: null,
+          created_at: '2024-01-01T00:00:00Z',
+        },
+      ],
+    })
 
-    const pending = renderHook(() => usePendingRegistrationRequestsQuery(true), { wrapper: createWrapper(queryClient) })
-    const history = renderHook(() => useRegistrationRequestHistoryQuery(true), { wrapper: createWrapper(queryClient) })
+    const pending = renderHook(() => usePendingRegistrationRequestsQuery(true), {
+      wrapper: createWrapper(queryClient),
+    })
+    const history = renderHook(() => useRegistrationRequestHistoryQuery(true), {
+      wrapper: createWrapper(queryClient),
+    })
     const users = renderHook(() => useUsersQuery(true), { wrapper: createWrapper(queryClient) })
-    const sessions = renderHook(() => useAdminUserSessionsQuery('u1', true), { wrapper: createWrapper(queryClient) })
-    const audit = renderHook(() => useAdminRoleAuditQuery('u1', true), { wrapper: createWrapper(queryClient) })
+    const sessions = renderHook(() => useAdminUserSessionsQuery('u1', true), {
+      wrapper: createWrapper(queryClient),
+    })
+    const audit = renderHook(() => useAdminRoleAuditQuery('u1', true), {
+      wrapper: createWrapper(queryClient),
+    })
 
     await waitFor(() => expect(pending.result.current.isSuccess).toBe(true))
     await waitFor(() => expect(history.result.current.isSuccess).toBe(true))
@@ -87,10 +159,16 @@ describe('admin queries and mutations', () => {
   it('approves and rejects registration requests', async () => {
     const queryClient = createQueryClient()
     const invalidateQueries = vi.spyOn(queryClient, 'invalidateQueries')
-    ;(approveRegistrationRequest as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({ id: 'r1' })
-    ;(rejectRegistrationRequest as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({ id: 'r2' })
+    ;(approveRegistrationRequest as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
+      id: 'r1',
+    })
+    ;(rejectRegistrationRequest as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
+      id: 'r2',
+    })
 
-    const { result } = renderHook(() => useDecideRegistrationRequestMutation(), { wrapper: createWrapper(queryClient) })
+    const { result } = renderHook(() => useDecideRegistrationRequestMutation(), {
+      wrapper: createWrapper(queryClient),
+    })
 
     await act(async () => {
       await result.current.mutateAsync({ id: 'r1', action: 'approve' })
@@ -100,18 +178,25 @@ describe('admin queries and mutations', () => {
     expect(approveRegistrationRequest).toHaveBeenCalledWith('r1')
     expect(rejectRegistrationRequest).toHaveBeenCalledWith('r2', 'nope')
     expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ['admin', 'registrationRequests'] })
-    expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ['admin', 'registrationRequests', 'all'] })
+    expect(invalidateQueries).toHaveBeenCalledWith({
+      queryKey: ['admin', 'registrationRequests', 'all'],
+    })
     expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ['auth', 'users'] })
   })
 
   it('invalidates admin user data after user actions', async () => {
     const queryClient = createQueryClient()
     const invalidateQueries = vi.spyOn(queryClient, 'invalidateQueries')
-    ;(requestAdminPasswordReset as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({ ok: true, reset_token: null })
+    ;(requestAdminPasswordReset as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: true,
+      reset_token: null,
+    })
     ;(lockUser as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({})
     ;(unlockUser as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({})
 
-    const { result } = renderHook(() => useAdminUserActionsMutation(), { wrapper: createWrapper(queryClient) })
+    const { result } = renderHook(() => useAdminUserActionsMutation(), {
+      wrapper: createWrapper(queryClient),
+    })
 
     await act(async () => {
       await result.current.passwordReset.mutateAsync({ userId: 'u1' })

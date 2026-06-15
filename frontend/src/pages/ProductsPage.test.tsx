@@ -32,7 +32,9 @@ describe('ProductsPage', () => {
   })
 
   it('zeigt Fehlerzustand bei Ladefehler', async () => {
-    ;(apiFetch as unknown as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error('Laden fehlgeschlagen'))
+    ;(apiFetch as unknown as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
+      new Error('Laden fehlgeschlagen')
+    )
 
     renderWithRouter(<ProductsPage />)
 

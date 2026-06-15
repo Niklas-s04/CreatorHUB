@@ -245,7 +245,7 @@ Schema example:
             },
         )
     )
-    db.commit()
+    db.flush()
 
     return result
 
@@ -403,6 +403,6 @@ Rules:
             },
         )
     )
-    db.commit()
+    db.flush()
 
     return result

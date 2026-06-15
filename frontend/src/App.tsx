@@ -1,79 +1,80 @@
-import { Suspense, lazy, useEffect, useRef, useState } from "react";
-import { Navigate, Outlet, Route, Routes } from "react-router-dom";
-import TopBar from "./components/TopBar";
-import Sidebar from "./components/Sidebar";
-import CookieConsentBanner from "./components/CookieConsentBanner";
-import { checkSession } from "./api";
-import { GlobalLoading } from "./shared/ui/states/GlobalLoading";
-import { Breadcrumbs } from "./shared/ui/navigation/Breadcrumbs";
-import { LanguageProvider, useI18n } from "./shared/i18n/i18n";
-import { StepUpProvider } from "./shared/auth/StepUpProvider";
+import { Suspense, lazy, useEffect, useRef, useState } from 'react'
+import { Navigate, Outlet, Route, Routes } from 'react-router-dom'
+import TopBar from './components/TopBar'
+import Sidebar from './components/Sidebar'
+import CookieConsentBanner from './components/CookieConsentBanner'
+import { checkSession } from './api'
+import { GlobalLoading } from './shared/ui/states/GlobalLoading'
+import { Breadcrumbs } from './shared/ui/navigation/Breadcrumbs'
+import { LanguageProvider, useI18n } from './shared/i18n/i18n'
+import { StepUpProvider } from './shared/auth/StepUpProvider'
 
-const DashboardPage = lazy(() => import("./pages/DashboardPage"));
-const ProductsPage = lazy(() => import("./pages/ProductsPage"));
-const ProductDetailPage = lazy(() => import("./pages/ProductDetailPage"));
-const EmailPage = lazy(() => import("./pages/EmailPage"));
-const SettingsPage = lazy(() => import("./pages/SettingsPage"));
-const ContentPage = lazy(() => import("./pages/ContentPage"));
-const AssetsPage = lazy(() => import("./pages/AssetsPage"));
-const LoginPage = lazy(() => import("./pages/LoginPage"));
-const AdminPage = lazy(() => import("./pages/AdminPage"));
-const AuditPage = lazy(() => import("./pages/AuditPage"));
-const OperationsPage = lazy(() => import("./pages/OperationsPage"));
+const DashboardPage = lazy(() => import('./pages/DashboardPage'))
+const ProductsPage = lazy(() => import('./pages/ProductsPage'))
+const ProductDetailPage = lazy(() => import('./pages/ProductDetailPage'))
+const EmailPage = lazy(() => import('./pages/EmailPage'))
+const SettingsPage = lazy(() => import('./pages/SettingsPage'))
+const ContentPage = lazy(() => import('./pages/ContentPage'))
+const AssetsPage = lazy(() => import('./pages/AssetsPage'))
+const LoginPage = lazy(() => import('./pages/LoginPage'))
+const AdminPage = lazy(() => import('./pages/AdminPage'))
+const AuditPage = lazy(() => import('./pages/AuditPage'))
+const OperationsPage = lazy(() => import('./pages/OperationsPage'))
 
 function RequireAuth() {
-  const [state, setState] = useState<"loading" | "ok" | "no">("loading");
-  const { t } = useI18n();
+  const [state, setState] = useState<'loading' | 'ok' | 'no'>('loading')
+  const { t } = useI18n()
 
   useEffect(() => {
-    let mounted = true;
-    checkSession().then(ok => {
-      if (mounted) setState(ok ? "ok" : "no");
-    });
+    let mounted = true
+    checkSession().then((ok) => {
+      if (mounted) setState(ok ? 'ok' : 'no')
+    })
     return () => {
-      mounted = false;
-    };
-  }, []);
+      mounted = false
+    }
+  }, [])
 
-  if (state === "loading") return <GlobalLoading label={t('app.loadingSession')} />;
-  if (state === "no") return <Navigate to="/login" replace />;
-  return <Outlet />;
+  if (state === 'loading') return <GlobalLoading label={t('app.loadingSession')} />
+  if (state === 'no') return <Navigate to="/login" replace />
+  return <Outlet />
 }
 
 function PublicOnly() {
-  const [state, setState] = useState<"loading" | "authed" | "guest">("loading");
-  const { t } = useI18n();
+  const [state, setState] = useState<'loading' | 'authed' | 'guest'>('loading')
+  const { t } = useI18n()
 
   useEffect(() => {
-    let mounted = true;
-    checkSession().then(ok => {
-      if (mounted) setState(ok ? "authed" : "guest");
-    });
+    let mounted = true
+    checkSession().then((ok) => {
+      if (mounted) setState(ok ? 'authed' : 'guest')
+    })
     return () => {
-      mounted = false;
-    };
-  }, []);
+      mounted = false
+    }
+  }, [])
 
-  if (state === "loading") return <GlobalLoading label={t('app.loadingSession')} />;
-  if (state === "authed") return <Navigate to="/dashboard" replace />;
-  return <Outlet />;
+  if (state === 'loading') return <GlobalLoading label={t('app.loadingSession')} />
+  if (state === 'authed') return <Navigate to="/dashboard" replace />
+  return <Outlet />
 }
 
 function AppLayout() {
-  const { t } = useI18n();
-  const [menuOpen, setMenuOpen] = useState(false);
-  const drawerRef = useRef<HTMLDivElement | null>(null);
-  const previousFocusRef = useRef<HTMLElement | null>(null);
+  const { t } = useI18n()
+  const [menuOpen, setMenuOpen] = useState(false)
+  const drawerRef = useRef<HTMLDivElement | null>(null)
+  const previousFocusRef = useRef<HTMLElement | null>(null)
 
   useEffect(() => {
     if (!menuOpen) {
-      previousFocusRef.current?.focus();
-      return;
+      previousFocusRef.current?.focus()
+      return
     }
 
-    previousFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    const drawerEl = drawerRef.current;
-    if (!drawerEl) return;
+    previousFocusRef.current =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null
+    const drawerEl = drawerRef.current
+    if (!drawerEl) return
 
     const selector = [
       'button:not([disabled])',
@@ -82,49 +83,56 @@ function AppLayout() {
       'select:not([disabled])',
       'textarea:not([disabled])',
       '[tabindex]:not([tabindex="-1"])',
-    ].join(', ');
+    ].join(', ')
 
-    const focusables = Array.from(drawerEl.querySelectorAll<HTMLElement>(selector));
-    const firstFocusable = focusables[0] ?? drawerEl;
-    firstFocusable.focus();
+    const focusables = Array.from(drawerEl.querySelectorAll<HTMLElement>(selector))
+    const firstFocusable = focusables[0] ?? drawerEl
+    firstFocusable.focus()
 
     function onKeyDown(event: KeyboardEvent) {
       if (event.key === 'Escape') {
-        event.preventDefault();
-        setMenuOpen(false);
-        return;
+        event.preventDefault()
+        setMenuOpen(false)
+        return
       }
-      if (event.key !== 'Tab') return;
+      if (event.key !== 'Tab') return
 
-      const allFocusable = Array.from(drawerEl!.querySelectorAll<HTMLElement>(selector));
+      const allFocusable = Array.from(drawerEl!.querySelectorAll<HTMLElement>(selector))
       if (!allFocusable.length) {
-        event.preventDefault();
-        drawerEl!.focus();
-        return;
+        event.preventDefault()
+        drawerEl!.focus()
+        return
       }
-      const first = allFocusable[0];
-      const last = allFocusable[allFocusable.length - 1];
-      const active = document.activeElement;
+      const first = allFocusable[0]
+      const last = allFocusable[allFocusable.length - 1]
+      const active = document.activeElement
       if (event.shiftKey && active === first) {
-        event.preventDefault();
-        last.focus();
+        event.preventDefault()
+        last.focus()
       } else if (!event.shiftKey && active === last) {
-        event.preventDefault();
-        first.focus();
+        event.preventDefault()
+        first.focus()
       }
     }
 
-    document.addEventListener('keydown', onKeyDown);
-    return () => document.removeEventListener('keydown', onKeyDown);
-  }, [menuOpen]);
+    document.addEventListener('keydown', onKeyDown)
+    return () => document.removeEventListener('keydown', onKeyDown)
+  }, [menuOpen])
 
   return (
     <div className="app-shell">
       <Sidebar />
-      {menuOpen && <button type="button" className="sidebar-overlay" onClick={() => setMenuOpen(false)} aria-label={t('app.menuClose')} />}
+      {menuOpen && (
+        <button
+          type="button"
+          className="sidebar-overlay"
+          onClick={() => setMenuOpen(false)}
+          aria-label={t('app.menuClose')}
+        />
+      )}
       <div
         id="mobile-navigation-drawer"
-        className={menuOpen ? "sidebar-drawer open" : "sidebar-drawer"}
+        className={menuOpen ? 'sidebar-drawer open' : 'sidebar-drawer'}
         role="dialog"
         aria-modal="true"
         aria-label={t('common.sidebarNavigation')}
@@ -134,14 +142,14 @@ function AppLayout() {
         <Sidebar onNavigate={() => setMenuOpen(false)} />
       </div>
       <div className="app-main">
-        <TopBar menuOpen={menuOpen} onToggleMenu={() => setMenuOpen(v => !v)} />
+        <TopBar menuOpen={menuOpen} onToggleMenu={() => setMenuOpen((v) => !v)} />
         <main id="main-content" className="main-content" tabIndex={-1}>
           <Breadcrumbs />
           <Outlet />
         </main>
       </div>
     </div>
-  );
+  )
 }
 
 export default function App() {
@@ -149,11 +157,11 @@ export default function App() {
     <LanguageProvider>
       <AppInner />
     </LanguageProvider>
-  );
+  )
 }
 
 function AppInner() {
-  const { t } = useI18n();
+  const { t } = useI18n()
 
   return (
     <Suspense fallback={<GlobalLoading label={t('app.loadingPage')} />}>
@@ -182,5 +190,5 @@ function AppInner() {
         </Routes>
       </StepUpProvider>
     </Suspense>
-  );
+  )
 }

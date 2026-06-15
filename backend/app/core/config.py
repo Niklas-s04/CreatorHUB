@@ -37,7 +37,7 @@ class Settings(BaseSettings):
 
     CORS_ORIGINS: str = "http://localhost:3000"
     TRUSTED_HOSTS: str = "localhost,127.0.0.1"
-    MAX_REQUEST_BODY_BYTES: int = 2_000_000
+    MAX_REQUEST_BODY_BYTES: int = 20 * 1024 * 1024
     RATE_LIMIT_ENABLED: bool = True
     RATE_LIMIT_WINDOW_SECONDS: int = 60
     RATE_LIMIT_GLOBAL: int = 240
@@ -125,6 +125,8 @@ class Settings(BaseSettings):
 
     OBSERVABILITY_METRICS_ENABLED: bool = True
     OBSERVABILITY_METRICS_PATH: str = "/health/metrics"
+    OBSERVABILITY_DETAIL_AUTH_REQUIRED: bool = True
+    OBSERVABILITY_DETAIL_TOKEN: str = ""
     OBSERVABILITY_MONITOR_ENABLED: bool = True
     OBSERVABILITY_MONITOR_INTERVAL_SECONDS: int = 30
 

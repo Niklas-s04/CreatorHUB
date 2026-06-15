@@ -1,6 +1,8 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import { useCallback, useMemo } from 'react'
 import { getMe, type Me, type Permission } from '../../api'
 import { getErrorMessage } from '../lib/errors'
+import { queryKeys } from '../api/queryKeys'
 
 type UseAuthzResult = {
   me: Me | null
@@ -11,39 +13,29 @@ type UseAuthzResult = {
 }
 
 export function useAuthz(): UseAuthzResult {
-  const [me, setMe] = useState<Me | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const meQuery = useQuery({
+    queryKey: queryKeys.auth.me(),
+    queryFn: getMe,
+    staleTime: 60_000,
+    retry: false,
+  })
+  const { refetch } = meQuery
 
-  const load = useCallback(async () => {
-    setLoading(true)
-    setError(null)
-    try {
-      const data = await getMe()
-      setMe(data)
-    } catch (e: unknown) {
-      setError(getErrorMessage(e))
-      setMe(null)
-    } finally {
-      setLoading(false)
-    }
-  }, [])
-
-  useEffect(() => {
-    load()
-  }, [load])
-
+  const me = meQuery.data ?? null
   const permissionSet = useMemo(() => new Set(me?.permissions || []), [me])
   const hasPermission = useCallback(
     (permission: Permission) => permissionSet.has(permission),
     [permissionSet]
   )
+  const reload = useCallback(async () => {
+    await refetch()
+  }, [refetch])
 
   return {
     me,
-    loading,
-    error,
+    loading: meQuery.isLoading || meQuery.isFetching,
+    error: meQuery.error ? getErrorMessage(meQuery.error) : null,
     hasPermission,
-    reload: load,
+    reload,
   }
 }

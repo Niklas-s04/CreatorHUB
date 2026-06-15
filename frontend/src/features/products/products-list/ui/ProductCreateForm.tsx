@@ -9,11 +9,7 @@ type ProductCreateFormProps = {
   onSave: (values: ProductCreateFormValues) => Promise<void>
 }
 
-export function ProductCreateForm({
-  canWrite,
-  isSubmitting,
-  onSave,
-}: ProductCreateFormProps) {
+export function ProductCreateForm({ canWrite, isSubmitting, onSave }: ProductCreateFormProps) {
   const {
     register,
     handleSubmit,
@@ -42,14 +38,22 @@ export function ProductCreateForm({
         <button
           className="btn"
           type="submit"
-          disabled={!canWrite || !isDirty || Boolean(errors.title) || Boolean(errors.currentValue) || isSubmitting}
+          disabled={
+            !canWrite ||
+            !isDirty ||
+            Boolean(errors.title) ||
+            Boolean(errors.currentValue) ||
+            isSubmitting
+          }
         >
           {isSubmitting ? 'Speichern…' : 'Speichern'}
         </button>
       </div>
 
       <div className="control-row section-gap">
-        <label className="sr-only" htmlFor="product-create-title">Titel</label>
+        <label className="sr-only" htmlFor="product-create-title">
+          Titel
+        </label>
         <input
           id="product-create-title"
           className="grow"
@@ -58,11 +62,17 @@ export function ProductCreateForm({
           aria-invalid={Boolean(errors.title)}
           aria-describedby={errors.title ? 'product-create-title-error' : undefined}
         />
-        <label className="sr-only" htmlFor="product-create-brand">Brand</label>
+        <label className="sr-only" htmlFor="product-create-brand">
+          Brand
+        </label>
         <input id="product-create-brand" placeholder="Brand" {...register('brand')} />
-        <label className="sr-only" htmlFor="product-create-model">Model</label>
+        <label className="sr-only" htmlFor="product-create-model">
+          Model
+        </label>
         <input id="product-create-model" placeholder="Model" {...register('model')} />
-        <label className="sr-only" htmlFor="product-create-current-value">Wert (EUR)</label>
+        <label className="sr-only" htmlFor="product-create-current-value">
+          Wert (EUR)
+        </label>
         <input
           id="product-create-current-value"
           placeholder="Wert (EUR)"
@@ -74,8 +84,12 @@ export function ProductCreateForm({
 
       {(errors.title || errors.currentValue) && (
         <div className="error mt8" role="alert">
-          {errors.title?.message && <span id="product-create-title-error">{errors.title.message}</span>}
-          {errors.currentValue?.message && <span id="product-create-current-value-error">{errors.currentValue.message}</span>}
+          {errors.title?.message && (
+            <span id="product-create-title-error">{errors.title.message}</span>
+          )}
+          {errors.currentValue?.message && (
+            <span id="product-create-current-value-error">{errors.currentValue.message}</span>
+          )}
         </div>
       )}
     </form>

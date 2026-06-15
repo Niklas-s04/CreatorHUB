@@ -16,82 +16,91 @@ export type NavSection = {
 
 export function buildNavSections(language: Language): NavSection[] {
   return [
-  {
-    title: translate(language, 'nav.sections.operations'),
-    items: [
-      {
-        to: '/dashboard',
-        label: translate(language, 'nav.dashboard'),
-        icon: '◧',
-        keywords: ['dashboard', 'übersicht', 'kpi', 'cockpit', 'overview', 'metrics'],
-      },
-      {
-        to: '/operations',
-        label: translate(language, 'nav.operationsInbox'),
-        icon: '☰',
-        keywords: ['operations', 'inbox', 'todo', 'aufgaben', 'freigaben', 'eskalation', 'tasks', 'approvals'],
-      },
-    ],
-  },
-  {
-    title: translate(language, 'nav.sections.content'),
-    items: [
-      {
-        to: '/products',
-        label: translate(language, 'nav.products'),
-        icon: '◫',
-        keywords: ['produkte', 'inventar', 'produkt', 'detail', 'products', 'inventory'],
-      },
-      {
-        to: '/assets',
-        label: translate(language, 'nav.assets'),
-        icon: '◩',
-        keywords: ['assets', 'mediathek', 'review', 'asset', 'media library'],
-      },
-      {
-        to: '/content',
-        label: translate(language, 'nav.contentPlan'),
-        icon: '✎',
-        keywords: ['content', 'kanban', 'aufgaben', 'planung', 'planning'],
-      },
-    ],
-  },
-  {
-    title: translate(language, 'nav.sections.communication'),
-    items: [
-      {
-        to: '/email',
-        label: translate(language, 'nav.emailThreads'),
-        icon: '✉',
-        keywords: ['email', 'mail', 'kommunikation', 'deals', 'threads', 'correspondence'],
-      },
-    ],
-  },
-  {
-    title: translate(language, 'nav.sections.governance'),
-    items: [
-      {
-        to: '/admin',
-        label: translate(language, 'nav.administration'),
-        icon: '⌘',
-        keywords: ['admin', 'registrierung', 'freigabe', 'user', 'approval'],
-        requiredPermission: 'user.approve_registration',
-      },
-      {
-        to: '/audit',
-        label: translate(language, 'nav.audit'),
-        icon: '⧉',
-        keywords: ['audit', 'vorfälle', 'security', 'compliance', 'security review'],
-        requiredPermission: 'audit.view',
-      },
-      {
-        to: '/settings',
-        label: translate(language, 'nav.settings'),
-        icon: '⚙',
-        keywords: ['settings', 'einstellungen', 'mfa', 'konto', 'account'],
-      },
-    ],
-  },
+    {
+      title: translate(language, 'nav.sections.operations'),
+      items: [
+        {
+          to: '/dashboard',
+          label: translate(language, 'nav.dashboard'),
+          icon: '◧',
+          keywords: ['dashboard', 'übersicht', 'kpi', 'cockpit', 'overview', 'metrics'],
+        },
+        {
+          to: '/operations',
+          label: translate(language, 'nav.operationsInbox'),
+          icon: '☰',
+          keywords: [
+            'operations',
+            'inbox',
+            'todo',
+            'aufgaben',
+            'freigaben',
+            'eskalation',
+            'tasks',
+            'approvals',
+          ],
+        },
+      ],
+    },
+    {
+      title: translate(language, 'nav.sections.content'),
+      items: [
+        {
+          to: '/products',
+          label: translate(language, 'nav.products'),
+          icon: '◫',
+          keywords: ['produkte', 'inventar', 'produkt', 'detail', 'products', 'inventory'],
+        },
+        {
+          to: '/assets',
+          label: translate(language, 'nav.assets'),
+          icon: '◩',
+          keywords: ['assets', 'mediathek', 'review', 'asset', 'media library'],
+        },
+        {
+          to: '/content',
+          label: translate(language, 'nav.contentPlan'),
+          icon: '✎',
+          keywords: ['content', 'kanban', 'aufgaben', 'planung', 'planning'],
+        },
+      ],
+    },
+    {
+      title: translate(language, 'nav.sections.communication'),
+      items: [
+        {
+          to: '/email',
+          label: translate(language, 'nav.emailThreads'),
+          icon: '✉',
+          keywords: ['email', 'mail', 'kommunikation', 'deals', 'threads', 'correspondence'],
+        },
+      ],
+    },
+    {
+      title: translate(language, 'nav.sections.governance'),
+      items: [
+        {
+          to: '/admin',
+          label: translate(language, 'nav.administration'),
+          icon: '⌘',
+          keywords: ['admin', 'registrierung', 'freigabe', 'user', 'approval'],
+          requiredPermission: 'user.approve_registration',
+        },
+        {
+          to: '/audit',
+          label: translate(language, 'nav.audit'),
+          icon: '⧉',
+          keywords: ['audit', 'vorfälle', 'security', 'compliance', 'security review'],
+          requiredPermission: 'audit.view',
+        },
+        {
+          to: '/settings',
+          label: translate(language, 'nav.settings'),
+          icon: '⚙',
+          keywords: ['settings', 'einstellungen', 'mfa', 'konto', 'account'],
+        },
+      ],
+    },
   ]
 }
 

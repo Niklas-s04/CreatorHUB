@@ -118,7 +118,7 @@ export default function DashboardPage() {
           </section>
 
           <section className="kpi-grid">
-            {metrics.map(metric => (
+            {metrics.map((metric) => (
               <Link
                 to={metric.route}
                 key={metric.key}
@@ -140,21 +140,27 @@ export default function DashboardPage() {
           </section>
 
           <section className="dashboard-worklist-grid">
-            {metrics.map(metric => (
+            {metrics.map((metric) => (
               <article className="card" key={`${metric.key}-list`}>
                 <div className="card-head">
                   <h3>{metric.label}</h3>
-                  <Link className="btn" to={metric.route}>{t('dashboard.open')}</Link>
+                  <Link className="btn" to={metric.route}>
+                    {t('dashboard.open')}
+                  </Link>
                 </div>
                 <div className="worklist-items">
-                  {metric.items.map(item => (
+                  {metric.items.map((item) => (
                     <div key={item.id} className="worklist-item">
                       <div className="worklist-title">{item.title}</div>
                       {item.subtitle && <div className="worklist-subtitle">{item.subtitle}</div>}
-                      {item.updated_at && <div className="worklist-time">{formatTime(item.updated_at)}</div>}
+                      {item.updated_at && (
+                        <div className="worklist-time">{formatTime(item.updated_at)}</div>
+                      )}
                     </div>
                   ))}
-                  {metric.items.length === 0 && <div className="muted">{t('dashboard.noItems')}</div>}
+                  {metric.items.length === 0 && (
+                    <div className="muted">{t('dashboard.noItems')}</div>
+                  )}
                 </div>
               </article>
             ))}

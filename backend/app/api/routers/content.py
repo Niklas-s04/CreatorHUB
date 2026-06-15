@@ -267,11 +267,11 @@ def list_my_tasks(
         status=status,
         overdue_only=overdue_only,
     )
-    items = content_service.list_personal_tasks(db, user=current_user, filters=filters)
-    total = len(items)
-    sliced = items[offset : offset + limit]
+    items, total = content_service.list_personal_tasks_page(
+        db, user=current_user, filters=filters, limit=limit, offset=offset
+    )
     return to_page(
-        items=sliced,
+        items=items,
         total=total,
         limit=limit,
         offset=offset,

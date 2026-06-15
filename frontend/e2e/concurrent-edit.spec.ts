@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test'
 
-import { csrfHeaders, loginAsAdmin, logout, uniqueSuffix } from './helpers'
+import { csrfHeaders, e2eApiPath, loginAsAdmin, logout, uniqueSuffix } from './helpers'
 
 test.describe('Concurrent edit E2E', () => {
   test('last write is persisted when two sessions edit the same product notes', async ({
@@ -10,7 +10,7 @@ test.describe('Concurrent edit E2E', () => {
     const productTitle = uniqueSuffix('Concurrent Product')
 
     await loginAsAdmin(page)
-    const createResponse = await page.request.post('/api/products', {
+    const createResponse = await page.request.post(e2eApiPath('/products'), {
       headers: await csrfHeaders(page),
       data: { title: productTitle },
     })

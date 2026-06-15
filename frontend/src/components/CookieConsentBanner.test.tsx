@@ -17,7 +17,9 @@ describe('CookieConsentBanner', () => {
     fireEvent.click(screen.getByRole('button', { name: /Analytics erlauben/i }))
 
     expect(window.localStorage.getItem('consent_level')).toBe('all')
-    expect(screen.queryByRole('region', { name: /Notwendige Cookies sind erforderlich/i })).toBeNull()
+    expect(
+      screen.queryByRole('region', { name: /Notwendige Cookies sind erforderlich/i })
+    ).toBeNull()
   })
 
   it('stays hidden after necessary-only consent', () => {

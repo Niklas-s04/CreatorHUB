@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test'
 
-import { csrfHeaders, login, loginAsAdmin, logout, uniqueSuffix } from './helpers'
+import { csrfHeaders, e2eApiPath, login, loginAsAdmin, logout, uniqueSuffix } from './helpers'
 
 test.describe('Permission boundary E2E', () => {
   test('viewer cannot see product write actions', async ({ page }) => {
@@ -8,7 +8,7 @@ test.describe('Permission boundary E2E', () => {
     const viewerPassword = 'Viewer!Pass12345'
 
     await loginAsAdmin(page)
-    const createResponse = await page.request.post('/api/auth/users', {
+    const createResponse = await page.request.post(e2eApiPath('/auth/users'), {
       headers: await csrfHeaders(page),
       data: {
         username: viewerName,

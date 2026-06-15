@@ -60,9 +60,13 @@ describe('createHttpClient', () => {
   it('refreshes once after unauthorized responses', async () => {
     const onUnauthorizedRetry = vi.fn().mockResolvedValue(undefined)
     const fetchMock = vi.mocked(fetch)
-    fetchMock.mockResolvedValueOnce(textResponse('expired', 401)).mockResolvedValueOnce(jsonResponse({ ok: true }))
+    fetchMock
+      .mockResolvedValueOnce(textResponse('expired', 401))
+      .mockResolvedValueOnce(jsonResponse({ ok: true }))
 
-    await expect(createClient({ onUnauthorizedRetry }).request('/profile')).resolves.toEqual({ ok: true })
+    await expect(createClient({ onUnauthorizedRetry }).request('/profile')).resolves.toEqual({
+      ok: true,
+    })
 
     expect(onUnauthorizedRetry).toHaveBeenCalledTimes(1)
     expect(fetchMock).toHaveBeenCalledTimes(2)
@@ -85,9 +89,13 @@ describe('createHttpClient', () => {
 
   it('retries idempotent network failures', async () => {
     const fetchMock = vi.mocked(fetch)
-    fetchMock.mockRejectedValueOnce(new TypeError('network')).mockResolvedValueOnce(jsonResponse({ ok: true }))
+    fetchMock
+      .mockRejectedValueOnce(new TypeError('network'))
+      .mockResolvedValueOnce(jsonResponse({ ok: true }))
 
-    await expect(createClient().request('/retry', { retryDelayMs: 0 })).resolves.toEqual({ ok: true })
+    await expect(createClient().request('/retry', { retryDelayMs: 0 })).resolves.toEqual({
+      ok: true,
+    })
     expect(fetchMock).toHaveBeenCalledTimes(2)
   })
 
@@ -95,7 +103,9 @@ describe('createHttpClient', () => {
     const fetchMock = vi.mocked(fetch)
     fetchMock.mockResolvedValueOnce(textResponse('bad request', 400))
 
-    const error = await createClient().request('/bad').catch(err => err)
+    const error = await createClient()
+      .request('/bad')
+      .catch((err) => err)
 
     expect(error).toBeInstanceOf(ApiError)
     expect(error).toMatchObject({
@@ -118,5 +128,20 @@ describe('createHttpClient', () => {
       details: 'no access',
     })
     expect(onUnauthorized).toHaveBeenCalledTimes(1)
+  })
+
+  it('refreshes once before retrying unauthorized blob responses', async () => {
+    const onUnauthorizedRetry = vi.fn().mockResolvedValue(undefined)
+    const fetchMock = vi.mocked(fetch)
+    fetchMock
+      .mockResolvedValueOnce(textResponse('expired', 401))
+      .mockResolvedValueOnce(new Response('file-content', { status: 200 }))
+
+    await expect(createClient({ onUnauthorizedRetry }).requestBlob('/file')).resolves.toMatchObject(
+      { size: 12 }
+    )
+
+    expect(onUnauthorizedRetry).toHaveBeenCalledTimes(1)
+    expect(fetchMock).toHaveBeenCalledTimes(2)
   })
 })

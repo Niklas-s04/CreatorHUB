@@ -46,13 +46,13 @@ function asNullableString(value: unknown): string | null {
 function parseSearchGroups(input: unknown): SearchGroup[] {
   if (!isRecord(input) || !Array.isArray(input.groups)) return []
   return input.groups
-    .map(group => {
+    .map((group) => {
       const src = isRecord(group) ? group : {}
       const key = asString(src.type)
       const label = asString(src.label)
       const hits = Array.isArray(src.hits)
         ? src.hits
-            .map(hit => {
+            .map((hit) => {
               const item = isRecord(hit) ? hit : {}
               const id = asString(item.id)
               const type = asString(item.type)
@@ -113,7 +113,13 @@ function HighlightedText({ text, query }: { text: string; query: string }) {
   )
 }
 
-export default function TopBar({ menuOpen = false, onToggleMenu }: { menuOpen?: boolean; onToggleMenu: () => void }) {
+export default function TopBar({
+  menuOpen = false,
+  onToggleMenu,
+}: {
+  menuOpen?: boolean
+  onToggleMenu: () => void
+}) {
   const navigate = useNavigate()
   const { language, t } = useI18n()
   const inputRef = useRef<HTMLInputElement | null>(null)
@@ -164,7 +170,7 @@ export default function TopBar({ menuOpen = false, onToggleMenu }: { menuOpen?: 
       try {
         const summary = await apiFetch<DashboardSummary>('/dashboard/summary')
         if (!active) return
-        const metric = summary.metrics.find(item => item.key === 'pending_registration_requests')
+        const metric = summary.metrics.find((item) => item.key === 'pending_registration_requests')
         setPendingApprovalCount(metric?.count ?? 0)
       } catch {
         if (!active) return
@@ -188,11 +194,11 @@ export default function TopBar({ menuOpen = false, onToggleMenu }: { menuOpen?: 
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [])
 
-  const flatHits = useMemo(() => groups.flatMap(group => group.hits), [groups])
+  const flatHits = useMemo(() => groups.flatMap((group) => group.hits), [groups])
 
   const activeIndex = useMemo(() => {
     if (!activeKey) return -1
-    return flatHits.findIndex(hit => `${hit.type}:${hit.id}` === activeKey)
+    return flatHits.findIndex((hit) => `${hit.type}:${hit.id}` === activeKey)
   }, [activeKey, flatHits])
 
   function goTo(path: string) {
@@ -268,7 +274,9 @@ export default function TopBar({ menuOpen = false, onToggleMenu }: { menuOpen?: 
         </button>
         <div className="topbar-search-wrap">
           <form onSubmit={onSubmit} role="search" aria-label={t('common.search')}>
-            <label htmlFor="global-search" className="sr-only">{t('common.search')}</label>
+            <label htmlFor="global-search" className="sr-only">
+              {t('common.search')}
+            </label>
             <input
               id="global-search"
               ref={inputRef}
@@ -286,7 +294,7 @@ export default function TopBar({ menuOpen = false, onToggleMenu }: { menuOpen?: 
               onBlur={() => {
                 setTimeout(() => setOpen(false), 120)
               }}
-              onChange={event => setQuery(event.target.value)}
+              onChange={(event) => setQuery(event.target.value)}
             />
           </form>
           <div className="sr-only" aria-live="polite" aria-atomic="true">
@@ -299,17 +307,23 @@ export default function TopBar({ menuOpen = false, onToggleMenu }: { menuOpen?: 
               role="listbox"
               aria-label={language === 'en' ? 'Search results' : 'Suchergebnisse'}
             >
-              {loading && <div className="topbar-search-empty">{language === 'en' ? 'Searching…' : 'Suche läuft…'}</div>}
+              {loading && (
+                <div className="topbar-search-empty">
+                  {language === 'en' ? 'Searching…' : 'Suche läuft…'}
+                </div>
+              )}
               {!loading && groups.length === 0 && (
                 <div className="topbar-search-empty">
-                  {language === 'en' ? 'No results. Enter opens the Operations Inbox.' : 'Keine Treffer. Enter öffnet Operations Inbox.'}
+                  {language === 'en'
+                    ? 'No results. Enter opens the Operations Inbox.'
+                    : 'Keine Treffer. Enter öffnet Operations Inbox.'}
                 </div>
               )}
               {!loading &&
-                groups.map(group => (
+                groups.map((group) => (
                   <div key={group.key} className="topbar-search-group">
                     <div className="topbar-search-group-title">{group.label}</div>
-                    {group.hits.map(hit => {
+                    {group.hits.map((hit) => {
                       const key = `${hit.type}:${hit.id}`
                       const active = key === activeKey
                       return (
@@ -353,8 +367,7 @@ export default function TopBar({ menuOpen = false, onToggleMenu }: { menuOpen?: 
             className="topbar-icon-btn"
             aria-label={language === 'en' ? 'Messages' : 'Nachrichten'}
           >
-            ✉
-            <span className="badge">7</span>
+            ✉<span className="badge">7</span>
           </button>
           <button
             type="button"

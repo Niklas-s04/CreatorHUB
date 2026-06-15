@@ -62,7 +62,9 @@ function summarizeDimension(asset: AssetLibraryItem) {
 function formatDate(value: string, locale: 'de-DE' | 'en-US' = 'de-DE') {
   try {
     return new Date(value).toLocaleDateString(locale, {
-      day: '2-digit', month: '2-digit', year: '2-digit'
+      day: '2-digit',
+      month: '2-digit',
+      year: '2-digit',
     })
   } catch (e) {
     return value
@@ -73,7 +75,13 @@ function hasLicense(asset: AssetLibraryItem) {
   return Boolean(asset.license_type || asset.license_url)
 }
 
-function ThumbVisibilityProbe({ assetId, onVisible }: { assetId: string; onVisible: (id: string) => void }) {
+function ThumbVisibilityProbe({
+  assetId,
+  onVisible,
+}: {
+  assetId: string
+  onVisible: (id: string) => void
+}) {
   const ref = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
@@ -81,7 +89,7 @@ function ThumbVisibilityProbe({ assetId, onVisible }: { assetId: string; onVisib
     if (!node) return
 
     const observer = new IntersectionObserver(
-      entries => {
+      (entries) => {
         if (!entries[0]?.isIntersecting) return
         onVisible(assetId)
         observer.disconnect()
@@ -101,17 +109,25 @@ export default function AssetsPage() {
   const { language } = useI18n()
   const [searchParams, setSearchParams] = useSearchParams()
   const [searchInput, setSearchInput] = useState(searchParams.get('q') || '')
-  const [ownerType, setOwnerType] = useState<'' | AssetOwnerType>((searchParams.get('owner_type') as AssetOwnerType | '') || '')
-  const [kind, setKind] = useState<'' | AssetKind>((searchParams.get('kind') as AssetKind | '') || '')
+  const [ownerType, setOwnerType] = useState<'' | AssetOwnerType>(
+    (searchParams.get('owner_type') as AssetOwnerType | '') || ''
+  )
+  const [kind, setKind] = useState<'' | AssetKind>(
+    (searchParams.get('kind') as AssetKind | '') || ''
+  )
   const [approvedOnly, setApprovedOnly] = useState(searchParams.get('approved_only') !== 'false')
   const [primaryOnly, setPrimaryOnly] = useState(searchParams.get('primary_only') === 'true')
-  const [licenseFilter, setLicenseFilter] = useState<LicenseFilter>((searchParams.get('license_filter') as LicenseFilter) || 'any')
+  const [licenseFilter, setLicenseFilter] = useState<LicenseFilter>(
+    (searchParams.get('license_filter') as LicenseFilter) || 'any'
+  )
   const [pageSize, setPageSize] = useState(() => {
     const parsed = Number(searchParams.get('limit') || '24')
     if (![24, 36, 60].includes(parsed)) return 24
     return parsed
   })
-  const [offset, setOffset] = useState(() => Math.max(0, Number(searchParams.get('offset') || '0') || 0))
+  const [offset, setOffset] = useState(() =>
+    Math.max(0, Number(searchParams.get('offset') || '0') || 0)
+  )
   const debouncedSearchTerm = useDebouncedValue(searchInput.trim(), 350)
   const tableAnchorRef = useRef<HTMLDivElement | null>(null)
   const [thumbs, setThumbs] = useState<Record<string, string>>({})
@@ -122,7 +138,7 @@ export default function AssetsPage() {
 
   useEffect(() => {
     return () => {
-      Object.values(thumbCacheRef.current).forEach(url => URL.revokeObjectURL(url))
+      Object.values(thumbCacheRef.current).forEach((url) => URL.revokeObjectURL(url))
     }
   }, [])
 
@@ -142,7 +158,18 @@ export default function AssetsPage() {
     if (next.toString() !== searchParams.toString()) {
       setSearchParams(next, { replace: true })
     }
-  }, [debouncedSearchTerm, ownerType, kind, approvedOnly, primaryOnly, licenseFilter, pageSize, offset, searchParams, setSearchParams])
+  }, [
+    debouncedSearchTerm,
+    ownerType,
+    kind,
+    approvedOnly,
+    primaryOnly,
+    licenseFilter,
+    pageSize,
+    offset,
+    searchParams,
+    setSearchParams,
+  ])
 
   const assetsQuery = useAssetLibraryQuery({
     search: debouncedSearchTerm || undefined,
@@ -154,30 +181,35 @@ export default function AssetsPage() {
     limit: pageSize,
     offset,
   })
-  const assets = assetsQuery.data ?? []
+  const assetsPage = assetsQuery.data
+  const assets = assetsPage?.items ?? []
+  const totalAssets = assetsPage?.meta.total ?? assets.length
   const loading = assetsQuery.isLoading || assetsQuery.isFetching
   const queryErr = assetsQuery.error ? getErrorMessage(assetsQuery.error) : null
 
   useEffect(() => {
-    Object.values(thumbCacheRef.current).forEach(url => URL.revokeObjectURL(url))
+    Object.values(thumbCacheRef.current).forEach((url) => URL.revokeObjectURL(url))
     thumbCacheRef.current = {}
     setThumbs({})
     setVisibleThumbIds(() => {
-      const initial = assets.filter(asset => asset.kind === 'image').slice(0, 12).map(asset => asset.id)
+      const initial = assets
+        .filter((asset) => asset.kind === 'image')
+        .slice(0, 12)
+        .map((asset) => asset.id)
       return new Set(initial)
     })
   }, [assets])
 
   useEffect(() => {
-    const images = assets.filter(a => a.kind === 'image' && visibleThumbIds.has(a.id))
-    images.forEach(asset => {
+    const images = assets.filter((a) => a.kind === 'image' && visibleThumbIds.has(a.id))
+    images.forEach((asset) => {
       if (thumbCacheRef.current[asset.id]) return
       ;(async () => {
         try {
           const blob = await apiFetchBlob(`/assets/${asset.id}/thumb`)
           const url = URL.createObjectURL(blob)
           thumbCacheRef.current[asset.id] = url
-          setThumbs(prev => ({ ...prev, [asset.id]: url }))
+          setThumbs((prev) => ({ ...prev, [asset.id]: url }))
         } catch (error) {
           // Vorschaufehler bewusst ignorieren.
         }
@@ -186,7 +218,7 @@ export default function AssetsPage() {
   }, [assets, visibleThumbIds])
 
   function markThumbVisible(assetId: string) {
-    setVisibleThumbIds(current => {
+    setVisibleThumbIds((current) => {
       if (current.has(assetId)) return current
       const next = new Set(current)
       next.add(assetId)
@@ -199,8 +231,8 @@ export default function AssetsPage() {
   }, [debouncedSearchTerm, ownerType, kind, approvedOnly, primaryOnly, licenseFilter, pageSize])
 
   const stats = useMemo(() => {
-    const licensed = assets.filter(a => hasLicense(a)).length
-    const primary = assets.filter(a => a.is_primary).length
+    const licensed = assets.filter((a) => hasLicense(a)).length
+    const primary = assets.filter((a) => a.is_primary).length
     return { licensed, missing: Math.max(0, assets.length - licensed), primary }
   }, [assets])
 
@@ -209,9 +241,9 @@ export default function AssetsPage() {
   }
 
   function changePage(direction: 'prev' | 'next') {
-    setOffset(current => {
+    setOffset((current) => {
       if (direction === 'prev') return Math.max(0, current - pageSize)
-      if (assets.length < pageSize) return current
+      if (current + assets.length >= totalAssets) return current
       return current + pageSize
     })
     tableAnchorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
@@ -225,11 +257,14 @@ export default function AssetsPage() {
       window.open(url, '_blank', 'noopener')
       setTimeout(() => URL.revokeObjectURL(url), 60_000)
     } catch (e: unknown) {
-      const message = language === 'en' ? `Download failed: ${getErrorMessage(e)}` : `Download fehlgeschlagen: ${getErrorMessage(e)}`
+      const message =
+        language === 'en'
+          ? `Download failed: ${getErrorMessage(e)}`
+          : `Download fehlgeschlagen: ${getErrorMessage(e)}`
       setErr(message)
       toast.error(message)
     } finally {
-      setDownloadingId(curr => (curr === assetId ? null : curr))
+      setDownloadingId((curr) => (curr === assetId ? null : curr))
     }
   }
 
@@ -238,12 +273,21 @@ export default function AssetsPage() {
       <div className="row between">
         <div>
           <h2>{language === 'en' ? 'Media library' : 'Mediathek'}</h2>
-          <div className="muted">{language === 'en' ? 'Search, filter and export reviewed assets.' : 'Suche, filtere und exportiere geprüfte Assets.'}</div>
+          <div className="muted">
+            {language === 'en'
+              ? 'Search, filter and export reviewed assets.'
+              : 'Suche, filtere und exportiere geprüfte Assets.'}
+          </div>
         </div>
         <div className="control-row">
-          <div className="card tight" role="status" aria-live="polite" aria-label={`Gefilterte Assets: ${assets.length}`}>
+          <div
+            className="card tight"
+            role="status"
+            aria-live="polite"
+            aria-label={`Gefilterte Assets: ${assets.length}`}
+          >
             <div className="muted small">{language === 'en' ? 'Filtered' : 'Gefiltert'}</div>
-            <div className="kpi">{assets.length}</div>
+            <div className="kpi">{totalAssets}</div>
           </div>
           <div className="card tight">
             <div className="muted small">{language === 'en' ? 'License ok' : 'Lizenz ok'}</div>
@@ -258,47 +302,90 @@ export default function AssetsPage() {
 
       {queryErr && (
         <ErrorState
-          title={language === 'en' ? 'Assets could not be loaded' : 'Assets konnten nicht geladen werden'}
+          title={
+            language === 'en' ? 'Assets could not be loaded' : 'Assets konnten nicht geladen werden'
+          }
           message={queryErr}
           onRetry={reload}
         />
       )}
-      {err && !queryErr && <ErrorState title={language === 'en' ? 'Action failed' : 'Aktion fehlgeschlagen'} message={err} />}
+      {err && !queryErr && (
+        <ErrorState
+          title={language === 'en' ? 'Action failed' : 'Aktion fehlgeschlagen'}
+          message={err}
+        />
+      )}
 
       <div className="card asset-controls mt16">
         <div ref={tableAnchorRef} />
         <div className="control-row stretch">
-          <label className="sr-only" htmlFor="assets-search">{language === 'en' ? 'Search assets' : 'Assets suchen'}</label>
+          <label className="sr-only" htmlFor="assets-search">
+            {language === 'en' ? 'Search assets' : 'Assets suchen'}
+          </label>
           <input
             id="assets-search"
             className="grow"
-            placeholder={language === 'en' ? 'Search (title, source, URL)' : 'Suche (Titel, Quelle, URL)'}
+            placeholder={
+              language === 'en' ? 'Search (title, source, URL)' : 'Suche (Titel, Quelle, URL)'
+            }
             value={searchInput}
-            onChange={e => setSearchInput(e.target.value)}
+            onChange={(e) => setSearchInput(e.target.value)}
           />
-          <button className="btn" onClick={reload} disabled={loading}>{language === 'en' ? 'Refresh' : 'Aktualisieren'}</button>
+          <button className="btn" onClick={reload} disabled={loading}>
+            {language === 'en' ? 'Refresh' : 'Aktualisieren'}
+          </button>
         </div>
         <div className="control-row">
-          <label className="sr-only" htmlFor="assets-owner-type">{language === 'en' ? 'Owner type' : 'Owner-Typ'}</label>
-          <select id="assets-owner-type" value={ownerType} onChange={e => setOwnerType(e.target.value as AssetOwnerType | '')}>
-            {ownerTypeOptions.map(opt => (
-              <option key={opt.value || 'all'} value={opt.value}>{opt.label}</option>
+          <label className="sr-only" htmlFor="assets-owner-type">
+            {language === 'en' ? 'Owner type' : 'Owner-Typ'}
+          </label>
+          <select
+            id="assets-owner-type"
+            value={ownerType}
+            onChange={(e) => setOwnerType(e.target.value as AssetOwnerType | '')}
+          >
+            {ownerTypeOptions.map((opt) => (
+              <option key={opt.value || 'all'} value={opt.value}>
+                {opt.label}
+              </option>
             ))}
           </select>
-          <label className="sr-only" htmlFor="assets-kind">{language === 'en' ? 'Asset kind' : 'Asset-Art'}</label>
-          <select id="assets-kind" value={kind} onChange={e => setKind(e.target.value as AssetKind | '')}>
-            {kindOptions.map(opt => (
-              <option key={opt.value || 'all'} value={opt.value}>{opt.label}</option>
+          <label className="sr-only" htmlFor="assets-kind">
+            {language === 'en' ? 'Asset kind' : 'Asset-Art'}
+          </label>
+          <select
+            id="assets-kind"
+            value={kind}
+            onChange={(e) => setKind(e.target.value as AssetKind | '')}
+          >
+            {kindOptions.map((opt) => (
+              <option key={opt.value || 'all'} value={opt.value}>
+                {opt.label}
+              </option>
             ))}
           </select>
-          <label className="sr-only" htmlFor="assets-license-filter">{language === 'en' ? 'License filter' : 'Lizenzfilter'}</label>
-          <select id="assets-license-filter" value={licenseFilter} onChange={e => setLicenseFilter(e.target.value as LicenseFilter)}>
-            {licenseFilterOptions.map(opt => (
-              <option key={opt.value} value={opt.value}>{opt.label}</option>
+          <label className="sr-only" htmlFor="assets-license-filter">
+            {language === 'en' ? 'License filter' : 'Lizenzfilter'}
+          </label>
+          <select
+            id="assets-license-filter"
+            value={licenseFilter}
+            onChange={(e) => setLicenseFilter(e.target.value as LicenseFilter)}
+          >
+            {licenseFilterOptions.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
             ))}
           </select>
-          <label className="sr-only" htmlFor="assets-page-size">{language === 'en' ? 'Page size' : 'Seitenlimit'}</label>
-          <select id="assets-page-size" value={String(pageSize)} onChange={e => setPageSize(Number(e.target.value))}>
+          <label className="sr-only" htmlFor="assets-page-size">
+            {language === 'en' ? 'Page size' : 'Seitenlimit'}
+          </label>
+          <select
+            id="assets-page-size"
+            value={String(pageSize)}
+            onChange={(e) => setPageSize(Number(e.target.value))}
+          >
             <option value="24">24 {language === 'en' ? '/ page' : '/ Seite'}</option>
             <option value="36">36 {language === 'en' ? '/ page' : '/ Seite'}</option>
             <option value="60">60 {language === 'en' ? '/ page' : '/ Seite'}</option>
@@ -306,11 +393,19 @@ export default function AssetsPage() {
         </div>
         <div className="asset-checkboxes">
           <label className="filter-check">
-            <input type="checkbox" checked={approvedOnly} onChange={e => setApprovedOnly(e.target.checked)} />
+            <input
+              type="checkbox"
+              checked={approvedOnly}
+              onChange={(e) => setApprovedOnly(e.target.checked)}
+            />
             {language === 'en' ? 'Approved only' : 'Nur approved'}
           </label>
           <label className="filter-check">
-            <input type="checkbox" checked={primaryOnly} onChange={e => setPrimaryOnly(e.target.checked)} />
+            <input
+              type="checkbox"
+              checked={primaryOnly}
+              onChange={(e) => setPrimaryOnly(e.target.checked)}
+            />
             {language === 'en' ? 'Primary only' : 'Nur Primary'}
           </label>
         </div>
@@ -319,13 +414,15 @@ export default function AssetsPage() {
       {loading && assets.length === 0 && <ListSkeleton rows={6} />}
 
       <div className="asset-grid mt16">
-        {assets.map(asset => {
+        {assets.map((asset) => {
           const thumbUrl = thumbs[asset.id]
           const licenseOk = hasLicense(asset)
           return (
             <div key={asset.id} id={`asset-${asset.id}`} className="asset-card">
               <div className="asset-cover">
-                {asset.kind === 'image' && !thumbUrl && <ThumbVisibilityProbe assetId={asset.id} onVisible={markThumbVisible} />}
+                {asset.kind === 'image' && !thumbUrl && (
+                  <ThumbVisibilityProbe assetId={asset.id} onVisible={markThumbVisible} />
+                )}
                 {asset.kind === 'image' && thumbUrl && (
                   <img
                     src={thumbUrl}
@@ -353,28 +450,50 @@ export default function AssetsPage() {
                 <div className="row between">
                   <strong>{asset.title || (language === 'en' ? 'Untitled' : 'Ohne Titel')}</strong>
                   <span className={`asset-license ${licenseOk ? 'ok' : 'missing'}`}>
-                    {licenseOk ? (language === 'en' ? 'License ok' : 'Lizenz ok') : (language === 'en' ? 'License missing' : 'Lizenz fehlt')}
+                    {licenseOk
+                      ? language === 'en'
+                        ? 'License ok'
+                        : 'Lizenz ok'
+                      : language === 'en'
+                        ? 'License missing'
+                        : 'Lizenz fehlt'}
                   </span>
                 </div>
                 <div className="asset-meta">
                   <span className="pill small">{ownerLabels[asset.owner_type]}</span>
                   <span className="pill small">{asset.kind}</span>
-                  <span className="pill small">{formatDate(asset.created_at, language === 'en' ? 'en-US' : 'de-DE')}</span>
+                  <span className="pill small">
+                    {formatDate(asset.created_at, language === 'en' ? 'en-US' : 'de-DE')}
+                  </span>
                 </div>
                 <div className="muted small mt12">
-                  {language === 'en' ? 'Source' : 'Quelle'}: {asset.source_name || asset.source_url || asset.source.toUpperCase()}
+                  {language === 'en' ? 'Source' : 'Quelle'}:{' '}
+                  {asset.source_name || asset.source_url || asset.source.toUpperCase()}
                 </div>
-                <div className="muted small">{language === 'en' ? 'License' : 'Lizenz'}: {asset.license_type || 'n/a'}</div>
+                <div className="muted small">
+                  {language === 'en' ? 'License' : 'Lizenz'}: {asset.license_type || 'n/a'}
+                </div>
                 {asset.license_url && (
-                  <a href={asset.license_url} className="muted small" target="_blank" rel="noreferrer">{language === 'en' ? 'License link' : 'Lizenzlink'}</a>
+                  <a
+                    href={asset.license_url}
+                    className="muted small"
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    {language === 'en' ? 'License link' : 'Lizenzlink'}
+                  </a>
                 )}
                 <div className="asset-stats">
                   <div>
-                    <div className="muted small">{language === 'en' ? 'Dimensions' : 'Dimensionen'}</div>
+                    <div className="muted small">
+                      {language === 'en' ? 'Dimensions' : 'Dimensionen'}
+                    </div>
                     <div>{summarizeDimension(asset)}</div>
                   </div>
                   <div>
-                    <div className="muted small">{language === 'en' ? 'File size' : 'Dateigröße'}</div>
+                    <div className="muted small">
+                      {language === 'en' ? 'File size' : 'Dateigröße'}
+                    </div>
                     <div>{formatBytes(asset.size_bytes)}</div>
                   </div>
                 </div>
@@ -384,10 +503,21 @@ export default function AssetsPage() {
                     onClick={() => openOriginal(asset.id)}
                     disabled={downloadingId === asset.id}
                   >
-                    {downloadingId === asset.id ? (language === 'en' ? 'Loading…' : 'Lädt…') : 'Original'}
+                    {downloadingId === asset.id
+                      ? language === 'en'
+                        ? 'Loading…'
+                        : 'Lädt…'
+                      : 'Original'}
                   </button>
                   {asset.source_url && (
-                    <a className="btn ghost" href={asset.source_url} target="_blank" rel="noreferrer">{language === 'en' ? 'Source' : 'Quelle'}</a>
+                    <a
+                      className="btn ghost"
+                      href={asset.source_url}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      {language === 'en' ? 'Source' : 'Quelle'}
+                    </a>
                   )}
                 </div>
               </div>
@@ -395,14 +525,33 @@ export default function AssetsPage() {
           )
         })}
         {!assets.length && !loading && (
-          <EmptyState title={language === 'en' ? 'No assets found' : 'Keine Assets gefunden'} message={language === 'en' ? 'Adjust the filters or remove search terms.' : 'Passe die Filter an oder entferne Suchbegriffe.'} />
+          <EmptyState
+            title={language === 'en' ? 'No assets found' : 'Keine Assets gefunden'}
+            message={
+              language === 'en'
+                ? 'Adjust the filters or remove search terms.'
+                : 'Passe die Filter an oder entferne Suchbegriffe.'
+            }
+          />
         )}
       </div>
 
       <div className="row between mt12">
-        <button className="btn" onClick={() => changePage('prev')} disabled={offset <= 0}>{language === 'en' ? '← Back' : '← Zurück'}</button>
-        <span className="muted small">{language === 'en' ? 'Offset' : 'Offset'} {offset} · {language === 'en' ? 'Limit' : 'Limit'} {pageSize} · {language === 'en' ? 'Results' : 'Ergebnisse'} {assets.length}</span>
-        <button className="btn" onClick={() => changePage('next')} disabled={assets.length < pageSize}>{language === 'en' ? 'Next →' : 'Weiter →'}</button>
+        <button className="btn" onClick={() => changePage('prev')} disabled={offset <= 0}>
+          {language === 'en' ? '← Back' : '← Zurück'}
+        </button>
+        <span className="muted small">
+          {language === 'en' ? 'Offset' : 'Offset'} {offset} ·{' '}
+          {language === 'en' ? 'Limit' : 'Limit'} {pageSize} ·{' '}
+          {language === 'en' ? 'Results' : 'Ergebnisse'} {assets.length}
+        </span>
+        <button
+          className="btn"
+          onClick={() => changePage('next')}
+          disabled={offset + assets.length >= totalAssets}
+        >
+          {language === 'en' ? 'Next →' : 'Weiter →'}
+        </button>
       </div>
     </div>
   )

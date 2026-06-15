@@ -35,7 +35,7 @@ function parseAuditEntries(input: unknown): AuditEntry[] {
   if (!Array.isArray(items)) return []
 
   return items
-    .map(item => {
+    .map((item) => {
       if (!isRecord(item)) return null
       return {
         id: typeof item.id === 'string' ? item.id : '',
@@ -198,7 +198,9 @@ export default function AuditLogsPageView() {
     return (
       <div className="card">
         <h2>{isEnglish ? 'Audit' : 'Audit'}</h2>
-        <div className="muted">{isEnglish ? 'No permission for audit logs.' : 'Keine Berechtigung für Audit-Logs.'}</div>
+        <div className="muted">
+          {isEnglish ? 'No permission for audit logs.' : 'Keine Berechtigung für Audit-Logs.'}
+        </div>
       </div>
     )
   }
@@ -206,7 +208,9 @@ export default function AuditLogsPageView() {
   if (err) {
     return (
       <ErrorState
-        title={isEnglish ? 'Audit logs could not be loaded' : 'Audit-Logs konnten nicht geladen werden'}
+        title={
+          isEnglish ? 'Audit logs could not be loaded' : 'Audit-Logs konnten nicht geladen werden'
+        }
         message={err}
         onRetry={() => {
           void load()
@@ -221,16 +225,22 @@ export default function AuditLogsPageView() {
         <div className="card-head">
           <h2>{isEnglish ? 'Audit logs' : 'Audit-Logs'}</h2>
           <div className="control-row">
-            <select value={String(limit)} onChange={event => {
-              setLimit(Number(event.target.value))
-              setOffset(0)
-            }}>
+            <select
+              value={String(limit)}
+              onChange={(event) => {
+                setLimit(Number(event.target.value))
+                setOffset(0)
+              }}
+            >
               <option value="25">25 {isEnglish ? '/ page' : '/ Seite'}</option>
               <option value="50">50 {isEnglish ? '/ page' : '/ Seite'}</option>
             </select>
-            <button className="btn" onClick={() => {
-              void load()
-            }}>
+            <button
+              className="btn"
+              onClick={() => {
+                void load()
+              }}
+            >
               {isEnglish ? 'Refresh' : 'Aktualisieren'}
             </button>
             <button className="btn" onClick={handleExportCsv}>
@@ -238,10 +248,14 @@ export default function AuditLogsPageView() {
             </button>
           </div>
         </div>
-        <div className="audit-filters" role="region" aria-label={isEnglish ? 'Audit filters' : 'Audit Filter'}>
+        <div
+          className="audit-filters"
+          role="region"
+          aria-label={isEnglish ? 'Audit filters' : 'Audit Filter'}
+        >
           <input
             value={actionFilter}
-            onChange={event => {
+            onChange={(event) => {
               setActionFilter(event.target.value)
               setOffset(0)
             }}
@@ -250,7 +264,7 @@ export default function AuditLogsPageView() {
           />
           <input
             value={entityTypeFilter}
-            onChange={event => {
+            onChange={(event) => {
               setEntityTypeFilter(event.target.value)
               setOffset(0)
             }}
@@ -259,7 +273,7 @@ export default function AuditLogsPageView() {
           />
           <input
             value={actorFilter}
-            onChange={event => {
+            onChange={(event) => {
               setActorFilter(event.target.value)
               setOffset(0)
             }}
@@ -268,7 +282,7 @@ export default function AuditLogsPageView() {
           />
           <input
             value={searchFilter}
-            onChange={event => {
+            onChange={(event) => {
               setSearchFilter(event.target.value)
               setOffset(0)
             }}
@@ -277,7 +291,7 @@ export default function AuditLogsPageView() {
           />
           <select
             value={categoryFilter}
-            onChange={event => {
+            onChange={(event) => {
               setCategoryFilter(event.target.value)
               setOffset(0)
             }}
@@ -285,7 +299,9 @@ export default function AuditLogsPageView() {
           >
             <option value="">{isEnglish ? 'All categories' : 'Alle Kategorien'}</option>
             <option value="approval">{isEnglish ? 'Approvals' : 'Freigaben'}</option>
-            <option value="permission_change">{isEnglish ? 'Permission changes' : 'Rechteänderungen'}</option>
+            <option value="permission_change">
+              {isEnglish ? 'Permission changes' : 'Rechteänderungen'}
+            </option>
             <option value="security">Security</option>
             <option value="ai_action">{isEnglish ? 'AI actions' : 'AI-Aktionen'}</option>
             <option value="domain">Domain</option>
@@ -294,14 +310,16 @@ export default function AuditLogsPageView() {
             <input
               type="checkbox"
               checked={criticalOnly}
-              onChange={event => {
+              onChange={(event) => {
                 setCriticalOnly(event.target.checked)
                 setOffset(0)
               }}
             />
             {isEnglish ? 'Critical only' : 'Nur kritisch'}
           </label>
-          <button className="btn" onClick={resetFilters}>{isEnglish ? 'Reset' : 'Zurücksetzen'}</button>
+          <button className="btn" onClick={resetFilters}>
+            {isEnglish ? 'Reset' : 'Zurücksetzen'}
+          </button>
         </div>
         <table className="status-table">
           <caption className="sr-only">{isEnglish ? 'Audit events' : 'Audit-Events'}</caption>
@@ -317,7 +335,7 @@ export default function AuditLogsPageView() {
             </tr>
           </thead>
           <tbody>
-            {entries.map(entry => (
+            {entries.map((entry) => (
               <tr key={entry.id}>
                 <td>{formatDate(entry.created_at)}</td>
                 <td>
@@ -326,7 +344,10 @@ export default function AuditLogsPageView() {
                   </span>
                 </td>
                 <td>{entry.action}</td>
-                <td>{entry.entity_type}{entry.entity_id ? `:${entry.entity_id}` : ''}</td>
+                <td>
+                  {entry.entity_type}
+                  {entry.entity_id ? `:${entry.entity_id}` : ''}
+                </td>
                 <td>{entry.description || '–'}</td>
                 <td>{entry.actor_name || 'system'}</td>
                 <td>
@@ -352,15 +373,32 @@ export default function AuditLogsPageView() {
             ))}
             {entries.length === 0 && (
               <tr>
-                <td colSpan={7} className="muted">{isEnglish ? 'No audit events available.' : 'Keine Audit-Events vorhanden.'}</td>
+                <td colSpan={7} className="muted">
+                  {isEnglish ? 'No audit events available.' : 'Keine Audit-Events vorhanden.'}
+                </td>
               </tr>
             )}
           </tbody>
         </table>
         <div className="row between mt8">
-          <button className="btn" onClick={() => setOffset(current => Math.max(0, current - limit))} disabled={offset <= 0}>{isEnglish ? '← Back' : '← Zurück'}</button>
-          <span className="muted small">{isEnglish ? 'Offset' : 'Offset'} {offset} · {isEnglish ? 'Limit' : 'Limit'} {limit} · {isEnglish ? 'Total' : 'Gesamt'} {total}</span>
-          <button className="btn" onClick={() => setOffset(current => current + limit)} disabled={entries.length < limit || offset + limit >= total}>{isEnglish ? 'Next →' : 'Weiter →'}</button>
+          <button
+            className="btn"
+            onClick={() => setOffset((current) => Math.max(0, current - limit))}
+            disabled={offset <= 0}
+          >
+            {isEnglish ? '← Back' : '← Zurück'}
+          </button>
+          <span className="muted small">
+            {isEnglish ? 'Offset' : 'Offset'} {offset} · {isEnglish ? 'Limit' : 'Limit'} {limit} ·{' '}
+            {isEnglish ? 'Total' : 'Gesamt'} {total}
+          </span>
+          <button
+            className="btn"
+            onClick={() => setOffset((current) => current + limit)}
+            disabled={entries.length < limit || offset + limit >= total}
+          >
+            {isEnglish ? 'Next →' : 'Weiter →'}
+          </button>
         </div>
       </div>
     </div>

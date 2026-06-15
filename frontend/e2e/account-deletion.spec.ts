@@ -1,6 +1,13 @@
 import { expect, test } from '@playwright/test'
 
-import { csrfHeaders, generateTotpCode, loginAsAdmin, logout, uniqueSuffix } from './helpers'
+import {
+  csrfHeaders,
+  e2eApiPath,
+  generateTotpCode,
+  loginAsAdmin,
+  logout,
+  uniqueSuffix,
+} from './helpers'
 
 test.describe('Account deletion E2E', () => {
   test('user can request account deletion after MFA step-up and is logged out immediately', async ({
@@ -10,7 +17,7 @@ test.describe('Account deletion E2E', () => {
     const password = 'Delete!Pass12345'
 
     await loginAsAdmin(page)
-    const createResponse = await page.request.post('/api/auth/users', {
+    const createResponse = await page.request.post(e2eApiPath('/auth/users'), {
       headers: await csrfHeaders(page),
       data: {
         username,
@@ -54,7 +61,7 @@ test.describe('Account deletion E2E', () => {
     await expect(page).toHaveURL(/\/login/)
     await expect(page.getByRole('heading', { name: 'Login' })).toBeVisible()
 
-    const meResponse = await page.request.get('/api/auth/me')
+    const meResponse = await page.request.get(e2eApiPath('/auth/me'))
     expect(meResponse.status()).toBe(401)
   })
 })

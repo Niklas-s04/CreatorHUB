@@ -6,6 +6,11 @@ export const E2E_ADMIN_USER = process.env.E2E_ADMIN_USER || 'admin'
 export const E2E_ADMIN_PASSWORD = process.env.E2E_ADMIN_PASSWORD || 'test_admin_password_1234567890'
 export const E2E_BOOTSTRAP_TOKEN =
   process.env.E2E_BOOTSTRAP_TOKEN || 'test_bootstrap_token_1234567890'
+export const E2E_API_BASE = process.env.E2E_API_BASE || '/api/v1'
+
+export function e2eApiPath(path: string): string {
+  return `${E2E_API_BASE}${path.startsWith('/') ? path : `/${path}`}`
+}
 
 export function uniqueSuffix(prefix: string): string {
   const stamp = Date.now().toString(36)

@@ -1,10 +1,12 @@
-from __future__ import annotations
-
+import base64
+import hashlib
 import ipaddress
 import secrets
 from datetime import datetime, timedelta, timezone
 
 import pyotp
+from cryptography.fernet import Fernet, InvalidToken
+from passlib.hash import pbkdf2_sha256
 from redis import Redis
 from redis.exceptions import RedisError
 from sqlalchemy.orm import Session
@@ -24,14 +26,26 @@ def utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
+_redis_client: Redis | None = None
+
+
 def _get_redis() -> Redis | None:
+    global _redis_client
+    if _redis_client is not None:
+        try:
+            _redis_client.ping()
+            return _redis_client
+        except Exception:
+            _redis_client = None
+
     try:
-        client = Redis.from_url(
+        _redis_client = Redis.from_url(
             settings.REDIS_URL, decode_responses=True, socket_connect_timeout=1, socket_timeout=1
         )
-        client.ping()
-        return client
+        _redis_client.ping()
+        return _redis_client
     except Exception:
+        _redis_client = None
         return None
 
 
@@ -332,7 +346,33 @@ def totp_uri(*, username: str, secret: str) -> str:
     return pyotp.TOTP(secret).provisioning_uri(name=username, issuer_name=settings.MFA_TOTP_ISSUER)
 
 
+def _mfa_fernet() -> Fernet:
+    digest = hashlib.sha256(f"{settings.JWT_SECRET}:mfa-totp".encode("utf-8")).digest()
+    return Fernet(base64.urlsafe_b64encode(digest))
+
+
+def protect_totp_secret(secret: str) -> str:
+    raw = (secret or "").strip()
+    if not raw:
+        return raw
+    if raw.startswith("enc:v1:"):
+        return raw
+    return "enc:v1:" + _mfa_fernet().encrypt(raw.encode("utf-8")).decode("ascii")
+
+
+def unprotect_totp_secret(secret: str) -> str:
+    raw = (secret or "").strip()
+    if not raw or not raw.startswith("enc:v1:"):
+        return raw
+    token = raw.removeprefix("enc:v1:")
+    try:
+        return _mfa_fernet().decrypt(token.encode("ascii")).decode("utf-8")
+    except (InvalidToken, UnicodeDecodeError):
+        return ""
+
+
 def verify_totp_code(secret: str, code: str) -> bool:
+    secret = unprotect_totp_secret(secret)
     token = (code or "").replace(" ", "").strip()
     if not token:
         return False
@@ -340,17 +380,24 @@ def verify_totp_code(secret: str, code: str) -> bool:
 
 
 def generate_recovery_codes() -> list[str]:
-    return [secrets.token_hex(4).upper() for _ in range(settings.MFA_RECOVERY_CODES_COUNT)]
+    return [secrets.token_hex(8).upper() for _ in range(settings.MFA_RECOVERY_CODES_COUNT)]
 
 
 def hash_recovery_codes(codes: list[str]) -> list[str]:
-    return [hash_token(code) for code in codes]
+    return [pbkdf2_sha256.hash(code.strip().upper()) for code in codes]
 
 
 def verify_recovery_code(stored_hashes: list[str] | None, code: str) -> tuple[bool, list[str]]:
     hashes = list(stored_hashes or [])
-    candidate = hash_token((code or "").strip().upper())
-    if candidate in hashes:
-        hashes.remove(candidate)
-        return True, hashes
+    candidate = (code or "").strip().upper()
+    legacy_candidate = hash_token(candidate)
+    for stored_hash in hashes:
+        verified = False
+        if stored_hash.startswith("$pbkdf2-sha256$"):
+            verified = pbkdf2_sha256.verify(candidate, stored_hash)
+        else:
+            verified = stored_hash == legacy_candidate
+        if verified:
+            hashes.remove(stored_hash)
+            return True, hashes
     return False, hashes

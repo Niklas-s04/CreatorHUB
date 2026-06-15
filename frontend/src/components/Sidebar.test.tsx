@@ -5,6 +5,11 @@ import Sidebar from './Sidebar'
 import { logout } from '../api'
 
 vi.mock('../api', () => ({
+  getMe: vi.fn().mockResolvedValue({
+    permissions: [],
+    roles: [],
+    username: 'tester',
+  }),
   logout: vi.fn(),
 }))
 

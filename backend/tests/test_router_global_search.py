@@ -162,3 +162,105 @@ def test_global_search_hides_user_group_without_user_read_permission() -> None:
         for table in reversed(TEST_TABLES):
             table.drop(bind=engine, checkfirst=True)
         engine.dispose()
+
+
+def test_global_search_hides_unapproved_assets_from_viewer() -> None:
+    engine = create_engine(
+        "sqlite+pysqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    for table in TEST_TABLES:
+        table.create(bind=engine, checkfirst=True)
+
+    testing_session = sessionmaker(bind=engine, autocommit=False, autoflush=False)
+    db = testing_session()
+
+    try:
+        viewer = create_user(db, username="canon_viewer_asset", role=UserRole.viewer)
+        product = Product(
+            title="Canon Private Body",
+            brand="Canon",
+            model="Private",
+            category="camera",
+            condition=ProductCondition.good,
+            status=ProductStatus.active,
+        )
+        db.add(product)
+        db.flush()
+        db.add(
+            Asset(
+                owner_type=AssetOwnerType.product,
+                owner_id=product.id,
+                kind=AssetKind.image,
+                source=AssetSource.web,
+                title="Canon quarantine leak",
+                review_state=AssetReviewState.quarantine,
+                source_name="Private source",
+            )
+        )
+        db.commit()
+
+        app = _test_app(db, viewer)
+        with TestClient(app) as client:
+            response = client.get("/api/search/?q=canon&per_type=5")
+
+        assert response.status_code == 200
+        group_types = {group["type"] for group in response.json()["groups"]}
+        assert "asset" not in group_types
+    finally:
+        db.close()
+        for table in reversed(TEST_TABLES):
+            table.drop(bind=engine, checkfirst=True)
+        engine.dispose()
+
+
+def test_global_search_shows_unapproved_assets_to_reviewer() -> None:
+    engine = create_engine(
+        "sqlite+pysqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    for table in TEST_TABLES:
+        table.create(bind=engine, checkfirst=True)
+
+    testing_session = sessionmaker(bind=engine, autocommit=False, autoflush=False)
+    db = testing_session()
+
+    try:
+        editor = create_user(db, username="canon_editor_asset", role=UserRole.editor)
+        product = Product(
+            title="Canon Review Body",
+            brand="Canon",
+            model="Review",
+            category="camera",
+            condition=ProductCondition.good,
+            status=ProductStatus.active,
+        )
+        db.add(product)
+        db.flush()
+        db.add(
+            Asset(
+                owner_type=AssetOwnerType.product,
+                owner_id=product.id,
+                kind=AssetKind.image,
+                source=AssetSource.web,
+                title="Canon review queue",
+                review_state=AssetReviewState.needs_review,
+                source_name="Review source",
+            )
+        )
+        db.commit()
+
+        app = _test_app(db, editor)
+        with TestClient(app) as client:
+            response = client.get("/api/search/?q=canon&per_type=5")
+
+        assert response.status_code == 200
+        groups = {group["type"]: group for group in response.json()["groups"]}
+        assert groups["asset"]["hits"][0]["title"] == "Canon review queue"
+    finally:
+        db.close()
+        for table in reversed(TEST_TABLES):
+            table.drop(bind=engine, checkfirst=True)
+        engine.dispose()

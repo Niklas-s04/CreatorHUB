@@ -4,6 +4,7 @@ import enum
 import mimetypes
 import os
 import uuid
+from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
@@ -70,6 +71,37 @@ def _upload_purpose_allowed(owner_type: AssetOwnerType, kind: AssetKind) -> bool
     if kind == AssetKind.image:
         return True
     return False
+
+
+def _max_upload_bytes(kind: AssetKind) -> int:
+    if kind == AssetKind.image:
+        return settings.UPLOAD_MAX_IMAGE_BYTES
+    if kind == AssetKind.pdf:
+        return settings.UPLOAD_MAX_PDF_BYTES
+    return 0
+
+
+async def _read_upload_file_limited(file: UploadFile, *, max_bytes: int) -> bytes:
+    chunks: list[bytes] = []
+    received = 0
+    while True:
+        chunk = await file.read(1024 * 1024)
+        if not chunk:
+            break
+        received += len(chunk)
+        if received > max_bytes:
+            raise HTTPException(status_code=413, detail="Uploaded file exceeds max size")
+        chunks.append(chunk)
+    return b"".join(chunks)
+
+
+def _delete_unreferenced_file(path: str | None) -> None:
+    if not path:
+        return
+    try:
+        Path(path).unlink(missing_ok=True)
+    except OSError:
+        pass
 
 
 def _enforce_asset_access(current_user: User, asset: Asset) -> None:
@@ -210,8 +242,9 @@ async def upload_asset(
             status_code=400, detail="This file type is not allowed for the selected upload purpose"
         )
 
-    data = await file.read()
+    data = await _read_upload_file_limited(file, max_bytes=_max_upload_bytes(kind))
     owner_folder = f"{owner_type.value}/{owner_id}"
+    stored = None
     try:
         stored = save_upload_validated(
             owner_folder=owner_folder,
@@ -264,6 +297,7 @@ async def upload_asset(
         .first()
     )
     if existing:
+        _delete_unreferenced_file(stored.local_path)
         # Do not create a duplicate database row.
         return existing
 

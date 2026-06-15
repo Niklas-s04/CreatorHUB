@@ -36,7 +36,12 @@ function asBoolean(value: unknown, fallback = false): boolean {
 
 function asProductStatus(value: unknown): ProductStatusDto {
   const raw = asString(value)
-  return raw === 'active' || raw === 'sold' || raw === 'gifted' || raw === 'returned' || raw === 'broken' || raw === 'archived'
+  return raw === 'active' ||
+    raw === 'sold' ||
+    raw === 'gifted' ||
+    raw === 'returned' ||
+    raw === 'broken' ||
+    raw === 'archived'
     ? raw
     : 'active'
 }
@@ -71,7 +76,7 @@ export function parseProductDto(input: unknown): ProductDto {
 
 export function parseProductAssetsDtoArray(input: unknown): ProductAssetDto[] {
   if (!Array.isArray(input)) return []
-  return input.map(item => {
+  return input.map((item) => {
     const src = isRecord(item) ? item : {}
     return {
       id: asString(src.id),
@@ -89,7 +94,7 @@ export function parseProductAssetsDtoArray(input: unknown): ProductAssetDto[] {
 
 export function parseProductTransactionsDtoArray(input: unknown): ProductTransactionDto[] {
   if (!Array.isArray(input)) return []
-  return input.map(item => {
+  return input.map((item) => {
     const src = isRecord(item) ? item : {}
     return {
       id: asString(src.id),
@@ -104,7 +109,7 @@ export function parseProductTransactionsDtoArray(input: unknown): ProductTransac
 
 export function parseKnowledgeDocsDtoArray(input: unknown): KnowledgeDocDto[] {
   if (!Array.isArray(input)) return []
-  return input.map(item => {
+  return input.map((item) => {
     const src = isRecord(item) ? item : {}
     const versionsRaw = Array.isArray(src.versions) ? src.versions : []
     const draftLinksRaw = Array.isArray(src.draft_links) ? src.draft_links : []
@@ -126,7 +131,7 @@ export function parseKnowledgeDocsDtoArray(input: unknown): KnowledgeDocDto[] {
       outdated_reason: asNullableString(src.outdated_reason),
       outdated_at: asNullableString(src.outdated_at),
       current_version: asNumber(src.current_version, 1),
-      versions: versionsRaw.map(version => {
+      versions: versionsRaw.map((version) => {
         const versionSrc = isRecord(version) ? version : {}
         return {
           id: asString(versionSrc.id, ''),
@@ -142,7 +147,7 @@ export function parseKnowledgeDocsDtoArray(input: unknown): KnowledgeDocDto[] {
           created_at: asString(versionSrc.created_at, ''),
         }
       }),
-      draft_links: draftLinksRaw.map(link => {
+      draft_links: draftLinksRaw.map((link) => {
         const linkSrc = isRecord(link) ? link : {}
         return {
           id: asString(linkSrc.id, ''),
@@ -167,7 +172,7 @@ export function parseKnowledgeDocsPage(input: unknown): KnowledgeDocDto[] {
 
 export function parseContentTasksDtoArray(input: unknown): ContentTaskDto[] {
   if (!Array.isArray(input)) return []
-  return input.map(item => {
+  return input.map((item) => {
     const src = isRecord(item) ? item : {}
     return {
       id: asString(src.id),
@@ -181,7 +186,10 @@ export function parseContentTasksDtoArray(input: unknown): ContentTaskDto[] {
 export function parseImageSearchJobDto(input: unknown): ImageSearchJobDto {
   const src = isRecord(input) ? input : {}
   const statusRaw = asString(src.status, 'queued')
-  const status = statusRaw === 'running' || statusRaw === 'finished' || statusRaw === 'failed' ? statusRaw : 'queued'
+  const status =
+    statusRaw === 'running' || statusRaw === 'finished' || statusRaw === 'failed'
+      ? statusRaw
+      : 'queued'
   const result = isRecord(src.result)
     ? {
         query: asNullableString(src.result.query) ?? undefined,

@@ -100,19 +100,27 @@ export default function OperationsInboxPageView() {
   const [searchInput, setSearchInput] = useState(searchParams.get('q') || '')
 
   const [userFilter, setUserFilter] = useState(searchParams.get('user') || 'all')
-  const [roleFilter, setRoleFilter] = useState<'all' | OperationRole>((searchParams.get('role') as 'all' | OperationRole) || 'all')
-  const [priorityFilter, setPriorityFilter] = useState<'all' | OperationPriority>((searchParams.get('priority') as 'all' | OperationPriority) || 'all')
-  const [dueFilter, setDueFilter] = useState<DueFilter>((searchParams.get('due') as DueFilter) || 'all')
+  const [roleFilter, setRoleFilter] = useState<'all' | OperationRole>(
+    (searchParams.get('role') as 'all' | OperationRole) || 'all'
+  )
+  const [priorityFilter, setPriorityFilter] = useState<'all' | OperationPriority>(
+    (searchParams.get('priority') as 'all' | OperationPriority) || 'all'
+  )
+  const [dueFilter, setDueFilter] = useState<DueFilter>(
+    (searchParams.get('due') as DueFilter) || 'all'
+  )
   const [pageSize, setPageSize] = useState(() => {
     const parsed = Number(searchParams.get('limit') || '50')
     if (![25, 50, 100].includes(parsed)) return 50
     return parsed
   })
-  const [offset, setOffset] = useState(() => Math.max(0, Number(searchParams.get('offset') || '0') || 0))
+  const [offset, setOffset] = useState(() =>
+    Math.max(0, Number(searchParams.get('offset') || '0') || 0)
+  )
   const debouncedSearch = useDebouncedValue(searchInput.trim().toLowerCase(), 250)
   const tableAnchorRef = useRef<HTMLDivElement | null>(null)
   function changePage(direction: 'prev' | 'next') {
-    setOffset(curr => {
+    setOffset((curr) => {
       if (direction === 'prev') return Math.max(0, curr - pageSize)
       if (allItems.length < pageSize) return curr
       return curr + pageSize
@@ -120,12 +128,13 @@ export default function OperationsInboxPageView() {
     tableAnchorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
 
-
   async function load() {
     try {
       setErr(null)
       setLoading(true)
-      const response = await apiFetch<OperationInboxOut>(`/operations/inbox?limit=${pageSize}&offset=${offset}`)
+      const response = await apiFetch<OperationInboxOut>(
+        `/operations/inbox?limit=${pageSize}&offset=${offset}`
+      )
       setData(response)
     } catch (e: unknown) {
       setErr(getErrorMessage(e))
@@ -159,7 +168,17 @@ export default function OperationsInboxPageView() {
     if (next.toString() !== searchParams.toString()) {
       setSearchParams(next, { replace: true })
     }
-  }, [userFilter, roleFilter, priorityFilter, dueFilter, debouncedSearch, pageSize, offset, searchParams, setSearchParams])
+  }, [
+    userFilter,
+    roleFilter,
+    priorityFilter,
+    dueFilter,
+    debouncedSearch,
+    pageSize,
+    offset,
+    searchParams,
+    setSearchParams,
+  ])
 
   const allItems = data?.items ?? []
 
@@ -172,14 +191,15 @@ export default function OperationsInboxPageView() {
   }, [allItems])
 
   const filteredItems = useMemo(() => {
-    return allItems.filter(item => {
+    return allItems.filter((item) => {
       const assignee = item.assignee_username || 'unassigned'
       if (userFilter !== 'all' && assignee !== userFilter) return false
       if (roleFilter !== 'all' && item.responsible_role !== roleFilter) return false
       if (priorityFilter !== 'all' && item.priority !== priorityFilter) return false
       if (!matchesDueFilter(item, dueFilter)) return false
       if (debouncedSearch) {
-        const haystack = `${item.title} ${item.description} ${item.assignee_username || ''} ${item.kind}`.toLowerCase()
+        const haystack =
+          `${item.title} ${item.description} ${item.assignee_username || ''} ${item.kind}`.toLowerCase()
         if (!haystack.includes(debouncedSearch)) return false
       }
       return true
@@ -203,7 +223,11 @@ export default function OperationsInboxPageView() {
   if (err) {
     return (
       <ErrorState
-        title={isEnglish ? 'Operations inbox could not be loaded' : 'Operations Inbox konnte nicht geladen werden'}
+        title={
+          isEnglish
+            ? 'Operations inbox could not be loaded'
+            : 'Operations Inbox konnte nicht geladen werden'
+        }
         message={err}
         onRetry={() => {
           void load()
@@ -217,13 +241,20 @@ export default function OperationsInboxPageView() {
       <section className="card">
         <div className="card-head">
           <h2>{isEnglish ? 'Operations inbox' : 'Operations Inbox'}</h2>
-          <button className="btn" onClick={() => {
-            void load()
-          }}>
+          <button
+            className="btn"
+            onClick={() => {
+              void load()
+            }}
+          >
             {isEnglish ? 'Refresh' : 'Aktualisieren'}
           </button>
         </div>
-        <div className="muted">{isEnglish ? 'Central workspace for open approvals, todos and escalations.' : 'Zentrale Arbeitsoberfläche für offene Freigaben, ToDos und Eskalationen.'}</div>
+        <div className="muted">
+          {isEnglish
+            ? 'Central workspace for open approvals, todos and escalations.'
+            : 'Zentrale Arbeitsoberfläche für offene Freigaben, ToDos und Eskalationen.'}
+        </div>
 
         <div className="control-row mt16">
           <div className="card tight">
@@ -240,7 +271,9 @@ export default function OperationsInboxPageView() {
           </div>
           <div className="card tight">
             <div className="muted small">{isEnglish ? 'Escalated' : 'Eskaliert'}</div>
-            <div className="kpi metric-kpi">{filteredItems.filter(item => item.escalation).length}</div>
+            <div className="kpi metric-kpi">
+              {filteredItems.filter((item) => item.escalation).length}
+            </div>
           </div>
         </div>
       </section>
@@ -252,47 +285,67 @@ export default function OperationsInboxPageView() {
         <div className="control-row">
           <input
             className="grow"
-            placeholder={isEnglish ? 'Search (title, description, assignee, type)' : 'Suche (Titel, Beschreibung, Assignee, Typ)'}
+            placeholder={
+              isEnglish
+                ? 'Search (title, description, assignee, type)'
+                : 'Suche (Titel, Beschreibung, Assignee, Typ)'
+            }
             value={searchInput}
-            onChange={e => setSearchInput(e.target.value)}
+            onChange={(e) => setSearchInput(e.target.value)}
           />
 
-          <select value={userFilter} onChange={e => setUserFilter(e.target.value)}>
+          <select value={userFilter} onChange={(e) => setUserFilter(e.target.value)}>
             <option value="all">{isEnglish ? 'User: all' : 'Benutzer: Alle'}</option>
-            {assigneeOptions.map(value => (
+            {assigneeOptions.map((value) => (
               <option key={value} value={value}>
-                {isEnglish ? 'User' : 'Benutzer'}: {value === 'unassigned' ? (isEnglish ? 'Unassigned' : 'Nicht zugewiesen') : value}
+                {isEnglish ? 'User' : 'Benutzer'}:{' '}
+                {value === 'unassigned' ? (isEnglish ? 'Unassigned' : 'Nicht zugewiesen') : value}
               </option>
             ))}
           </select>
 
-          <select value={roleFilter} onChange={e => setRoleFilter(e.target.value as 'all' | OperationRole)}>
+          <select
+            value={roleFilter}
+            onChange={(e) => setRoleFilter(e.target.value as 'all' | OperationRole)}
+          >
             <option value="all">{isEnglish ? 'Role: all' : 'Rolle: Alle'}</option>
             <option value="admin">{isEnglish ? 'Role: Admin' : 'Rolle: Admin'}</option>
             <option value="editor">{isEnglish ? 'Role: Editor' : 'Rolle: Editor'}</option>
             <option value="viewer">{isEnglish ? 'Role: Viewer' : 'Rolle: Viewer'}</option>
           </select>
 
-          <select value={priorityFilter} onChange={e => setPriorityFilter(e.target.value as 'all' | OperationPriority)}>
+          <select
+            value={priorityFilter}
+            onChange={(e) => setPriorityFilter(e.target.value as 'all' | OperationPriority)}
+          >
             <option value="all">{isEnglish ? 'Priority: all' : 'Priorität: Alle'}</option>
             <option value="low">{isEnglish ? 'Priority: low' : 'Priorität: Niedrig'}</option>
             <option value="medium">{isEnglish ? 'Priority: medium' : 'Priorität: Mittel'}</option>
             <option value="high">{isEnglish ? 'Priority: high' : 'Priorität: Hoch'}</option>
-            <option value="critical">{isEnglish ? 'Priority: critical' : 'Priorität: Kritisch'}</option>
+            <option value="critical">
+              {isEnglish ? 'Priority: critical' : 'Priorität: Kritisch'}
+            </option>
           </select>
 
-          <select value={dueFilter} onChange={e => setDueFilter(e.target.value as DueFilter)}>
+          <select value={dueFilter} onChange={(e) => setDueFilter(e.target.value as DueFilter)}>
             <option value="all">{isEnglish ? 'Due date: all' : 'Fälligkeit: Alle'}</option>
-            <option value="overdue">{isEnglish ? 'Due date: overdue' : 'Fälligkeit: Überfällig'}</option>
+            <option value="overdue">
+              {isEnglish ? 'Due date: overdue' : 'Fälligkeit: Überfällig'}
+            </option>
             <option value="today">{isEnglish ? 'Due date: today' : 'Fälligkeit: Heute'}</option>
-            <option value="next7">{isEnglish ? 'Due date: next 7 days' : 'Fälligkeit: Nächste 7 Tage'}</option>
+            <option value="next7">
+              {isEnglish ? 'Due date: next 7 days' : 'Fälligkeit: Nächste 7 Tage'}
+            </option>
             <option value="none">{isEnglish ? 'Due date: none' : 'Fälligkeit: Ohne Datum'}</option>
           </select>
 
-          <select value={String(pageSize)} onChange={e => {
-            setPageSize(Number(e.target.value))
-            setOffset(0)
-          }}>
+          <select
+            value={String(pageSize)}
+            onChange={(e) => {
+              setPageSize(Number(e.target.value))
+              setOffset(0)
+            }}
+          >
             <option value="25">25 {isEnglish ? '/ page' : '/ Seite'}</option>
             <option value="50">50 {isEnglish ? '/ page' : '/ Seite'}</option>
             <option value="100">100 {isEnglish ? '/ page' : '/ Seite'}</option>
@@ -306,7 +359,9 @@ export default function OperationsInboxPageView() {
           <h3>{isEnglish ? 'Open approvals & todos' : 'Offene Freigaben & ToDos'}</h3>
         </div>
         <table className="status-table">
-          <caption className="sr-only">{isEnglish ? 'Operations inbox entries' : 'Operations Inbox Einträge'}</caption>
+          <caption className="sr-only">
+            {isEnglish ? 'Operations inbox entries' : 'Operations Inbox Einträge'}
+          </caption>
           <thead>
             <tr>
               <th scope="col">{isEnglish ? 'Type' : 'Typ'}</th>
@@ -319,7 +374,7 @@ export default function OperationsInboxPageView() {
             </tr>
           </thead>
           <tbody>
-            {filteredItems.map(item => (
+            {filteredItems.map((item) => (
               <tr key={item.id}>
                 <td>{KIND_LABELS[item.kind]}</td>
                 <td>
@@ -327,27 +382,42 @@ export default function OperationsInboxPageView() {
                   <div className="muted small">{item.description}</div>
                 </td>
                 <td>
-                  <span className={`status-badge ${item.priority === 'critical' ? 'danger' : item.priority === 'high' ? 'warn' : 'ok'}`}>
+                  <span
+                    className={`status-badge ${item.priority === 'critical' ? 'danger' : item.priority === 'high' ? 'warn' : 'ok'}`}
+                  >
                     {PRIORITY_LABELS[item.priority]}
                   </span>
                 </td>
                 <td>{item.escalation ? 'Ja' : 'Nein'}</td>
                 <td>
-                  <div>{isEnglish ? 'Role' : 'Rolle'}: {item.responsible_role}</div>
-                  <div className="muted small">{isEnglish ? 'User' : 'Benutzer'}: {item.assignee_username || (isEnglish ? 'Unassigned' : 'Nicht zugewiesen')}</div>
+                  <div>
+                    {isEnglish ? 'Role' : 'Rolle'}: {item.responsible_role}
+                  </div>
+                  <div className="muted small">
+                    {isEnglish ? 'User' : 'Benutzer'}:{' '}
+                    {item.assignee_username || (isEnglish ? 'Unassigned' : 'Nicht zugewiesen')}
+                  </div>
                 </td>
                 <td>
                   <div>{formatDateTime(item.due_at, isEnglish ? 'en-US' : 'de-DE')}</div>
-                  {isOverdue(item.due_at) && <div className="muted small">{isEnglish ? 'overdue' : 'überfällig'}</div>}
+                  {isOverdue(item.due_at) && (
+                    <div className="muted small">{isEnglish ? 'overdue' : 'überfällig'}</div>
+                  )}
                 </td>
                 <td>
-                  <Link className="btn" to={item.source_route}>{isEnglish ? 'Open' : 'Öffnen'}</Link>
+                  <Link className="btn" to={item.source_route}>
+                    {isEnglish ? 'Open' : 'Öffnen'}
+                  </Link>
                 </td>
               </tr>
             ))}
             {filteredItems.length === 0 && (
               <tr>
-                <td colSpan={7} className="muted">{isEnglish ? 'No entries match the current filters.' : 'Keine Einträge für die aktuelle Filterung.'}</td>
+                <td colSpan={7} className="muted">
+                  {isEnglish
+                    ? 'No entries match the current filters.'
+                    : 'Keine Einträge für die aktuelle Filterung.'}
+                </td>
               </tr>
             )}
           </tbody>
@@ -355,9 +425,20 @@ export default function OperationsInboxPageView() {
       </section>
 
       <div className="row between">
-        <button className="btn" onClick={() => changePage('prev')} disabled={offset <= 0}>{isEnglish ? '← Back' : '← Zurück'}</button>
-        <span className="muted small">{isEnglish ? 'Offset' : 'Offset'} {offset} · {isEnglish ? 'Limit' : 'Limit'} {pageSize} · {isEnglish ? 'Results' : 'Ergebnisse'} {filteredItems.length}</span>
-        <button className="btn" onClick={() => changePage('next')} disabled={allItems.length < pageSize}>{isEnglish ? 'Next →' : 'Weiter →'}</button>
+        <button className="btn" onClick={() => changePage('prev')} disabled={offset <= 0}>
+          {isEnglish ? '← Back' : '← Zurück'}
+        </button>
+        <span className="muted small">
+          {isEnglish ? 'Offset' : 'Offset'} {offset} · {isEnglish ? 'Limit' : 'Limit'} {pageSize} ·{' '}
+          {isEnglish ? 'Results' : 'Ergebnisse'} {filteredItems.length}
+        </span>
+        <button
+          className="btn"
+          onClick={() => changePage('next')}
+          disabled={allItems.length < pageSize}
+        >
+          {isEnglish ? 'Next →' : 'Weiter →'}
+        </button>
       </div>
     </div>
   )

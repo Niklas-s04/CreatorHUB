@@ -46,15 +46,15 @@ export function StepUpProvider({ children }: { children: ReactNode }) {
       setState({ ...initialState, open: true, loadingStatus: true })
 
       getMfaStatus()
-        .then(status => {
-          setState(prev => ({
+        .then((status) => {
+          setState((prev) => ({
             ...prev,
             loadingStatus: false,
             mfaEnabled: status.enabled,
           }))
         })
-        .catch(error => {
-          setState(prev => ({
+        .catch((error) => {
+          setState((prev) => ({
             ...prev,
             loadingStatus: false,
             error: getErrorMessage(error),
@@ -87,7 +87,7 @@ export function StepUpProvider({ children }: { children: ReactNode }) {
     event.preventDefault()
     const code = state.code.trim()
     if (!code) {
-      setState(prev => ({
+      setState((prev) => ({
         ...prev,
         error: isEnglish ? 'Enter an MFA code.' : 'MFA-Code eingeben.',
       }))
@@ -95,13 +95,13 @@ export function StepUpProvider({ children }: { children: ReactNode }) {
     }
 
     try {
-      setState(prev => ({ ...prev, submitting: true, error: null }))
+      setState((prev) => ({ ...prev, submitting: true, error: null }))
       await performMfaStepUp(code)
       resolverRef.current?.resolve()
       resolverRef.current = null
       setState(initialState)
     } catch (error: unknown) {
-      setState(prev => ({
+      setState((prev) => ({
         ...prev,
         submitting: false,
         error: getErrorMessage(error),
@@ -129,7 +129,9 @@ export function StepUpProvider({ children }: { children: ReactNode }) {
             </div>
 
             {state.loadingStatus && (
-              <div className="muted section-gap">{isEnglish ? 'Checking MFA status...' : 'MFA-Status wird geprüft...'}</div>
+              <div className="muted section-gap">
+                {isEnglish ? 'Checking MFA status...' : 'MFA-Status wird geprüft...'}
+              </div>
             )}
 
             {!state.loadingStatus && state.mfaEnabled === false && (
@@ -160,16 +162,25 @@ export function StepUpProvider({ children }: { children: ReactNode }) {
                   className="full-width"
                   autoFocus
                   value={state.code}
-                  onChange={event => setState(prev => ({ ...prev, code: event.target.value }))}
+                  onChange={(event) => setState((prev) => ({ ...prev, code: event.target.value }))}
                   placeholder={isEnglish ? 'TOTP or recovery code' : 'TOTP oder Recovery-Code'}
                   autoComplete="one-time-code"
                 />
-                {state.error && <div className="error mt8" role="alert">{state.error}</div>}
+                {state.error && (
+                  <div className="error mt8" role="alert">
+                    {state.error}
+                  </div>
+                )}
                 <div className="table-actions mt8">
                   <button className="btn primary" disabled={state.submitting}>
                     {state.submitting ? '...' : isEnglish ? 'Confirm' : 'Bestätigen'}
                   </button>
-                  <button type="button" className="btn" onClick={closeWithRejection} disabled={state.submitting}>
+                  <button
+                    type="button"
+                    className="btn"
+                    onClick={closeWithRejection}
+                    disabled={state.submitting}
+                  >
                     {isEnglish ? 'Cancel' : 'Abbrechen'}
                   </button>
                 </div>

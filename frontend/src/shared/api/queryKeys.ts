@@ -34,7 +34,8 @@ export const queryKeys = {
     thread: (id: string) => ['email', 'thread', id] as const,
   },
   admin: {
-    registrationRequests: (statusFilter: 'pending' | 'approved' | 'rejected') => ['admin', 'registrationRequests', statusFilter] as const,
+    registrationRequests: (statusFilter: 'pending' | 'approved' | 'rejected') =>
+      ['admin', 'registrationRequests', statusFilter] as const,
     registrationRequestsAll: () => ['admin', 'registrationRequests', 'all'] as const,
     userSessions: (userId: string) => ['admin', 'userSessions', userId] as const,
   },

@@ -5,7 +5,7 @@ const DEFAULT_MESSAGE = 'Du hast ungespeicherte Änderungen. Wirklich verlassen?
 
 export function useUnsavedChangesWarning(isDirty: boolean, message = DEFAULT_MESSAGE) {
   useBeforeUnload(
-    event => {
+    (event) => {
       if (!isDirty) return
       event.preventDefault()
       event.returnValue = message

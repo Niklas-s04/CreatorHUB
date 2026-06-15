@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, get_db
 from app.core.authorization import Permission, has_permission
-from app.models.asset import Asset
+from app.models.asset import Asset, AssetReviewState
 from app.models.content import ContentItem
 from app.models.knowledge import KnowledgeDoc
 from app.models.product import Product
@@ -117,22 +117,19 @@ def _product_hits(
 
 
 def _asset_hits(
-    db: Session, query: str, pattern: str, candidate_limit: int
+    db: Session, query: str, pattern: str, candidate_limit: int, include_unapproved: bool = False
 ) -> list[GlobalSearchHit]:
-    rows = (
-        db.query(Asset)
-        .filter(
-            or_(
-                Asset.title.ilike(pattern),
-                Asset.source_name.ilike(pattern),
-                Asset.source_url.ilike(pattern),
-                Asset.url.ilike(pattern),
-            )
+    q = db.query(Asset).filter(
+        or_(
+            Asset.title.ilike(pattern),
+            Asset.source_name.ilike(pattern),
+            Asset.source_url.ilike(pattern),
+            Asset.url.ilike(pattern),
         )
-        .order_by(Asset.updated_at.desc())
-        .limit(candidate_limit)
-        .all()
     )
+    if not include_unapproved:
+        q = q.filter(Asset.review_state == AssetReviewState.approved)
+    rows = q.order_by(Asset.updated_at.desc()).limit(candidate_limit).all()
     hits: list[GlobalSearchHit] = []
     for row in rows:
         score = (
@@ -285,7 +282,11 @@ def global_search(
         )
     if has_permission(current_user, Permission.asset_read):
         grouped_hits[GlobalSearchEntityType.asset] = _asset_hits(
-            db, query, pattern, candidate_limit
+            db,
+            query,
+            pattern,
+            candidate_limit,
+            include_unapproved=has_permission(current_user, Permission.asset_review),
         )
     if has_permission(current_user, Permission.content_read):
         grouped_hits[GlobalSearchEntityType.content] = _content_hits(

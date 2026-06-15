@@ -1,9 +1,11 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, Request, Response, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response, status
 from sqlalchemy import text
 from starlette.responses import PlainTextResponse
 
+from app.api.deps import get_current_auth_context, get_db, oauth2_scheme
+from app.core.authorization import Permission, has_permission
 from app.core.config import settings
 from app.core.observability import (
     collect_worker_snapshot,
@@ -13,8 +15,38 @@ from app.core.observability import (
     monitor_once,
 )
 from app.db.session import SessionLocal
+from app.models.user import User
 
 router = APIRouter()
+
+
+def _optional_current_user(
+    request: Request,
+    db=Depends(get_db),
+    token: str | None = Depends(oauth2_scheme),
+) -> User | None:
+    try:
+        return get_current_auth_context(request=request, db=db, token=token).user
+    except HTTPException:
+        return None
+
+
+def require_observability_access(
+    request: Request,
+    x_observability_token: str | None = Header(default=None),
+    current_user: User | None = Depends(_optional_current_user),
+) -> None:
+    if not settings.OBSERVABILITY_DETAIL_AUTH_REQUIRED:
+        return
+
+    expected = (settings.OBSERVABILITY_DETAIL_TOKEN or "").strip()
+    if expected and x_observability_token and x_observability_token == expected:
+        return
+
+    if current_user is not None and has_permission(current_user, Permission.audit_view):
+        return
+
+    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Observability access denied")
 
 
 @router.get("/health")
@@ -75,7 +107,11 @@ def readiness(request: Request, response: Response) -> dict:
     }
 
 
-@router.get("/health/metrics", include_in_schema=False)
+@router.get(
+    "/health/metrics",
+    include_in_schema=False,
+    dependencies=[Depends(require_observability_access)],
+)
 def metrics() -> PlainTextResponse:
     if not settings.OBSERVABILITY_METRICS_ENABLED:
         raise HTTPException(status_code=404, detail="Metrics endpoint disabled")
@@ -84,7 +120,7 @@ def metrics() -> PlainTextResponse:
     )
 
 
-@router.get("/health/background-jobs")
+@router.get("/health/background-jobs", dependencies=[Depends(require_observability_access)])
 def background_jobs(request: Request) -> dict:
     auto_archive_task = getattr(request.app.state, "auto_archive_task", None)
     auto_archive_state = {
@@ -115,7 +151,7 @@ def background_jobs(request: Request) -> dict:
     }
 
 
-@router.get("/health/alerts")
+@router.get("/health/alerts", dependencies=[Depends(require_observability_access)])
 def alerts(request: Request) -> dict:
     monitor_once(request.app, settings)
     state = get_alert_state()

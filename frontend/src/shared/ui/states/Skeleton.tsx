@@ -5,5 +5,7 @@ type SkeletonProps = {
 }
 
 export function Skeleton({ width = '100%', height = '14px', className = '' }: SkeletonProps) {
-  return <div className={`skeleton ${className}`.trim()} style={{ width, height }} aria-hidden="true" />
+  return (
+    <div className={`skeleton ${className}`.trim()} style={{ width, height }} aria-hidden="true" />
+  )
 }

@@ -51,7 +51,7 @@ export function ProductsTable({
   onPrefetchDetail,
 }: ProductsTableProps) {
   const [scrollTop, setScrollTop] = useState(0)
-  const selectedOnPage = items.filter(item => selectedIds.has(String(item.id))).length
+  const selectedOnPage = items.filter((item) => selectedIds.has(String(item.id))).length
   const allSelected = items.length > 0 && selectedOnPage === items.length
   const rowHeight = 46
   const viewportHeight = 520
@@ -93,13 +93,19 @@ export function ProductsTable({
     }
   }, [items.length, scrollTop])
 
-  const visibleItems = virtualization.enabled ? items.slice(virtualization.start, virtualization.end) : items
+  const visibleItems = virtualization.enabled
+    ? items.slice(virtualization.start, virtualization.end)
+    : items
 
   return (
     <div
       className="table-virtual-wrap"
-      style={virtualization.enabled ? { maxHeight: `${viewportHeight}px`, overflowY: 'auto' } : undefined}
-      onScroll={virtualization.enabled ? event => setScrollTop(event.currentTarget.scrollTop) : undefined}
+      style={
+        virtualization.enabled ? { maxHeight: `${viewportHeight}px`, overflowY: 'auto' } : undefined
+      }
+      onScroll={
+        virtualization.enabled ? (event) => setScrollTop(event.currentTarget.scrollTop) : undefined
+      }
     >
       <table>
         <caption className="sr-only">Produktliste mit Auswahl und Sortierung</caption>
@@ -113,7 +119,7 @@ export function ProductsTable({
                 onChange={onToggleAllRows}
               />
             </th>
-            {visibleColumns.map(column => {
+            {visibleColumns.map((column) => {
               const sortableField = SORTABLE_COLUMNS[column]
               return (
                 <th key={column} scope="col" aria-sort={getSortAria(column)}>
@@ -137,10 +143,13 @@ export function ProductsTable({
         <tbody>
           {virtualization.enabled && virtualization.topSpacer > 0 && (
             <tr aria-hidden="true">
-              <td colSpan={visibleColumns.length + 1} style={{ height: `${virtualization.topSpacer}px`, padding: 0, borderBottom: 0 }} />
+              <td
+                colSpan={visibleColumns.length + 1}
+                style={{ height: `${virtualization.topSpacer}px`, padding: 0, borderBottom: 0 }}
+              />
             </tr>
           )}
-          {visibleItems.map(product => (
+          {visibleItems.map((product) => (
             <tr key={product.id}>
               <td>
                 <input
@@ -150,7 +159,7 @@ export function ProductsTable({
                   onChange={() => onToggleRow(String(product.id))}
                 />
               </td>
-              {visibleColumns.map(column => {
+              {visibleColumns.map((column) => {
                 if (column === 'title') {
                   const id = String(product.id)
                   return (
@@ -165,7 +174,8 @@ export function ProductsTable({
                     </th>
                   )
                 }
-                if (column === 'category') return <td key={`${product.id}-${column}`}>{product.category}</td>
+                if (column === 'category')
+                  return <td key={`${product.id}-${column}`}>{product.category}</td>
                 if (column === 'condition') {
                   return (
                     <td key={`${product.id}-${column}`}>
@@ -189,12 +199,17 @@ export function ProductsTable({
           ))}
           {virtualization.enabled && virtualization.bottomSpacer > 0 && (
             <tr aria-hidden="true">
-              <td colSpan={visibleColumns.length + 1} style={{ height: `${virtualization.bottomSpacer}px`, padding: 0, borderBottom: 0 }} />
+              <td
+                colSpan={visibleColumns.length + 1}
+                style={{ height: `${virtualization.bottomSpacer}px`, padding: 0, borderBottom: 0 }}
+              />
             </tr>
           )}
           {!items.length && (
             <tr>
-              <td colSpan={visibleColumns.length + 1} className="muted">Keine Treffer.</td>
+              <td colSpan={visibleColumns.length + 1} className="muted">
+                Keine Treffer.
+              </td>
             </tr>
           )}
         </tbody>

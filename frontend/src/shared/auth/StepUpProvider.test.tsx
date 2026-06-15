@@ -39,10 +39,13 @@ describe('StepUpProvider', () => {
         })
       )
       .mockResolvedValueOnce(
-        new Response(JSON.stringify({ mfa_verified: true, step_up_expires_at: '2026-06-13T22:00:00Z' }), {
-          status: 200,
-          headers: { 'content-type': 'application/json' },
-        })
+        new Response(
+          JSON.stringify({ mfa_verified: true, step_up_expires_at: '2026-06-13T22:00:00Z' }),
+          {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          }
+        )
       )
       .mockResolvedValueOnce(
         new Response(JSON.stringify({ ok: true }), {
@@ -68,7 +71,7 @@ describe('StepUpProvider', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Bestätigen' }))
 
     await waitFor(() => expect(document.body.dataset.stepUpResult).toBe('ok'))
-    expect(fetchMock.mock.calls.map(call => call[0])).toEqual([
+    expect(fetchMock.mock.calls.map((call) => call[0])).toEqual([
       '/api/v1/sensitive',
       '/api/v1/auth/mfa/status',
       '/api/v1/auth/mfa/step-up',

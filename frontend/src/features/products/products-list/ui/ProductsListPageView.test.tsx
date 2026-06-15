@@ -14,21 +14,48 @@ vi.mock('react-router-dom', async () => {
   return {
     ...actual,
     useNavigate: () => navigate,
-    useSearchParams: () => [new URLSearchParams('q=cam&status=active&limit=25&offset=0&sort_by=updated_at&sort_order=desc'), setSearchParams],
+    useSearchParams: () => [
+      new URLSearchParams(
+        'q=cam&status=active&limit=25&offset=0&sort_by=updated_at&sort_order=desc'
+      ),
+      setSearchParams,
+    ],
   }
 })
 
 vi.mock('../../../../shared/hooks/useAuthz', () => ({
-  useAuthz: () => ({ hasPermission: (permission: string) => ['product.read', 'product.write', 'product.export'].includes(permission) }),
+  useAuthz: () => ({
+    hasPermission: (permission: string) =>
+      ['product.read', 'product.write', 'product.export'].includes(permission),
+  }),
 }))
 
 vi.mock('../../../../shared/api/queries/products', () => ({
-  useCreateProductMutation: () => ({ mutateAsync: vi.fn().mockResolvedValue(undefined), isPending: false }),
+  useCreateProductMutation: () => ({
+    mutateAsync: vi.fn().mockResolvedValue(undefined),
+    isPending: false,
+  }),
   useProductsListQuery: () => ({
     data: {
       items: [
-        { id: 'product-1', title: 'Camera', category: 'photo', condition: 'good', status: 'active', currentValue: 99, currency: 'EUR' },
-        { id: 'product-2', title: 'Lens', category: 'photo', condition: 'used', status: 'sold', currentValue: 120, currency: 'EUR' },
+        {
+          id: 'product-1',
+          title: 'Camera',
+          category: 'photo',
+          condition: 'good',
+          status: 'active',
+          currentValue: 99,
+          currency: 'EUR',
+        },
+        {
+          id: 'product-2',
+          title: 'Lens',
+          category: 'photo',
+          condition: 'used',
+          status: 'sold',
+          currentValue: 120,
+          currency: 'EUR',
+        },
       ],
       meta: { limit: 25, offset: 0, total: 2, sort_by: 'updated_at', sort_order: 'desc' },
     },
@@ -43,7 +70,8 @@ vi.mock('../../../../shared/ui/toast/ToastProvider', () => ({
 }))
 
 vi.mock('@tanstack/react-query', async () => {
-  const actual = await vi.importActual<typeof import('@tanstack/react-query')>('@tanstack/react-query')
+  const actual =
+    await vi.importActual<typeof import('@tanstack/react-query')>('@tanstack/react-query')
   return {
     ...actual,
     useQueryClient: () => ({
@@ -84,7 +112,9 @@ describe('ProductsListPageView', () => {
 
     fireEvent.click(screen.getByLabelText('Produkt Camera auswählen'))
     fireEvent.click(screen.getByRole('button', { name: 'Bulk: Archivieren' }))
-    await waitFor(() => expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ['products', 'list'] }))
+    await waitFor(() =>
+      expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ['products', 'list'] })
+    )
 
     fireEvent.change(screen.getByLabelText('Produktsuche'), { target: { value: 'kamera' } })
     fireEvent.click(screen.getByRole('button', { name: 'Filter' }))
@@ -93,12 +123,16 @@ describe('ProductsListPageView', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Reset' }))
     expect(setSearchParams).toHaveBeenCalled()
 
-    fireEvent.change(screen.getByLabelText('Export-Datensatz'), { target: { value: 'transactions' } })
+    fireEvent.change(screen.getByLabelText('Export-Datensatz'), {
+      target: { value: 'transactions' },
+    })
     fireEvent.change(screen.getByLabelText('Export-Jahre'), { target: { value: '2023, 2024' } })
     fireEvent.click(screen.getByRole('button', { name: 'Export CSV' }))
     expect(window.open).toHaveBeenCalled()
 
-    fireEvent.change(screen.getByLabelText('Name für gespeicherte Ansicht'), { target: { value: 'Meine Ansicht' } })
+    fireEvent.change(screen.getByLabelText('Name für gespeicherte Ansicht'), {
+      target: { value: 'Meine Ansicht' },
+    })
     fireEvent.click(screen.getByRole('button', { name: 'View speichern' }))
     expect(screen.getByText('View löschen: Meine Ansicht')).toBeInTheDocument()
 

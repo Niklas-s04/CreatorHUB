@@ -15,7 +15,14 @@ vi.mock('../api', () => ({
   requestAdminPasswordReset: vi.fn(),
 }))
 
-import { approveRegistrationRequest, apiFetch, getMe, getRegistrationRequests, getUsers, getUserSessions } from '../api'
+import {
+  approveRegistrationRequest,
+  apiFetch,
+  getMe,
+  getRegistrationRequests,
+  getUsers,
+  getUserSessions,
+} from '../api'
 
 describe('AdminPage', () => {
   beforeEach(() => {
@@ -48,22 +55,23 @@ describe('AdminPage', () => {
 
     renderWithRouter(<AdminPage />)
 
-    expect(await screen.findByText('Nur Admin kann Registrierungsanfragen bearbeiten.')).toBeInTheDocument()
+    expect(
+      await screen.findByText('Nur Admin kann Registrierungsanfragen bearbeiten.')
+    ).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Freigeben' })).not.toBeInTheDocument()
   })
 
   it('zeigt leere Zustände für Admin ohne Daten', async () => {
-    ;(getMe as unknown as ReturnType<typeof vi.fn>)
-      .mockResolvedValueOnce({
-        id: 'a1',
-        username: 'admin',
-        role: 'admin',
-        is_active: true,
-        needs_password_setup: false,
-        locked_until: null,
-        last_activity_at: null,
-        permissions: ['user.read', 'user.approve_registration'],
-      })
+    ;(getMe as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      id: 'a1',
+      username: 'admin',
+      role: 'admin',
+      is_active: true,
+      needs_password_setup: false,
+      locked_until: null,
+      last_activity_at: null,
+      permissions: ['user.read', 'user.approve_registration'],
+    })
     ;(apiFetch as unknown as ReturnType<typeof vi.fn>)
       .mockResolvedValueOnce([])
       .mockResolvedValueOnce({ items: [], meta: { total: 0 } })
@@ -78,7 +86,7 @@ describe('AdminPage', () => {
 
   it('zeigt Ladezustand beim Initial-Load', async () => {
     let resolveMe: ((value: unknown) => void) | null = null
-    const mePromise = new Promise(resolve => {
+    const mePromise = new Promise((resolve) => {
       resolveMe = resolve
     })
     ;(getMe as unknown as ReturnType<typeof vi.fn>).mockImplementationOnce(() => mePromise)
@@ -104,7 +112,9 @@ describe('AdminPage', () => {
   })
 
   it('zeigt Fehlerzustand', async () => {
-    ;(getMe as unknown as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error('Backend nicht erreichbar'))
+    ;(getMe as unknown as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
+      new Error('Backend nicht erreichbar')
+    )
 
     renderWithRouter(<AdminPage />)
 
@@ -122,12 +132,34 @@ describe('AdminPage', () => {
       last_activity_at: null,
       permissions: ['user.read', 'user.approve_registration'],
     })
-    ;(getRegistrationRequests as unknown as ReturnType<typeof vi.fn>).mockImplementation(async (statusFilter?: string) => {
-      if (statusFilter === 'pending') {
-        return [{ id: 'r1', username: 'new-user', status: 'pending', reviewed_at: null, reviewed_by_user_id: null, reviewed_by_username: null, rejection_reason: null }]
+    ;(getRegistrationRequests as unknown as ReturnType<typeof vi.fn>).mockImplementation(
+      async (statusFilter?: string) => {
+        if (statusFilter === 'pending') {
+          return [
+            {
+              id: 'r1',
+              username: 'new-user',
+              status: 'pending',
+              reviewed_at: null,
+              reviewed_by_user_id: null,
+              reviewed_by_username: null,
+              rejection_reason: null,
+            },
+          ]
+        }
+        return [
+          {
+            id: 'h1',
+            username: 'old-user',
+            status: 'approved',
+            reviewed_at: '2026-04-04T10:00:00Z',
+            reviewed_by_user_id: 'a1',
+            reviewed_by_username: 'admin',
+            rejection_reason: null,
+          },
+        ]
       }
-      return [{ id: 'h1', username: 'old-user', status: 'approved', reviewed_at: '2026-04-04T10:00:00Z', reviewed_by_user_id: 'a1', reviewed_by_username: 'admin', rejection_reason: null }]
-    })
+    )
     ;(getUsers as unknown as ReturnType<typeof vi.fn>).mockResolvedValue([
       {
         id: 'u2',

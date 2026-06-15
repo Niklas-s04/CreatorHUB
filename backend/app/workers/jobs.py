@@ -70,6 +70,15 @@ def _find_perceptual_duplicate(
     return best
 
 
+def _delete_cached_candidate(path: str | None) -> None:
+    if not path:
+        return
+    try:
+        Path(path).unlink(missing_ok=True)
+    except OSError:
+        pass
+
+
 MIN_IMAGE_WIDTH = 900
 MIN_IMAGE_HEIGHT = 700
 MIN_ASPECT_RATIO = 0.6
@@ -163,23 +172,27 @@ def image_hunt_job(
 
             if duplicate_asset:
                 skipped_duplicates += 1
+                _delete_cached_candidate(stored.local_path)
                 continue
 
             width = stored.width or c.get("width")
             height = stored.height or c.get("height")
             if not width or not height:
                 quality_rejections["missing_dimensions"] += 1
+                _delete_cached_candidate(stored.local_path)
                 continue
 
             width = int(width)
             height = int(height)
             if width < MIN_IMAGE_WIDTH or height < MIN_IMAGE_HEIGHT:
                 quality_rejections["low_resolution"] += 1
+                _delete_cached_candidate(stored.local_path)
                 continue
 
             aspect_ratio = width / height if height else 0
             if aspect_ratio < MIN_ASPECT_RATIO or aspect_ratio > MAX_ASPECT_RATIO:
                 quality_rejections["bad_aspect_ratio"] += 1
+                _delete_cached_candidate(stored.local_path)
                 continue
 
             if not stored.local_path:
@@ -189,12 +202,15 @@ def image_hunt_job(
             score = score_image(Path(stored.local_path))
             if score.spec_sheet:
                 quality_rejections["spec_sheet"] += 1
+                _delete_cached_candidate(stored.local_path)
                 continue
             if score.background_score < MIN_BACKGROUND_SCORE:
                 quality_rejections["low_background"] += 1
+                _delete_cached_candidate(stored.local_path)
                 continue
             if score.score < MIN_OVERALL_SCORE:
                 quality_rejections["low_score"] += 1
+                _delete_cached_candidate(stored.local_path)
                 continue
 
             asset = Asset(

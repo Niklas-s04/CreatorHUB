@@ -4,6 +4,7 @@ import {
   E2E_ADMIN_PASSWORD,
   E2E_ADMIN_USER,
   csrfHeaders,
+  e2eApiPath,
   generateTotpCode,
   loginAsAdmin,
   logout,
@@ -40,7 +41,7 @@ test.describe('Auth E2E', () => {
     const password = 'AuthDelete!Pass12345'
 
     await loginAsAdmin(page)
-    const createResponse = await page.request.post('/api/auth/users', {
+    const createResponse = await page.request.post(e2eApiPath('/auth/users'), {
       headers: await csrfHeaders(page),
       data: {
         username,

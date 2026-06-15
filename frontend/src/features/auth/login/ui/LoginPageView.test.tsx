@@ -39,6 +39,7 @@ describe('LoginPageView', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     localStorage.clear()
+    sessionStorage.clear()
   })
 
   it('supports registration, reset and login flows', async () => {
@@ -87,7 +88,7 @@ describe('LoginPageView', () => {
   })
 
   it('shows bootstrap setup mode when a token exists', async () => {
-    localStorage.setItem('bootstrap_token', 'bootstrap-1')
+    sessionStorage.setItem('bootstrap_token', 'bootstrap-1')
 
     render(
       <MemoryRouter>
@@ -141,6 +142,6 @@ describe('LoginPageView', () => {
       expect(screen.queryByRole('button', { name: 'Erstsetup' })).not.toBeInTheDocument()
     )
     expect(screen.queryByLabelText('Bootstrap-Token (nur Erstsetup)')).not.toBeInTheDocument()
-    expect(localStorage.getItem('bootstrap_token')).toBeNull()
+    expect(sessionStorage.getItem('bootstrap_token')).toBeNull()
   })
 })

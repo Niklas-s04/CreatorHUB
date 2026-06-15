@@ -21,7 +21,9 @@ export function ErrorState({
       <div className="error mt8">{message}</div>
       {onRetry ? (
         <div className="mt12">
-          <button className="btn" onClick={onRetry}>{retryLabel || t('common.retry')}</button>
+          <button className="btn" onClick={onRetry}>
+            {retryLabel || t('common.retry')}
+          </button>
         </div>
       ) : null}
     </div>

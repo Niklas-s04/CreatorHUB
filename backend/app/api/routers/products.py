@@ -5,7 +5,7 @@ from datetime import date, datetime, timezone
 from enum import Enum
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from fastapi.responses import FileResponse
+from fastapi.responses import StreamingResponse
 from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session, joinedload
 
@@ -45,9 +45,9 @@ from app.services.domain_events import emit_domain_event
 from app.services.domain_rules import product_status_side_effect, validate_product_status_change
 from app.services.errors import BusinessRuleViolation
 from app.services.exports import (
-    export_products_csv,
-    export_transactions_csv,
-    export_value_history_csv,
+    stream_products_csv,
+    stream_transactions_csv,
+    stream_value_history_csv,
 )
 from app.services.inventory_import import CsvImportConfig, import_products_from_csv
 from app.services.sales_workflow import finalize_product_sale
@@ -679,7 +679,7 @@ def export_csv(
     sort_order: SortOrder = Query(default=SortOrder.desc),
     db: Session = Depends(get_db),
     _: User = Depends(require_permission(Permission.product_export)),
-) -> FileResponse:
+) -> StreamingResponse:
     year_list = _normalize_years(years)
     year_set = set(year_list)
     if dataset == CSVExportKind.products:
@@ -709,10 +709,11 @@ def export_csv(
             },
             fallback="updated_at",
         )
-        items = qry.all()
+        items = qry.yield_per(500)
         if year_set:
             items = [p for p in items if _product_in_years(p, year_set)]
-        path = export_products_csv(items)
+        stream = stream_products_csv(items)
+        filename = "products.csv"
     elif dataset == CSVExportKind.transactions:
         qry = (
             db.query(ProductTransaction)
@@ -721,8 +722,9 @@ def export_csv(
         )
         if year_list:
             qry = _apply_year_filter_date(qry, ProductTransaction.date, year_list)
-        items = qry.all()
-        path = export_transactions_csv(items)
+        items = qry.yield_per(500)
+        stream = stream_transactions_csv(items)
+        filename = "transactions.csv"
     else:
         qry = (
             db.query(ProductValueHistory)
@@ -731,7 +733,12 @@ def export_csv(
         )
         if year_list:
             qry = _apply_year_filter_date(qry, ProductValueHistory.date, year_list)
-        items = qry.all()
-        path = export_value_history_csv(items)
+        items = qry.yield_per(500)
+        stream = stream_value_history_csv(items)
+        filename = "value_history.csv"
 
-    return FileResponse(path, filename=path.split("/")[-1], media_type="text/csv")
+    return StreamingResponse(
+        stream,
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )

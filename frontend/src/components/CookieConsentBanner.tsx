@@ -45,9 +45,7 @@ export default function CookieConsentBanner() {
       <div className="cookie-consent__copy">
         <p className="cookie-consent__eyebrow">{t('cookie.eyebrow')}</p>
         <h2 id="cookie-consent-title">{t('cookie.title')}</h2>
-        <p>
-          {t('cookie.body')}
-        </p>
+        <p>{t('cookie.body')}</p>
       </div>
       <div className="cookie-consent__actions">
         <button type="button" className="btn secondary" onClick={acceptNecessaryOnly}>

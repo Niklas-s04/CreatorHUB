@@ -4,7 +4,13 @@ import { queryKeys } from '../queryKeys'
 
 export type AssetOwnerType = 'product' | 'content' | 'email' | 'deal'
 export type AssetKind = 'image' | 'pdf' | 'link' | 'video'
-export type AssetReviewState = 'pending' | 'approved' | 'rejected'
+export type AssetReviewState =
+  | 'quarantine'
+  | 'pending_review'
+  | 'needs_review'
+  | 'pending'
+  | 'approved'
+  | 'rejected'
 export type LicenseFilter = 'any' | 'licensed' | 'missing'
 
 export type AssetLibraryItem = {
@@ -30,6 +36,19 @@ export type AssetLibraryItem = {
   updated_at: string
 }
 
+export type PageMeta = {
+  limit: number
+  offset: number
+  total: number
+  sort_by?: string
+  sort_order?: 'asc' | 'desc'
+}
+
+export type AssetLibraryPage = {
+  meta: PageMeta
+  items: AssetLibraryItem[]
+}
+
 type AssetLibraryQueryParams = {
   search?: string
   ownerType?: AssetOwnerType
@@ -53,14 +72,14 @@ export function useAssetLibraryQuery(params: AssetLibraryQueryParams) {
   if (params.ownerType) normalizedParams.owner_type = params.ownerType
   if (params.kind) normalizedParams.kind = params.kind
 
-  return useQuery<AssetLibraryItem[]>({
+  return useQuery<AssetLibraryPage>({
     queryKey: queryKeys.assets.library(normalizedParams),
     staleTime: 60_000,
     gcTime: 10 * 60_000,
-    placeholderData: previous => previous,
+    placeholderData: (previous) => previous,
     queryFn: async () => {
       const search = new URLSearchParams(normalizedParams)
-      return apiFetch<AssetLibraryItem[]>(`/assets/library?${search.toString()}`)
+      return apiFetch<AssetLibraryPage>(`/assets/library?${search.toString()}`)
     },
   })
 }

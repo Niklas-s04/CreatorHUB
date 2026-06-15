@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import uuid
 from io import BytesIO
+from pathlib import Path
 
 from PIL import Image
 from sqlalchemy.orm import Session
 
 from app.api import deps
+from app.core.config import settings
 from app.models.user import UserRole
 from tests.factories import create_user
 
@@ -57,6 +59,24 @@ def test_upload_rejects_invalid_image_signature(client, app, db_session: Session
     )
 
 
+def test_upload_rejects_files_above_kind_limit(client, app, db_session: Session, monkeypatch) -> None:
+    admin = create_user(db_session, username="assets_admin_too_large", role=UserRole.admin)
+    app.dependency_overrides[deps.get_current_user] = lambda: admin
+    monkeypatch.setattr(settings, "UPLOAD_MAX_IMAGE_BYTES", 8)
+
+    response = client.post(
+        "/api/assets/upload",
+        data={
+            "owner_type": "product",
+            "owner_id": str(uuid.uuid4()),
+            "kind": "image",
+        },
+        files={"file": ("image.png", _png_bytes(), "image/png")},
+    )
+
+    assert response.status_code == 413
+
+
 def test_upload_deduplicates_by_hash(client, app, db_session: Session) -> None:
     admin = create_user(db_session, username="assets_admin_dup", role=UserRole.admin)
     app.dependency_overrides[deps.get_current_user] = lambda: admin
@@ -82,6 +102,9 @@ def test_upload_deduplicates_by_hash(client, app, db_session: Session) -> None:
     )
     assert second.status_code == 200
     assert first.json()["id"] == second.json()["id"]
+    stored_files = list(Path(settings.UPLOADS_DIR).rglob("*"))
+    stored_files = [path for path in stored_files if path.is_file()]
+    assert len(stored_files) == 1
 
 
 def test_upload_allows_same_hash_for_different_owner(client, app, db_session: Session) -> None:

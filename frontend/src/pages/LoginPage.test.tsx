@@ -39,7 +39,11 @@ describe('LoginPage', () => {
   })
 
   it('validiert Passwortabgleich bei Registrierung', async () => {
-    ;(requestRegistration as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({ id: 'x', username: 'u', status: 'pending' })
+    ;(requestRegistration as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
+      id: 'x',
+      username: 'u',
+      status: 'pending',
+    })
 
     renderPage()
 
@@ -59,7 +63,7 @@ describe('LoginPage', () => {
 
   it('zeigt Ladezustand während Login-Request', async () => {
     ;(login as unknown as ReturnType<typeof vi.fn>).mockImplementation(
-      () => new Promise(resolve => setTimeout(resolve, 200))
+      () => new Promise((resolve) => setTimeout(resolve, 200))
     )
 
     renderPage()
@@ -73,7 +77,9 @@ describe('LoginPage', () => {
   })
 
   it('zeigt Fehlerzustand aus API-Detail', async () => {
-    ;(login as unknown as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('{"detail":"Ungültige Zugangsdaten"}'))
+    ;(login as unknown as ReturnType<typeof vi.fn>).mockRejectedValue(
+      new Error('{"detail":"Ungültige Zugangsdaten"}')
+    )
 
     renderPage()
     const passwordInput = document.querySelector('input[type="password"]') as HTMLInputElement

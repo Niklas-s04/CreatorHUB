@@ -1,12 +1,12 @@
 import { expect, test } from '@playwright/test'
 
-import { csrfHeaders, loginAsAdmin } from './helpers'
+import { csrfHeaders, e2eApiPath, loginAsAdmin } from './helpers'
 
 test.describe('CSV Import E2E', () => {
   test('rejects malformed CSV payloads with a helpful error', async ({ page }) => {
     await loginAsAdmin(page)
 
-    const response = await page.request.post('/api/products/import/csv', {
+    const response = await page.request.post(e2eApiPath('/products/import/csv'), {
       headers: await csrfHeaders(page),
       data: {
         csv_text: 'title;brand\nCamera;Canon\nBrokenRow',

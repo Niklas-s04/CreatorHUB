@@ -11,8 +11,11 @@ export default function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   const sections = buildNavSections(language)
 
   async function onLogout() {
-    await logout()
-    window.location.href = '/login'
+    try {
+      await logout()
+    } finally {
+      window.location.href = '/login'
+    }
   }
 
   return (

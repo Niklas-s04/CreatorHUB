@@ -33,7 +33,7 @@ type HttpClientContext = {
 }
 
 function delay(ms: number) {
-  return new Promise(resolve => setTimeout(resolve, ms))
+  return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
 function isIdempotent(method?: string) {
@@ -51,7 +51,11 @@ function backoff(attempt: number, baseDelay: number) {
 }
 
 export function createHttpClient(context: HttpClientContext) {
-  async function request<T = unknown>(path: string, options: JsonRequestOptions = {}, allowRefresh = true): Promise<T> {
+  async function request<T = unknown>(
+    path: string,
+    options: JsonRequestOptions = {},
+    allowRefresh = true
+  ): Promise<T> {
     const method = (options.method || 'GET').toUpperCase()
     const timeoutMs = options.timeoutMs ?? 12_000
     const retries = options.retries ?? (isIdempotent(method) ? 2 : 0)
@@ -80,7 +84,13 @@ export function createHttpClient(context: HttpClientContext) {
         })
 
         if (!res.ok) {
-          if (res.status === 401 && allowRefresh && path !== context.refreshPath && path !== context.tokenPath && context.onUnauthorizedRetry) {
+          if (
+            res.status === 401 &&
+            allowRefresh &&
+            path !== context.refreshPath &&
+            path !== context.tokenPath &&
+            context.onUnauthorizedRetry
+          ) {
             try {
               await context.onUnauthorizedRetry()
               return request<T>(path, options, false)
@@ -130,7 +140,11 @@ export function createHttpClient(context: HttpClientContext) {
     throw lastError ?? new Error('Unbekannter Netzwerkfehler')
   }
 
-  async function requestBlob(path: string, options: JsonRequestOptions = {}): Promise<Blob> {
+  async function requestBlob(
+    path: string,
+    options: JsonRequestOptions = {},
+    allowRefresh = true
+  ): Promise<Blob> {
     const method = (options.method || 'GET').toUpperCase()
     const timeoutMs = options.timeoutMs ?? 12_000
     const retries = options.retries ?? (isIdempotent(method) ? 1 : 0)
@@ -153,6 +167,21 @@ export function createHttpClient(context: HttpClientContext) {
         })
 
         if (!res.ok) {
+          if (
+            res.status === 401 &&
+            allowRefresh &&
+            path !== context.refreshPath &&
+            path !== context.tokenPath &&
+            context.onUnauthorizedRetry
+          ) {
+            try {
+              await context.onUnauthorizedRetry()
+              return requestBlob(path, options, false)
+            } catch {
+              context.onUnauthorized?.()
+            }
+          }
+
           if (res.status === 401) context.onUnauthorized?.()
           const text = await res.text()
           throw new ApiError(text || res.statusText, res.status, path, text)
@@ -162,7 +191,8 @@ export function createHttpClient(context: HttpClientContext) {
       } catch (error: unknown) {
         const err = error instanceof Error ? error : new Error(String(error))
         lastError = err
-        const canRetry = attempt < retries && (err.name === 'AbortError' || err instanceof TypeError)
+        const canRetry =
+          attempt < retries && (err.name === 'AbortError' || err instanceof TypeError)
         if (!canRetry) throw err
       } finally {
         clearTimeout(timeout)

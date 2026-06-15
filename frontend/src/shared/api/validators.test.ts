@@ -20,7 +20,10 @@ describe('validators', () => {
       review_state: 'pending',
       is_primary: false,
     })
-    expect(parseProductTransactionsDtoArray([{ id: 'tx-1', amount: 4 }])[0]).toMatchObject({ id: 'tx-1', amount: 4 })
+    expect(parseProductTransactionsDtoArray([{ id: 'tx-1', amount: 4 }])[0]).toMatchObject({
+      id: 'tx-1',
+      amount: 4,
+    })
     expect(parseContentTasksDtoArray([{ id: 'task-1', title: null }])[0]).toMatchObject({
       id: 'task-1',
       title: 'Neue Aufgabe',
@@ -32,7 +35,10 @@ describe('validators', () => {
     expect(docs[0].current_version).toBe(1)
 
     expect(
-      parseImageSearchJobDto({ status: 'unknown', result: { query: 'q', count: 2, candidates: [] } })
+      parseImageSearchJobDto({
+        status: 'unknown',
+        result: { query: 'q', count: 2, candidates: [] },
+      })
     ).toMatchObject({ status: 'queued', result: { query: 'q', count: 2 } })
   })
 })

@@ -22,7 +22,9 @@ vi.mock('../../../../api', () => ({
     throw new Error(`Unexpected apiFetch path: ${path}`)
   }),
   changePassword: vi.fn().mockResolvedValue(undefined),
-  deleteAccount: vi.fn().mockResolvedValue({ ok: 'true', message: 'Account scheduled for deletion.' }),
+  deleteAccount: vi
+    .fn()
+    .mockResolvedValue({ ok: 'true', message: 'Account scheduled for deletion.' }),
   disableMfa: vi.fn().mockResolvedValue({ enabled: false }),
   enableMfa: vi.fn().mockResolvedValue({ recovery_codes: [] }),
   getLoginHistory: vi.fn().mockResolvedValue([]),
@@ -57,7 +59,9 @@ describe('SettingsAccountPageView', () => {
     fireEvent.change(screen.getByLabelText('Bestätigung'), { target: { value: 'LÖSCHEN' } })
     fireEvent.click(screen.getByRole('button', { name: 'Account zur Löschung anmelden' }))
 
-    await waitFor(() => expect(toastSuccess).toHaveBeenCalledWith('Account scheduled for deletion.'))
+    await waitFor(() =>
+      expect(toastSuccess).toHaveBeenCalledWith('Account scheduled for deletion.')
+    )
     expect(navigate).toHaveBeenCalledWith('/login')
   })
 

@@ -170,7 +170,7 @@ export default function LoginPage() {
   useEffect(() => {
     ;(async () => {
       try {
-        const token = localStorage.getItem('bootstrap_token') || ''
+        const token = sessionStorage.getItem('bootstrap_token') || ''
         if (!token) return
         setShowBootstrapPanel(true)
         const status = await getBootstrapStatus(token)
@@ -182,7 +182,7 @@ export default function LoginPage() {
         } else {
           setBootstrapAvailable(false)
           setShowBootstrapPanel(false)
-          localStorage.removeItem('bootstrap_token')
+          sessionStorage.removeItem('bootstrap_token')
           setValue('bootstrapToken', '', { shouldDirty: false })
         }
       } catch {}
@@ -196,7 +196,7 @@ export default function LoginPage() {
     try {
       if (values.mode === 'setup') {
         await setupAdminPassword(values.password, values.bootstrapToken)
-        localStorage.removeItem('bootstrap_token')
+        sessionStorage.removeItem('bootstrap_token')
         setBootstrapAvailable(false)
         setShowBootstrapPanel(false)
         reset(undefined, { keepValues: false })
@@ -254,7 +254,7 @@ export default function LoginPage() {
         setMsg(t('login.bootstrapAlreadyDone'))
         setBootstrapAvailable(false)
         setShowBootstrapPanel(false)
-        localStorage.removeItem('bootstrap_token')
+        sessionStorage.removeItem('bootstrap_token')
         setValue('bootstrapToken', '', { shouldDirty: false })
         return
       }
@@ -374,7 +374,7 @@ export default function LoginPage() {
                           shouldValidate: true,
                           shouldDirty: true,
                         })
-                        localStorage.setItem('bootstrap_token', value)
+                        sessionStorage.setItem('bootstrap_token', value)
                       }}
                       placeholder={t('login.bootstrapTokenPlaceholder')}
                     />

@@ -23,6 +23,7 @@ def _health_app() -> FastAPI:
 
 def test_metrics_endpoint_returns_prometheus_payload(monkeypatch) -> None:
     monkeypatch.setattr(settings, "OBSERVABILITY_METRICS_ENABLED", True)
+    monkeypatch.setattr(settings, "OBSERVABILITY_DETAIL_AUTH_REQUIRED", False)
     observability.inc_counter("api_requests_total", method="GET", path="/health", status="200")
 
     app = _health_app()
@@ -35,6 +36,7 @@ def test_metrics_endpoint_returns_prometheus_payload(monkeypatch) -> None:
 
 
 def test_alerts_endpoint_returns_definitions_and_state(monkeypatch) -> None:
+    monkeypatch.setattr(settings, "OBSERVABILITY_DETAIL_AUTH_REQUIRED", False)
     monkeypatch.setattr(health, "monitor_once", lambda app, cfg: {"ok": True})
     app = _health_app()
 
@@ -49,6 +51,7 @@ def test_alerts_endpoint_returns_definitions_and_state(monkeypatch) -> None:
 
 
 def test_background_jobs_endpoint_exposes_queue_snapshot(monkeypatch) -> None:
+    monkeypatch.setattr(settings, "OBSERVABILITY_DETAIL_AUTH_REQUIRED", False)
     monkeypatch.setattr(health, "monitor_once", lambda app, cfg: {"ok": True})
     monkeypatch.setattr(
         health,
@@ -69,3 +72,19 @@ def test_background_jobs_endpoint_exposes_queue_snapshot(monkeypatch) -> None:
     payload = response.json()
     assert payload["queue"]["max_queue_length"] == 3
     assert payload["queue"]["worker_ok"] is True
+
+
+def test_observability_detail_endpoints_require_access(monkeypatch) -> None:
+    monkeypatch.setattr(settings, "OBSERVABILITY_METRICS_ENABLED", True)
+    monkeypatch.setattr(settings, "OBSERVABILITY_DETAIL_AUTH_REQUIRED", True)
+    monkeypatch.setattr(settings, "OBSERVABILITY_DETAIL_TOKEN", "test-observability-token")
+
+    app = _health_app()
+    with TestClient(app) as client:
+        denied = client.get("/health/metrics")
+        allowed = client.get(
+            "/health/metrics", headers={"x-observability-token": "test-observability-token"}
+        )
+
+    assert denied.status_code == 403
+    assert allowed.status_code == 200

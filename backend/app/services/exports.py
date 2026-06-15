@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import io
 import os
 from datetime import date, datetime, timezone
 from decimal import Decimal
@@ -56,6 +57,25 @@ def _write_csv(prefix: str, headers: list[str], rows: Iterable[list[str]]) -> st
     return path
 
 
+def iter_csv_lines(headers: list[str], rows: Iterable[list[str]]) -> Iterable[str]:
+    buffer = io.StringIO()
+    writer = csv.writer(
+        buffer,
+        delimiter=";",
+        quoting=csv.QUOTE_MINIMAL,
+        lineterminator="\n",
+    )
+    writer.writerow(headers)
+    yield "\ufeff" + buffer.getvalue()
+    buffer.seek(0)
+    buffer.truncate(0)
+    for row in rows:
+        writer.writerow(row)
+        yield buffer.getvalue()
+        buffer.seek(0)
+        buffer.truncate(0)
+
+
 def export_products_csv(products: Iterable[Product]) -> str:
     """Export a tidy, readable, Excel-friendly CSV."""
 
@@ -100,6 +120,48 @@ def export_products_csv(products: Iterable[Product]) -> str:
     return _write_csv("products", headers, _rows())
 
 
+def stream_products_csv(products: Iterable[Product]) -> Iterable[str]:
+    headers = [
+        "Titel",
+        "Marke",
+        "Modell",
+        "Kategorie",
+        "Zustand",
+        "Status",
+        "Aktueller Wert",
+        "Währung",
+        "Kaufpreis",
+        "Kaufdatum",
+        "Lagerort",
+        "Seriennummer",
+        "Produkt-ID",
+        "Erstellt (UTC)",
+        "Aktualisiert (UTC)",
+    ]
+
+    def _rows() -> Iterable[list[str]]:
+        for p in products:
+            yield [
+                p.title or "",
+                p.brand or "",
+                p.model or "",
+                p.category or "",
+                getattr(p.condition, "value", str(p.condition)),
+                getattr(p.status, "value", str(p.status)),
+                _fmt_money(getattr(p, "current_value", None)),
+                getattr(p, "currency", "") or "",
+                _fmt_money(getattr(p, "purchase_price", None)),
+                _fmt_date(getattr(p, "purchase_date", None)),
+                getattr(p, "storage_location", "") or "",
+                getattr(p, "serial_number", "") or "",
+                str(getattr(p, "id", "")),
+                _fmt_dt(getattr(p, "created_at", None)),
+                _fmt_dt(getattr(p, "updated_at", None)),
+            ]
+
+    return iter_csv_lines(headers, _rows())
+
+
 def export_transactions_csv(transactions: Iterable[ProductTransaction]) -> str:
     headers = [
         "Produkt-ID",
@@ -133,6 +195,39 @@ def export_transactions_csv(transactions: Iterable[ProductTransaction]) -> str:
     return _write_csv("transactions", headers, _rows())
 
 
+def stream_transactions_csv(transactions: Iterable[ProductTransaction]) -> Iterable[str]:
+    headers = [
+        "Produkt-ID",
+        "Produkt Titel",
+        "Transaktionstyp",
+        "Datum",
+        "Betrag",
+        "Währung",
+        "Gegenpartei",
+        "Notiz",
+        "Angelegt (UTC)",
+        "Aktualisiert (UTC)",
+    ]
+
+    def _rows() -> Iterable[list[str]]:
+        for tx in transactions:
+            product = getattr(tx, "product", None)
+            yield [
+                str(getattr(tx, "product_id", "")),
+                getattr(product, "title", "") or "",
+                getattr(tx.type, "value", str(tx.type)),
+                _fmt_date(getattr(tx, "date", None)),
+                _fmt_money(getattr(tx, "amount", None)),
+                getattr(tx, "currency", "") or "",
+                getattr(tx, "counterparty", "") or "",
+                getattr(tx, "notes", "") or "",
+                _fmt_dt(getattr(tx, "created_at", None)),
+                _fmt_dt(getattr(tx, "updated_at", None)),
+            ]
+
+    return iter_csv_lines(headers, _rows())
+
+
 def export_value_history_csv(entries: Iterable[ProductValueHistory]) -> str:
     headers = [
         "Produkt-ID",
@@ -160,3 +255,32 @@ def export_value_history_csv(entries: Iterable[ProductValueHistory]) -> str:
             ]
 
     return _write_csv("value_history", headers, _rows())
+
+
+def stream_value_history_csv(entries: Iterable[ProductValueHistory]) -> Iterable[str]:
+    headers = [
+        "Produkt-ID",
+        "Produkt Titel",
+        "Datum",
+        "Wert",
+        "Währung",
+        "Quelle",
+        "Angelegt (UTC)",
+        "Aktualisiert (UTC)",
+    ]
+
+    def _rows() -> Iterable[list[str]]:
+        for entry in entries:
+            product = getattr(entry, "product", None)
+            yield [
+                str(getattr(entry, "product_id", "")),
+                getattr(product, "title", "") or "",
+                _fmt_date(getattr(entry, "date", None)),
+                _fmt_money(getattr(entry, "value", None)),
+                getattr(entry, "currency", "") or "",
+                getattr(entry.source, "value", str(entry.source)),
+                _fmt_dt(getattr(entry, "created_at", None)),
+                _fmt_dt(getattr(entry, "updated_at", None)),
+            ]
+
+    return iter_csv_lines(headers, _rows())

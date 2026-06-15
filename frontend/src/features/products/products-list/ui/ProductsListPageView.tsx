@@ -5,7 +5,10 @@ import { apiFetch, apiUrl } from '../../../../api'
 import { toProductDetailVm } from '../../../../shared/api/mappers'
 import { queryKeys } from '../../../../shared/api/queryKeys'
 import { parseProductDto } from '../../../../shared/api/validators'
-import { useCreateProductMutation, useProductsListQuery } from '../../../../shared/api/queries/products'
+import {
+  useCreateProductMutation,
+  useProductsListQuery,
+} from '../../../../shared/api/queries/products'
 import type { ProductCreateFormValues } from '../../../../shared/forms/schemas'
 import { useDebouncedValue } from '../../../../shared/hooks/useDebouncedValue'
 import { getErrorMessage } from '../../../../shared/lib/errors'
@@ -54,7 +57,12 @@ function parseOffset(value: string | null): number {
 }
 
 function parseSortBy(value: string | null): ProductSortField {
-  if (value === 'title' || value === 'status' || value === 'current_value' || value === 'updated_at') {
+  if (
+    value === 'title' ||
+    value === 'status' ||
+    value === 'current_value' ||
+    value === 'updated_at'
+  ) {
     return value
   }
   return 'updated_at'
@@ -68,7 +76,7 @@ function parseColumns(value: string | null): ProductColumnKey[] {
   if (!value) return []
   const entries = value
     .split(',')
-    .map(token => token.trim())
+    .map((token) => token.trim())
     .filter((token): token is ProductColumnKey =>
       ['title', 'category', 'condition', 'status', 'currentValue', 'currency'].includes(token)
     )
@@ -82,7 +90,9 @@ function loadColumnsFromStorage(): ProductColumnKey[] {
     const parsed = JSON.parse(raw)
     if (!Array.isArray(parsed)) return DEFAULT_COLUMNS
     const cols = parsed.filter((entry): entry is ProductColumnKey =>
-      ['title', 'category', 'condition', 'status', 'currentValue', 'currency'].includes(String(entry))
+      ['title', 'category', 'condition', 'status', 'currentValue', 'currency'].includes(
+        String(entry)
+      )
     )
     return cols.length ? cols : DEFAULT_COLUMNS
   } catch {
@@ -97,7 +107,7 @@ function loadSavedViews(): SavedView[] {
     const parsed = JSON.parse(raw)
     if (!Array.isArray(parsed)) return []
     return parsed
-      .map(entry => {
+      .map((entry) => {
         if (!entry || typeof entry !== 'object') return null
         const view = entry as Partial<SavedView>
         if (!view.id || !view.name) return null
@@ -109,8 +119,11 @@ function loadSavedViews(): SavedView[] {
           limit: parsePositiveInt(String(view.limit || ''), 50),
           sortBy: parseSortBy(String(view.sortBy || 'updated_at')),
           sortOrder: parseSortOrder(String(view.sortOrder || 'desc')),
-          columns: Array.from(new Set(view.columns || [])).filter((token): token is ProductColumnKey =>
-            ['title', 'category', 'condition', 'status', 'currentValue', 'currency'].includes(String(token))
+          columns: Array.from(new Set(view.columns || [])).filter(
+            (token): token is ProductColumnKey =>
+              ['title', 'category', 'condition', 'status', 'currentValue', 'currency'].includes(
+                String(token)
+              )
           ),
         }
       })
@@ -154,7 +167,9 @@ export default function ProductsListPageView() {
   const [visibleColumns, setVisibleColumns] = useState<ProductColumnKey[]>(initialColumns)
   const [tableInteractionVersion, setTableInteractionVersion] = useState(0)
 
-  const [exportDataset, setExportDataset] = useState<'products' | 'transactions' | 'value_history'>('products')
+  const [exportDataset, setExportDataset] = useState<'products' | 'transactions' | 'value_history'>(
+    'products'
+  )
   const [exportYears, setExportYears] = useState('')
   const queryClient = useQueryClient()
   const allColumns: { key: ProductColumnKey; label: string }[] = [
@@ -245,17 +260,18 @@ export default function ProductsListPageView() {
   }
 
   function changePage(direction: 'prev' | 'next') {
-    const nextOffset = direction === 'prev' ? Math.max(0, meta.offset - meta.limit) : meta.offset + meta.limit
+    const nextOffset =
+      direction === 'prev' ? Math.max(0, meta.offset - meta.limit) : meta.offset + meta.limit
     updateParams({ offset: String(nextOffset) })
     setSelectedIds(new Set())
-    setTableInteractionVersion(value => value + 1)
+    setTableInteractionVersion((value) => value + 1)
   }
 
   function handleSort(field: ProductSortField) {
     const nextOrder = meta.sort_by === field && meta.sort_order === 'desc' ? 'asc' : 'desc'
     updateParams({ sort_by: field, sort_order: nextOrder, offset: '0' })
     setSelectedIds(new Set())
-    setTableInteractionVersion(value => value + 1)
+    setTableInteractionVersion((value) => value + 1)
   }
 
   function prefetchProductDetail(id: string) {
@@ -270,9 +286,9 @@ export default function ProductsListPageView() {
   }
 
   function toggleColumn(column: ProductColumnKey) {
-    setVisibleColumns(current => {
+    setVisibleColumns((current) => {
       const exists = current.includes(column)
-      const next = exists ? current.filter(item => item !== column) : [...current, column]
+      const next = exists ? current.filter((item) => item !== column) : [...current, column]
       if (next.length === 0) return current
       localStorage.setItem(COLUMNS_KEY, JSON.stringify(next))
       updateParams({ cols: next.join(',') })
@@ -281,7 +297,7 @@ export default function ProductsListPageView() {
   }
 
   function toggleRowSelection(id: string) {
-    setSelectedIds(current => {
+    setSelectedIds((current) => {
       const next = new Set(current)
       if (next.has(id)) next.delete(id)
       else next.add(id)
@@ -290,14 +306,14 @@ export default function ProductsListPageView() {
   }
 
   function toggleAllOnPage() {
-    const idsOnPage = items.map(item => String(item.id))
-    const allSelected = idsOnPage.length > 0 && idsOnPage.every(id => selectedIds.has(id))
-    setSelectedIds(current => {
+    const idsOnPage = items.map((item) => String(item.id))
+    const allSelected = idsOnPage.length > 0 && idsOnPage.every((id) => selectedIds.has(id))
+    setSelectedIds((current) => {
       const next = new Set(current)
       if (allSelected) {
-        idsOnPage.forEach(id => next.delete(id))
+        idsOnPage.forEach((id) => next.delete(id))
       } else {
-        idsOnPage.forEach(id => next.add(id))
+        idsOnPage.forEach((id) => next.add(id))
       }
       return next
     })
@@ -309,7 +325,7 @@ export default function ProductsListPageView() {
       setErr(null)
       const today = new Date().toISOString().slice(0, 10)
       await Promise.all(
-        Array.from(selectedIds).map(id =>
+        Array.from(selectedIds).map((id) =>
           apiFetch(`/products/${id}/status`, {
             method: 'POST',
             body: JSON.stringify({ status: 'archived', date: today, amount: null }),
@@ -318,7 +334,11 @@ export default function ProductsListPageView() {
       )
       setSelectedIds(new Set())
       await queryClient.invalidateQueries({ queryKey: ['products', 'list'] })
-      toast.success(language === 'en' ? 'Selected products were archived' : 'Ausgewählte Produkte wurden archiviert')
+      toast.success(
+        language === 'en'
+          ? 'Selected products were archived'
+          : 'Ausgewählte Produkte wurden archiviert'
+      )
     } catch (e: unknown) {
       const message = getErrorMessage(e)
       setErr(message)
@@ -347,12 +367,15 @@ export default function ProductsListPageView() {
   }
 
   function applyView(viewId: string) {
-    const view = savedViews.find(entry => entry.id === viewId)
+    const view = savedViews.find((entry) => entry.id === viewId)
     if (!view) return
     setQ(view.q)
     setStatus(view.status)
     setVisibleColumns(view.columns.length ? view.columns : DEFAULT_COLUMNS)
-    localStorage.setItem(COLUMNS_KEY, JSON.stringify(view.columns.length ? view.columns : DEFAULT_COLUMNS))
+    localStorage.setItem(
+      COLUMNS_KEY,
+      JSON.stringify(view.columns.length ? view.columns : DEFAULT_COLUMNS)
+    )
     updateParams({
       q: view.q || null,
       status: view.status || null,
@@ -366,7 +389,7 @@ export default function ProductsListPageView() {
   }
 
   function deleteView(viewId: string) {
-    const next = savedViews.filter(entry => entry.id !== viewId)
+    const next = savedViews.filter((entry) => entry.id !== viewId)
     setSavedViews(next)
     persistSavedViews(next)
   }
@@ -375,10 +398,13 @@ export default function ProductsListPageView() {
     if (!hasPermission('product.write')) return
     try {
       setErr(null)
-      const payload: { title: string; brand?: string; model?: string; current_value?: number } = { title: values.title.trim() }
+      const payload: { title: string; brand?: string; model?: string; current_value?: number } = {
+        title: values.title.trim(),
+      }
       if (values.brand.trim()) payload.brand = values.brand.trim()
       if (values.model.trim()) payload.model = values.model.trim()
-      if (values.currentValue.trim()) payload.current_value = Number(values.currentValue.replace(',', '.'))
+      if (values.currentValue.trim())
+        payload.current_value = Number(values.currentValue.replace(',', '.'))
       await createMutation.mutateAsync(payload)
       setShowNew(false)
       await queryClient.invalidateQueries({ queryKey: queryKeys.products.list(listParams) })
@@ -402,9 +428,9 @@ export default function ProductsListPageView() {
     }
     const yearTokens = exportYears
       .split(/[,\s]+/)
-      .map(token => token.trim())
+      .map((token) => token.trim())
       .filter(Boolean)
-    yearTokens.forEach(year => {
+    yearTokens.forEach((year) => {
       const parsed = parseInt(year, 10)
       if (!Number.isNaN(parsed)) {
         params.append('years', String(parsed))
@@ -419,39 +445,78 @@ export default function ProductsListPageView() {
     <div className="container">
       <PageHeader
         title={language === 'en' ? 'Inventory' : 'Inventar'}
-        subtitle={language === 'en' ? 'Manage, filter and export products.' : 'Produkte verwalten, filtern und exportieren.'}
-        right={(
+        subtitle={
+          language === 'en'
+            ? 'Manage, filter and export products.'
+            : 'Produkte verwalten, filtern und exportieren.'
+        }
+        right={
           <>
-            <button className="btn primary" onClick={() => setShowNew(v => !v)} disabled={!hasPermission('product.write')}>
-              {showNew ? (language === 'en' ? 'Close' : 'Schließen') : (language === 'en' ? '+ Product' : '+ Produkt')}
+            <button
+              className="btn primary"
+              onClick={() => setShowNew((v) => !v)}
+              disabled={!hasPermission('product.write')}
+            >
+              {showNew
+                ? language === 'en'
+                  ? 'Close'
+                  : 'Schließen'
+                : language === 'en'
+                  ? '+ Product'
+                  : '+ Produkt'}
             </button>
             <div className="control-row">
-              <label className="sr-only" htmlFor="products-export-dataset">{language === 'en' ? 'Export dataset' : 'Export-Datensatz'}</label>
-              <select id="products-export-dataset" value={exportDataset} onChange={e => setExportDataset(e.target.value as typeof exportDataset)}>
+              <label className="sr-only" htmlFor="products-export-dataset">
+                {language === 'en' ? 'Export dataset' : 'Export-Datensatz'}
+              </label>
+              <select
+                id="products-export-dataset"
+                value={exportDataset}
+                onChange={(e) => setExportDataset(e.target.value as typeof exportDataset)}
+              >
                 <option value="products">{language === 'en' ? 'Products' : 'Produkte'}</option>
-                <option value="transactions">{language === 'en' ? 'Transactions' : 'Transaktionen'}</option>
-                <option value="value_history">{language === 'en' ? 'Value history' : 'Wert-Historie'}</option>
+                <option value="transactions">
+                  {language === 'en' ? 'Transactions' : 'Transaktionen'}
+                </option>
+                <option value="value_history">
+                  {language === 'en' ? 'Value history' : 'Wert-Historie'}
+                </option>
               </select>
-              <label className="sr-only" htmlFor="products-export-years">{language === 'en' ? 'Export years' : 'Export-Jahre'}</label>
+              <label className="sr-only" htmlFor="products-export-years">
+                {language === 'en' ? 'Export years' : 'Export-Jahre'}
+              </label>
               <input
                 id="products-export-years"
                 className="w180"
                 placeholder={language === 'en' ? 'Years e.g. 2023,2024' : 'Jahre z.B. 2023,2024'}
                 value={exportYears}
-                onChange={e => setExportYears(e.target.value)}
+                onChange={(e) => setExportYears(e.target.value)}
               />
-              <button className="btn" onClick={handleExport} disabled={!hasPermission('product.export')}>
+              <button
+                className="btn"
+                onClick={handleExport}
+                disabled={!hasPermission('product.export')}
+              >
                 {language === 'en' ? 'Export CSV' : 'Export CSV'}
               </button>
             </div>
           </>
-        )}
+        }
       />
 
-      {err && <ErrorState title={language === 'en' ? 'Action failed' : 'Aktion fehlgeschlagen'} message={err} />}
+      {err && (
+        <ErrorState
+          title={language === 'en' ? 'Action failed' : 'Aktion fehlgeschlagen'}
+          message={err}
+        />
+      )}
       {productsQuery.error && !err && (
         <ErrorState
-          title={language === 'en' ? 'Products could not be loaded' : 'Produkte konnten nicht geladen werden'}
+          title={
+            language === 'en'
+              ? 'Products could not be loaded'
+              : 'Produkte konnten nicht geladen werden'
+          }
           message={getErrorMessage(productsQuery.error)}
           onRetry={() => {
             void productsQuery.refetch()
@@ -481,28 +546,47 @@ export default function ProductsListPageView() {
           onPageSizeChange={setPageSize}
           onFilter={load}
           onReset={resetFilters}
-          extraActions={(
+          extraActions={
             <div className="control-row">
-              <label className="sr-only" htmlFor="products-view-name">{language === 'en' ? 'Saved view name' : 'Name für gespeicherte Ansicht'}</label>
+              <label className="sr-only" htmlFor="products-view-name">
+                {language === 'en' ? 'Saved view name' : 'Name für gespeicherte Ansicht'}
+              </label>
               <input
                 id="products-view-name"
                 className="w180"
                 placeholder={language === 'en' ? 'Save view…' : 'Ansicht speichern…'}
                 value={newViewName}
-                onChange={e => setNewViewName(e.target.value)}
+                onChange={(e) => setNewViewName(e.target.value)}
               />
-              <button className="btn" onClick={saveView}>{language === 'en' ? 'Save view' : 'View speichern'}</button>
-              <label className="sr-only" htmlFor="products-saved-views">{language === 'en' ? 'Saved views' : 'Gespeicherte Ansichten'}</label>
-              <select id="products-saved-views" onChange={e => applyView(e.target.value)} value="">
-                <option value="">{language === 'en' ? 'Saved views…' : 'Gespeicherte Ansichten…'}</option>
-                {savedViews.map(view => (
-                  <option key={view.id} value={view.id}>{view.name}</option>
+              <button className="btn" onClick={saveView}>
+                {language === 'en' ? 'Save view' : 'View speichern'}
+              </button>
+              <label className="sr-only" htmlFor="products-saved-views">
+                {language === 'en' ? 'Saved views' : 'Gespeicherte Ansichten'}
+              </label>
+              <select
+                id="products-saved-views"
+                onChange={(e) => applyView(e.target.value)}
+                value=""
+              >
+                <option value="">
+                  {language === 'en' ? 'Saved views…' : 'Gespeicherte Ansichten…'}
+                </option>
+                {savedViews.map((view) => (
+                  <option key={view.id} value={view.id}>
+                    {view.name}
+                  </option>
                 ))}
               </select>
               <details>
-                <summary className="btn ghost" aria-label={language === 'en' ? 'Open column selection' : 'Spaltenauswahl öffnen'}>{language === 'en' ? 'Columns' : 'Spalten'}</summary>
+                <summary
+                  className="btn ghost"
+                  aria-label={language === 'en' ? 'Open column selection' : 'Spaltenauswahl öffnen'}
+                >
+                  {language === 'en' ? 'Columns' : 'Spalten'}
+                </summary>
                 <div className="card stack">
-                  {allColumns.map(column => (
+                  {allColumns.map((column) => (
                     <label key={column.key} className="small">
                       <input
                         type="checkbox"
@@ -515,16 +599,24 @@ export default function ProductsListPageView() {
                 </div>
               </details>
             </div>
-          )}
+          }
         />
         {!!selectedIds.size && (
           <div className="row between section-gap">
-            <span className="muted small">{selectedIds.size} {language === 'en' ? 'selected' : 'ausgewählt'}</span>
+            <span className="muted small">
+              {selectedIds.size} {language === 'en' ? 'selected' : 'ausgewählt'}
+            </span>
             <div className="control-row">
-              <button className="btn danger" onClick={() => void bulkArchiveSelection()} disabled={!hasPermission('product.write')}>
+              <button
+                className="btn danger"
+                onClick={() => void bulkArchiveSelection()}
+                disabled={!hasPermission('product.write')}
+              >
                 {language === 'en' ? 'Bulk: Archive' : 'Bulk: Archivieren'}
               </button>
-              <button className="btn ghost" onClick={() => setSelectedIds(new Set())}>{language === 'en' ? 'Clear selection' : 'Auswahl löschen'}</button>
+              <button className="btn ghost" onClick={() => setSelectedIds(new Set())}>
+                {language === 'en' ? 'Clear selection' : 'Auswahl löschen'}
+              </button>
             </div>
           </div>
         )}
@@ -544,8 +636,14 @@ export default function ProductsListPageView() {
           />
         )}
         <div className="row between mt8">
-          <button className="btn" onClick={() => changePage('prev')} disabled={meta.offset <= 0}>{language === 'en' ? '← Back' : '← Zurück'}</button>
-          <span className="muted small">{language === 'en' ? 'Offset' : 'Offset'} {meta.offset} · {language === 'en' ? 'Limit' : 'Limit'} {meta.limit} · {language === 'en' ? 'Total' : 'Gesamt'} {meta.total}</span>
+          <button className="btn" onClick={() => changePage('prev')} disabled={meta.offset <= 0}>
+            {language === 'en' ? '← Back' : '← Zurück'}
+          </button>
+          <span className="muted small">
+            {language === 'en' ? 'Offset' : 'Offset'} {meta.offset} ·{' '}
+            {language === 'en' ? 'Limit' : 'Limit'} {meta.limit} ·{' '}
+            {language === 'en' ? 'Total' : 'Gesamt'} {meta.total}
+          </span>
           <button
             className="btn"
             onClick={() => changePage('next')}
@@ -556,7 +654,7 @@ export default function ProductsListPageView() {
         </div>
         {!!savedViews.length && (
           <div className="control-row mt8">
-            {savedViews.map(view => (
+            {savedViews.map((view) => (
               <button key={view.id} className="btn ghost" onClick={() => deleteView(view.id)}>
                 {language === 'en' ? 'Delete view:' : 'View löschen:'} {view.name}
               </button>

@@ -1,8 +1,23 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiFetch } from '../../../api'
-import { toProductAssetVm, toProductDetailVm, toProductListItemVm, toProductTransactionVm } from '../mappers'
-import type { ProductAssetVm, ProductDetailVm, ProductListItemVm, ProductTransactionVm } from '../contracts'
-import { parseProductAssetsDtoArray, parseProductDto, parseProductsDtoArray, parseProductTransactionsDtoArray } from '../validators'
+import {
+  toProductAssetVm,
+  toProductDetailVm,
+  toProductListItemVm,
+  toProductTransactionVm,
+} from '../mappers'
+import type {
+  ProductAssetVm,
+  ProductDetailVm,
+  ProductListItemVm,
+  ProductTransactionVm,
+} from '../contracts'
+import {
+  parseProductAssetsDtoArray,
+  parseProductDto,
+  parseProductsDtoArray,
+  parseProductTransactionsDtoArray,
+} from '../validators'
 import { queryKeys } from '../queryKeys'
 
 export type ProductsListParams = {
@@ -32,7 +47,9 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function parseProductsPage(input: unknown, fallback: ProductsListParams): ProductsListPageVm {
   if (Array.isArray(input)) {
     return {
-      items: parseProductsDtoArray(input).map(toProductListItemVm).filter(product => product.id),
+      items: parseProductsDtoArray(input)
+        .map(toProductListItemVm)
+        .filter((product) => product.id),
       meta: {
         limit: fallback.limit ?? 50,
         offset: fallback.offset ?? 0,
@@ -56,7 +73,7 @@ function parseProductsPage(input: unknown, fallback: ProductsListParams): Produc
   }
   const items = parseProductsDtoArray(input.items)
     .map(toProductListItemVm)
-    .filter(product => product.id)
+    .filter((product) => product.id)
 
   const metaRaw = isRecord(input.meta) ? input.meta : {}
   const sortOrder = metaRaw.sort_order === 'asc' ? 'asc' : 'desc'
@@ -64,10 +81,11 @@ function parseProductsPage(input: unknown, fallback: ProductsListParams): Produc
   return {
     items,
     meta: {
-      limit: typeof metaRaw.limit === 'number' ? metaRaw.limit : fallback.limit ?? 100,
-      offset: typeof metaRaw.offset === 'number' ? metaRaw.offset : fallback.offset ?? 0,
+      limit: typeof metaRaw.limit === 'number' ? metaRaw.limit : (fallback.limit ?? 100),
+      offset: typeof metaRaw.offset === 'number' ? metaRaw.offset : (fallback.offset ?? 0),
       total: typeof metaRaw.total === 'number' ? metaRaw.total : items.length,
-      sort_by: typeof metaRaw.sort_by === 'string' ? metaRaw.sort_by : fallback.sort_by ?? 'updated_at',
+      sort_by:
+        typeof metaRaw.sort_by === 'string' ? metaRaw.sort_by : (fallback.sort_by ?? 'updated_at'),
       sort_order: sortOrder,
     },
   }
@@ -78,7 +96,7 @@ export function useProductsListQuery(params: ProductsListParams) {
     queryKey: queryKeys.products.list(params),
     staleTime: 45_000,
     gcTime: 10 * 60_000,
-    placeholderData: previous => previous,
+    placeholderData: (previous) => previous,
     queryFn: async () => {
       const search = new URLSearchParams()
       search.set('limit', String(Math.min(60, params.limit ?? 50)))
@@ -111,9 +129,13 @@ export function useProductAssetsQuery(id: string | undefined) {
     enabled: Boolean(id),
     staleTime: 45_000,
     queryFn: async () => {
-      const data = await apiFetch<unknown>(`/assets?owner_type=product&owner_id=${id}&include_pending=true`)
+      const data = await apiFetch<unknown>(
+        `/assets?owner_type=product&owner_id=${id}&include_pending=true`
+      )
       const items = isRecord(data) && Array.isArray(data.items) ? data.items : data
-      return parseProductAssetsDtoArray(items).map(toProductAssetVm).filter(asset => asset.id)
+      return parseProductAssetsDtoArray(items)
+        .map(toProductAssetVm)
+        .filter((asset) => asset.id)
     },
   })
 }
@@ -125,7 +147,9 @@ export function useProductTransactionsQuery(id: string | undefined) {
     staleTime: 10_000,
     queryFn: async () => {
       const data = await apiFetch<unknown>(`/products/${id}/transactions`)
-      return parseProductTransactionsDtoArray(data).map(toProductTransactionVm).filter(tx => tx.id)
+      return parseProductTransactionsDtoArray(data)
+        .map(toProductTransactionVm)
+        .filter((tx) => tx.id)
     },
   })
 }
@@ -212,7 +236,10 @@ export function useReviewAssetMutation(id: string | undefined) {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: async ({ assetId, state }: { assetId: string; state: 'approved' | 'rejected' }) => {
-      await apiFetch(`/assets/${assetId}`, { method: 'PATCH', body: JSON.stringify({ review_state: state }) })
+      await apiFetch(`/assets/${assetId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ review_state: state }),
+      })
     },
     onSuccess: async () => {
       if (!id) return
@@ -225,7 +252,10 @@ export function useSetPrimaryAssetMutation(id: string | undefined) {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: async ({ assetId }: { assetId: string }) => {
-      await apiFetch(`/assets/${assetId}`, { method: 'PATCH', body: JSON.stringify({ is_primary: true }) })
+      await apiFetch(`/assets/${assetId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ is_primary: true }),
+      })
     },
     onSuccess: async () => {
       if (!id) return

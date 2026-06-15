@@ -30,9 +30,7 @@ export function AssetCard({ asset, canReview, onReview, onPrimary }: AssetCardPr
         <div className="muted">No preview</div>
       )}
 
-      <div className="asset-title">
-        {asset.title || `asset ${asset.id}`}
-      </div>
+      <div className="asset-title">{asset.title || `asset ${asset.id}`}</div>
 
       <div className="muted small">
         {asset.source} • {asset.reviewState} {asset.isPrimary ? '• primary' : ''}
@@ -48,19 +46,33 @@ export function AssetCard({ asset, canReview, onReview, onPrimary }: AssetCardPr
 
       {(asset.sourceUrl || asset.licenseUrl) && (
         <div className="muted small mt6">
-          {asset.sourceUrl ? <a href={asset.sourceUrl} target="_blank" rel="noreferrer">Quelle</a> : null}
+          {asset.sourceUrl ? (
+            <a href={asset.sourceUrl} target="_blank" rel="noreferrer">
+              Quelle
+            </a>
+          ) : null}
           {asset.sourceUrl && asset.licenseUrl ? ' • ' : null}
-          {asset.licenseUrl ? <a href={asset.licenseUrl} target="_blank" rel="noreferrer">Lizenz</a> : null}
+          {asset.licenseUrl ? (
+            <a href={asset.licenseUrl} target="_blank" rel="noreferrer">
+              Lizenz
+            </a>
+          ) : null}
         </div>
       )}
 
       <div className="row mt10">
-        <button className="btn" onClick={() => onPrimary(asset.id)} disabled={!canReview}>Primary</button>
+        <button className="btn" onClick={() => onPrimary(asset.id)} disabled={!canReview}>
+          Primary
+        </button>
         {canReview && asset.reviewState !== 'approved' && (
-          <button className="btn primary" onClick={() => onReview(asset.id, 'approved')}>Approve</button>
+          <button className="btn primary" onClick={() => onReview(asset.id, 'approved')}>
+            Approve
+          </button>
         )}
         {canReview && asset.reviewState !== 'rejected' && (
-          <button className="btn danger" onClick={() => onReview(asset.id, 'rejected')}>Reject</button>
+          <button className="btn danger" onClick={() => onReview(asset.id, 'rejected')}>
+            Reject
+          </button>
         )}
       </div>
     </div>

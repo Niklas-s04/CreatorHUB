@@ -748,6 +748,29 @@ def list_personal_tasks(
     ).all()
 
 
+def list_personal_tasks_page(
+    db: Session,
+    *,
+    user: User,
+    filters: ContentTaskFilterParams,
+    limit: int,
+    offset: int,
+) -> tuple[list[ContentTask], int]:
+    q = _apply_task_filters(db.query(ContentTask), filters=filters)
+    q = q.filter(
+        (ContentTask.assignee_user_id == user.id)
+        | ((ContentTask.assignee_user_id.is_(None)) & (ContentTask.assignee_role == user.role))
+    )
+    total = q.order_by(None).count()
+    items = (
+        q.order_by(ContentTask.priority.desc(), ContentTask.due_date.asc(), ContentTask.updated_at.desc())
+        .offset(offset)
+        .limit(limit)
+        .all()
+    )
+    return items, total
+
+
 def list_task_views(db: Session, *, user: User) -> list[ContentTaskView]:
     return (
         db.query(ContentTaskView)

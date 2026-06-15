@@ -78,6 +78,7 @@ from app.services.auth_security import (
     is_suspicious_login,
     is_token_revoked,
     password_reset_context_matches,
+    protect_totp_secret,
     record_login_attempt,
     revoke_session,
     revoke_token,
@@ -1452,7 +1453,7 @@ def mfa_enable(
         raise HTTPException(status_code=400, detail="Invalid MFA code")
 
     codes = generate_recovery_codes()
-    context.user.mfa_secret = payload.secret
+    context.user.mfa_secret = protect_totp_secret(payload.secret)
     context.user.mfa_enabled = True
     context.user.mfa_recovery_codes = hash_recovery_codes(codes)
     context.session.mfa_verified = True
