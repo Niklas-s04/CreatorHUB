@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import date, timedelta
+from pathlib import Path
 
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
@@ -15,6 +16,16 @@ from app.models.email import EmailDraft, EmailThread
 from app.models.registration_request import RegistrationRequest, RegistrationRequestStatus
 from app.models.user import UserRole
 from tests.factories import create_user, login
+
+
+def test_registration_review_metadata_has_migration_coverage() -> None:
+    migration = (
+        Path(__file__).resolve().parents[1] / "alembic" / "versions" / "0024.py"
+    ).read_text(encoding="utf-8")
+
+    assert '"registration_requests"' in migration
+    assert '"reviewed_at"' in migration
+    assert '"rejection_reason"' in migration
 
 
 def test_dashboard_summary_returns_role_aware_metrics(
