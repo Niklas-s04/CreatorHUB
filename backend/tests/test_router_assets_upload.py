@@ -59,7 +59,9 @@ def test_upload_rejects_invalid_image_signature(client, app, db_session: Session
     )
 
 
-def test_upload_rejects_files_above_kind_limit(client, app, db_session: Session, monkeypatch) -> None:
+def test_upload_rejects_files_above_kind_limit(
+    client, app, db_session: Session, monkeypatch
+) -> None:
     admin = create_user(db_session, username="assets_admin_too_large", role=UserRole.admin)
     app.dependency_overrides[deps.get_current_user] = lambda: admin
     monkeypatch.setattr(settings, "UPLOAD_MAX_IMAGE_BYTES", 8)

@@ -763,7 +763,9 @@ def list_personal_tasks_page(
     )
     total = q.order_by(None).count()
     items = (
-        q.order_by(ContentTask.priority.desc(), ContentTask.due_date.asc(), ContentTask.updated_at.desc())
+        q.order_by(
+            ContentTask.priority.desc(), ContentTask.due_date.asc(), ContentTask.updated_at.desc()
+        )
         .offset(offset)
         .limit(limit)
         .all()
