@@ -139,21 +139,33 @@ describe('apiFetch step-up retry flow', () => {
     expect(getToken()).toBeNull()
   })
 
-  it('times out direct auth requests instead of leaving the UI busy forever', async () => {
+  it('keeps normal auth timeouts short and allows longer admin setup requests', async () => {
     vi.useFakeTimers()
     const fetchMock = vi.mocked(fetch)
-    fetchMock.mockImplementationOnce((_input, init) => {
+    const neverRespond = (_input: RequestInfo | URL, init?: RequestInit) => {
       const signal = init?.signal
       return new Promise<Response>((_resolve, reject) => {
         signal?.addEventListener('abort', () => {
           reject(new DOMException('Aborted', 'AbortError'))
         })
       })
-    })
+    }
+    fetchMock.mockImplementation(neverRespond)
+
+    const loginRequest = login('admin', 'password')
+    const loginAssertion = expect(loginRequest).rejects.toThrow('Anfrage hat zu lange gedauert')
+    await vi.advanceTimersByTimeAsync(12_000)
+    await loginAssertion
 
     const request = setupAdminPassword('new-password', 'bootstrap-token')
     const assertion = expect(request).rejects.toThrow('Anfrage hat zu lange gedauert')
-    await vi.advanceTimersByTimeAsync(12_000)
+    await vi.advanceTimersByTimeAsync(59_999)
+    const setupStillPending = Promise.race([
+      request.then(() => 'resolved'),
+      Promise.resolve('pending'),
+    ])
+    await expect(setupStillPending).resolves.toBe('pending')
+    await vi.advanceTimersByTimeAsync(1)
 
     await assertion
     vi.useRealTimers()

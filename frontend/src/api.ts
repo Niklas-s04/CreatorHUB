@@ -6,6 +6,7 @@ export const API_BASE = __API_BASE__ || '/api/v1'
 const AUTH_HINT_KEY = 'auth_session'
 const CSRF_COOKIE_NAME = 'creatorhub_csrf'
 const AUTH_REQUEST_TIMEOUT_MS = 12_000
+const ADMIN_SETUP_TIMEOUT_MS = 60_000
 
 export type BootstrapStatus = {
   admin_username: string
@@ -154,12 +155,17 @@ function isAbortError(error: unknown): boolean {
   )
 }
 
-async function authFetch(path: string, options: RequestInit = {}): Promise<Response> {
+type AuthFetchOptions = RequestInit & {
+  timeoutMs?: number
+}
+
+async function authFetch(path: string, options: AuthFetchOptions = {}): Promise<Response> {
+  const { timeoutMs = AUTH_REQUEST_TIMEOUT_MS, ...requestOptions } = options
   const controller = new AbortController()
-  const timeout = window.setTimeout(() => controller.abort(), AUTH_REQUEST_TIMEOUT_MS)
+  const timeout = window.setTimeout(() => controller.abort(), timeoutMs)
   try {
     return await fetch(`${API_BASE}${path}`, {
-      ...options,
+      ...requestOptions,
       signal: controller.signal,
       credentials: 'include',
     })
@@ -225,6 +231,7 @@ export async function setupAdminPassword(password: string, bootstrapToken: strin
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'X-Bootstrap-Token': bootstrapToken },
     body: JSON.stringify({ password }),
+    timeoutMs: ADMIN_SETUP_TIMEOUT_MS,
   })
   if (!res.ok) throw new Error(await res.text())
   setToken('1')

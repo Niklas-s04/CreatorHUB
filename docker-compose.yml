@@ -34,7 +34,7 @@ services:
       CORS_ORIGINS: ${CORS_ORIGINS:?Missing CORS_ORIGINS environment variable}
       TRUSTED_HOSTS: ${TRUSTED_HOSTS:?Missing TRUSTED_HOSTS environment variable}
       AUTH_COOKIE_SECURE: ${AUTH_COOKIE_SECURE:?Missing AUTH_COOKIE_SECURE environment variable}
-      AUTH_COOKIE_DOMAIN: ${AUTH_COOKIE_DOMAIN:?Missing AUTH_COOKIE_DOMAIN environment variable}
+      AUTH_COOKIE_DOMAIN: ${AUTH_COOKIE_DOMAIN-}
     depends_on:
       db:
         condition: service_healthy
@@ -83,7 +83,7 @@ services:
       backend:
         condition: service_healthy
     ports:
-      - "3000:80"
+      - "${FRONTEND_PORT:-3000}:80"
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1/healthz >/dev/null 2>&1 || exit 1"]
       interval: 20s

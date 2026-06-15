@@ -215,6 +215,16 @@ API conventions:
 - If authentication fails, verify cookie domain, secure cookie settings, and CSRF handling.
 - If uploads fail, verify the file signature, allowed extension, and size limits.
 - If API calls fail from the frontend, verify the API base URL and CORS settings.
+- If the frontend is opened through a LAN IP such as `http://192.168.x.x:3000`, run a
+  LAN/dev profile: set `ENV=dev` or `ENV=test`, `AUTH_COOKIE_SECURE=false`, leave
+  `AUTH_COOKIE_DOMAIN` empty, add the exact browser origin to `CORS_ORIGINS`, and add
+  the LAN host/IP to `TRUSTED_HOSTS`.
+- If you need another frontend port, set `FRONTEND_PORT`, for example
+  `FRONTEND_PORT=3001 docker compose up --build`. Use the same port in `CORS_ORIGINS`.
+- If Nginx logs `connect() failed ... upstream: "http://[...]:8000"`, rebuild the
+  frontend image so the Docker DNS resolver config with IPv6 disabled is active.
+- For production, use an HTTPS domain, `AUTH_COOKIE_SECURE=true`, an explicit
+  `AUTH_COOKIE_DOMAIN`, and production-only `CORS_ORIGINS`/`TRUSTED_HOSTS` values.
 
 ## License
 
