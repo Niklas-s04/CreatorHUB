@@ -218,13 +218,17 @@ API conventions:
 - If the frontend is opened through a LAN IP such as `http://192.168.x.x:3000`, run a
   LAN/dev profile: set `ENV=dev` or `ENV=test`, `AUTH_COOKIE_SECURE=false`, leave
   `AUTH_COOKIE_DOMAIN` empty, add the exact browser origin to `CORS_ORIGINS`, and add
-  the LAN host/IP to `TRUSTED_HOSTS`.
+  the LAN host/IP to `TRUSTED_HOSTS`. The frontend container must not force
+  `upgrade-insecure-requests` in this HTTP profile, otherwise browser asset requests are
+  upgraded to HTTPS on the HTTP-only Nginx port and the app can render as a blank page.
 - If you need another frontend port, set `FRONTEND_PORT`, for example
   `FRONTEND_PORT=3001 docker compose up --build`. Use the same port in `CORS_ORIGINS`.
 - If Nginx logs `connect() failed ... upstream: "http://[...]:8000"`, rebuild the
   frontend image so the Docker DNS resolver config with IPv6 disabled is active.
 - For production, use an HTTPS domain, `AUTH_COOKIE_SECURE=true`, an explicit
   `AUTH_COOKIE_DOMAIN`, and production-only `CORS_ORIGINS`/`TRUSTED_HOSTS` values.
+  Terminate TLS, redirect HTTP to HTTPS, and set HSTS at the external reverse proxy or
+  load balancer in front of the frontend container.
 
 ## License
 
