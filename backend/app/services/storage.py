@@ -148,7 +148,7 @@ def _image_metadata(path: Path) -> Tuple[int | None, int | None, str | None]:
 
 def _average_hash(img: Image.Image, hash_size: int = 8) -> str:
     gray = img.convert("L").resize((hash_size, hash_size), Image.LANCZOS)
-    pixels = list(gray.getdata())
+    pixels = list(gray.tobytes())
     avg = sum(pixels) / len(pixels)
     bits = 0
     for idx, pixel in enumerate(pixels):
