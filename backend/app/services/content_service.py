@@ -103,6 +103,10 @@ def _normalize_optional_text(value: str | None) -> str | None:
     return trimmed or None
 
 
+def _is_missing_value(value) -> bool:
+    return value is None or value == "" or value == []
+
+
 def _active_platform_profile(
     db: Session,
     *,
@@ -154,17 +158,46 @@ def _validate_platform_meta(
     if unknown:
         raise BusinessRuleViolation("Unknown platform fields: " + ", ".join(unknown))
 
-    missing_required = sorted(key for key in required_keys if payload.get(key) in {None, "", []})
+    missing_required = sorted(key for key in required_keys if _is_missing_value(payload.get(key)))
     return missing_required
+
+
+def _active_platform_schema(db: Session, *, platform) -> dict:
+    profile = _active_platform_profile(db, platform=platform)
+    if profile is None or not isinstance(profile.schema_json, dict):
+        return {}
+    return profile.schema_json
+
+
+def _missing_required_base_fields(db: Session, *, item: ContentItem) -> list[str]:
+    schema = _active_platform_schema(db, platform=item.platform)
+    required_base_fields = schema.get("required_base_fields")
+    if not isinstance(required_base_fields, list):
+        return []
+
+    missing: list[str] = []
+    for raw_field in required_base_fields:
+        if not isinstance(raw_field, str) or not raw_field.strip():
+            continue
+        field = raw_field.strip()
+        if not hasattr(item, field):
+            continue
+        value = getattr(item, field)
+        if _is_missing_value(value):
+            missing.append(field)
+    return sorted(set(missing))
 
 
 def _compute_readiness_score(
     *,
+    missing_base_fields: list[str] | None = None,
     missing_platform_fields: list[str],
     open_required_tasks: int,
     approved_assets: int,
 ) -> int:
     score = 100
+    if missing_base_fields:
+        score -= min(30, len(missing_base_fields) * 10)
     if missing_platform_fields:
         score -= min(40, len(missing_platform_fields) * 10)
     if open_required_tasks > 0:
@@ -321,6 +354,12 @@ def _ensure_publish_ready(item: ContentItem, db: Session) -> None:
     if blocking_tasks > 0:
         raise BusinessRuleViolation("Required checklist tasks are still open")
 
+    missing_required_base_fields = _missing_required_base_fields(db, item=item)
+    if missing_required_base_fields:
+        raise BusinessRuleViolation(
+            "Missing required content fields: " + ", ".join(missing_required_base_fields)
+        )
+
     missing_required_platform_fields = _validate_platform_meta(
         db,
         platform=item.platform,
@@ -347,6 +386,7 @@ def _ensure_publish_ready(item: ContentItem, db: Session) -> None:
 
 
 def _refresh_item_readiness(db: Session, *, item: ContentItem) -> None:
+    missing_required_base_fields = _missing_required_base_fields(db, item=item)
     missing_required_platform_fields = _validate_platform_meta(
         db,
         platform=item.platform,
@@ -371,6 +411,7 @@ def _refresh_item_readiness(db: Session, *, item: ContentItem) -> None:
         .count()
     )
     item.readiness_score = _compute_readiness_score(
+        missing_base_fields=missing_required_base_fields,
         missing_platform_fields=missing_required_platform_fields,
         open_required_tasks=required_open_tasks,
         approved_assets=approved_assets,
@@ -1452,7 +1493,12 @@ def get_planning_view(
         platform=item.platform,
         platform_meta_json=item.platform_meta_json,
     )
+    missing_required_base_fields = _missing_required_base_fields(db, item=item)
     blockers: list[str] = []
+    if missing_required_base_fields:
+        blockers.append(
+            "Missing required content fields: " + ", ".join(missing_required_base_fields)
+        )
     if missing_required_platform_fields:
         blockers.append(
             "Missing required platform fields: " + ", ".join(missing_required_platform_fields)

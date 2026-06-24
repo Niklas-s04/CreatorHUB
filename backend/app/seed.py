@@ -8,6 +8,7 @@ from app.db.session import SessionLocal, engine
 from app.models.base import Base
 from app.models.knowledge import KnowledgeDoc, KnowledgeDocType
 from app.models.user import User, UserRole
+from app.services.content_defaults import ensure_content_defaults
 
 DEFAULT_BRAND_VOICE = """- Ton: freundlich, direkt, professionell, keine Übertreibungen
 - Länge: 6–12 Sätze Standard
@@ -72,6 +73,7 @@ def bootstrap_if_needed() -> None:
                     type=KnowledgeDocType.policy, title="Default Policy", content=DEFAULT_POLICY
                 )
             )
+        ensure_content_defaults(db)
         db.commit()
     finally:
         db.close()

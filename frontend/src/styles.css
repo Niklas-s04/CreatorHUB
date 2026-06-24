@@ -898,6 +898,63 @@ caption {
   margin-bottom: 6px;
 }
 
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 12px;
+}
+
+.form-grid.compact {
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+}
+
+.form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.form-field.wide {
+  grid-column: 1 / -1;
+}
+
+.content-editor textarea,
+.form-field textarea,
+.card.tight textarea {
+  min-height: 84px;
+  resize: vertical;
+}
+
+.calendar-row {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 120px minmax(0, 1fr) 120px 140px;
+  gap: 12px;
+  align-items: center;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--panel);
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.calendar-row:hover {
+  border-color: var(--accent);
+}
+
+.danger-text {
+  color: var(--danger);
+}
+
+.pill.success {
+  border-color: rgba(69, 208, 139, 0.42);
+  background: rgba(69, 208, 139, 0.1);
+  color: #198754;
+}
+
 .section-gap {
   margin-top: 16px;
 }

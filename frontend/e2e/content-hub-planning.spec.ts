@@ -95,9 +95,10 @@ test.describe('Content Hub planning E2E', () => {
     // Attempt to force status to published; backend should reject and UI should keep non-published status.
     await page.getByRole('tab', { name: /Plan/i }).click()
     await page.locator('.kanban-card', { hasText: videoTitle }).first().click()
-    page.once('dialog', (dialog) => dialog.accept())
-    await page.locator('.content-side select').first().selectOption('published')
-    await expect(page.locator('.content-side select').first()).not.toHaveValue('published')
+    const statusSelect = page.locator('.content-editor').getByLabel(/Status/i)
+    await statusSelect.selectOption('published')
+    await page.locator('.content-editor').getByRole('button', { name: /Speichern|Save/i }).click()
+    await expect(statusSelect).not.toHaveValue('published')
 
     await page.getByRole('tab', { name: /Checkliste|Checklist/i }).click()
     await expect(page.getByText(/Publish ready/i)).toBeVisible({ timeout: 15_000 })

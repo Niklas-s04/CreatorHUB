@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Generator
+from datetime import date
 
 import pytest
 from sqlalchemy import create_engine
@@ -8,15 +9,25 @@ from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
 import app.models  # noqa: F401
+from app.models.asset import Asset, AssetKind, AssetOwnerType, AssetReviewState, AssetSource
 from app.models.base import Base
+from app.models.content import (
+    ContentChecklistTemplate,
+    ContentPlatformProfile,
+    ContentTask,
+    TaskStatus,
+)
 from app.models.user import User, UserRole
+from app.models.workflow import WorkflowStatus
 from app.schemas.content import (
     ContentChecklistTemplateCreate,
     ContentItemCreate,
+    ContentItemUpdate,
     ContentPlatformProfileCreate,
+    ContentTaskUpdate,
     ContentTemplateApplyRequest,
 )
-from app.services import content_service
+from app.services import content_defaults, content_service
 from app.services.errors import BusinessRuleViolation
 
 TEST_TABLES = list(Base.metadata.sorted_tables)
@@ -86,6 +97,180 @@ def test_create_item_rejects_unknown_platform_meta_fields(service_db: Session) -
             ),
             actor=admin,
         )
+
+
+def test_content_defaults_are_seeded_idempotently(service_db: Session) -> None:
+    content_defaults.ensure_content_defaults(service_db)
+    service_db.commit()
+    content_defaults.ensure_content_defaults(service_db)
+    service_db.commit()
+
+    profiles = service_db.query(ContentPlatformProfile).all()
+    templates = service_db.query(ContentChecklistTemplate).all()
+
+    assert {profile.platform.value for profile in profiles} >= {
+        "youtube",
+        "instagram",
+        "tiktok",
+    }
+    assert service_db.query(ContentPlatformProfile).count() == 3
+    assert {template.name for template in templates} >= {
+        "YouTube Review",
+        "Short/Reel/TikTok",
+        "Unboxing Video",
+    }
+    assert service_db.query(ContentChecklistTemplate).count() == 3
+    assert all(template.items for template in templates)
+
+
+def test_planning_view_reports_missing_required_base_and_platform_fields(
+    service_db: Session,
+) -> None:
+    admin = _create_admin(service_db, username="planner_admin_base_fields")
+    content_service.create_platform_profile(
+        service_db,
+        payload=ContentPlatformProfileCreate(
+            platform="youtube",
+            name="YouTube planning fields",
+            schema_json={
+                "required_base_fields": ["title", "publish_date", "description_md", "tags_csv"],
+                "fields": [
+                    {"key": "category", "required": True},
+                    {"key": "visibility", "required": True},
+                ],
+            },
+            is_active=True,
+        ),
+        actor=admin,
+    )
+    item = content_service.create_item(
+        service_db,
+        payload=ContentItemCreate(title="Video C", platform="youtube", type="review"),
+        actor=admin,
+    )
+
+    planned_item, _, blockers, publish_ready = content_service.get_planning_view(
+        service_db,
+        item_id=item.id,
+    )
+
+    assert publish_ready is False
+    assert planned_item.readiness_score < 100
+    assert any("Missing required content fields" in blocker for blocker in blockers)
+    assert any("publish_date" in blocker for blocker in blockers)
+    assert any("Missing required platform fields" in blocker for blocker in blockers)
+    assert any("category" in blocker for blocker in blockers)
+
+
+def test_publish_guard_blocks_missing_required_fields_after_tasks_and_asset(
+    service_db: Session,
+) -> None:
+    admin = _create_admin(service_db, username="planner_admin_publish_fields")
+    content_service.create_platform_profile(
+        service_db,
+        payload=ContentPlatformProfileCreate(
+            platform="youtube",
+            name="YouTube publish fields",
+            schema_json={
+                "required_base_fields": ["description_md", "tags_csv"],
+                "fields": [{"key": "category", "required": True}],
+            },
+            is_active=True,
+        ),
+        actor=admin,
+    )
+    item = content_service.create_item(
+        service_db,
+        payload=ContentItemCreate(
+            title="Video D",
+            platform="youtube",
+            type="review",
+            status="scheduled",
+            planned_date=date.today(),
+            publish_date=date.today(),
+        ),
+        actor=admin,
+    )
+    content_service.update_item(
+        service_db,
+        item_id=item.id,
+        payload=ContentItemUpdate(
+            workflow_status=WorkflowStatus.in_review,
+            review_reason="Ready",
+        ),
+        actor=admin,
+    )
+    content_service.update_item(
+        service_db,
+        item_id=item.id,
+        payload=ContentItemUpdate(
+            workflow_status=WorkflowStatus.approved,
+            review_reason="Approved",
+        ),
+        actor=admin,
+    )
+    for task in service_db.query(ContentTask).filter(ContentTask.content_item_id == item.id).all():
+        content_service.update_task(
+            service_db,
+            task_id=task.id,
+            payload=ContentTaskUpdate(status=TaskStatus.done),
+            actor=admin,
+        )
+
+    approved_asset = Asset(
+        owner_type=AssetOwnerType.content,
+        owner_id=item.id,
+        kind=AssetKind.image,
+        source=AssetSource.upload,
+        review_state=AssetReviewState.approved,
+        local_path="/tmp/content-planning-publish.png",
+        workflow_status=WorkflowStatus.approved,
+        title="Cover",
+    )
+    service_db.add(approved_asset)
+    service_db.commit()
+
+    with pytest.raises(BusinessRuleViolation, match="Missing required content fields"):
+        content_service.update_item(
+            service_db,
+            item_id=item.id,
+            payload=ContentItemUpdate(
+                status="published",
+                primary_asset_id=approved_asset.id,
+            ),
+            actor=admin,
+        )
+
+    content_service.update_item(
+        service_db,
+        item_id=item.id,
+        payload=ContentItemUpdate(
+            description_md="Ready description",
+            tags_csv="review, creatorhub",
+            platform_meta_json={"category": "Review"},
+        ),
+        actor=admin,
+    )
+    content_service.update_item(
+        service_db,
+        item_id=item.id,
+        payload=ContentItemUpdate(
+            workflow_status=WorkflowStatus.approved,
+            review_reason="Approved after metadata",
+        ),
+        actor=admin,
+    )
+    published = content_service.update_item(
+        service_db,
+        item_id=item.id,
+        payload=ContentItemUpdate(
+            status="published",
+            primary_asset_id=approved_asset.id,
+        ),
+        actor=admin,
+    )
+
+    assert published.status.value == "published"
 
 
 def test_apply_template_creates_required_tasks_and_planning_blockers(service_db: Session) -> None:
