@@ -201,7 +201,11 @@ export default function ContentKanbanPageView() {
     if (!selectedId) return
     await api(`/content/items/${selectedId}/apply-template`, {
       method: 'POST',
-      body: JSON.stringify({ template_id: templateId, merge_mode: 'replace', keep_done_tasks: false }),
+      body: JSON.stringify({
+        template_id: templateId,
+        merge_mode: 'replace',
+        keep_done_tasks: false,
+      }),
     })
     await loadAll()
     await loadPlanning(selectedId)
@@ -255,7 +259,11 @@ export default function ContentKanbanPageView() {
   }
 
   const boardColumns = useMemo(
-    () => STATUS_COLUMNS.map((status) => ({ status, items: items.filter((item) => item.status === status) })),
+    () =>
+      STATUS_COLUMNS.map((status) => ({
+        status,
+        items: items.filter((item) => item.status === status),
+      })),
     [items]
   )
 
@@ -303,7 +311,10 @@ export default function ContentKanbanPageView() {
           <button className="btn primary" onClick={() => createItem()}>
             {t('contentHub.addVideo')}
           </button>
-          <button className="btn" onClick={() => loadAll().catch((loadError) => setError(errorMessage(loadError)))}>
+          <button
+            className="btn"
+            onClick={() => loadAll().catch((loadError) => setError(errorMessage(loadError)))}
+          >
             {t('common.refresh')}
           </button>
         </div>

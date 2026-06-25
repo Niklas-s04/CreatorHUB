@@ -155,7 +155,14 @@ SYSTEM_CHECKLIST_TEMPLATES: list[dict[str, Any]] = [
         "items": [
             ("Prepare product and set", ChecklistPhase.pre_production, True, "medium", -5, True),
             ("Record package opening", ChecklistPhase.production, True, "high", -4, True),
-            ("Record closeups and first impressions", ChecklistPhase.production, True, "high", -3, True),
+            (
+                "Record closeups and first impressions",
+                ChecklistPhase.production,
+                True,
+                "high",
+                -3,
+                True,
+            ),
             ("Cut story flow", ChecklistPhase.post_production, True, "high", -2, True),
             ("Add title, tags and description", ChecklistPhase.upload, True, "medium", -1, True),
             ("Final publish check", ChecklistPhase.upload, True, "medium", 0, True),

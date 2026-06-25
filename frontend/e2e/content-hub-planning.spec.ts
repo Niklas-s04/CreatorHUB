@@ -97,7 +97,10 @@ test.describe('Content Hub planning E2E', () => {
     await page.locator('.kanban-card', { hasText: videoTitle }).first().click()
     const statusSelect = page.locator('.content-editor').getByLabel(/Status/i)
     await statusSelect.selectOption('published')
-    await page.locator('.content-editor').getByRole('button', { name: /Speichern|Save/i }).click()
+    await page
+      .locator('.content-editor')
+      .getByRole('button', { name: /Speichern|Save/i })
+      .click()
     await expect(statusSelect).not.toHaveValue('published')
 
     await page.getByRole('tab', { name: /Checkliste|Checklist/i }).click()

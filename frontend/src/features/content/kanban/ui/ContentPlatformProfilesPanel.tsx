@@ -101,7 +101,9 @@ export default function ContentPlatformProfilesPanel({
         <div className="card stack">
           <div className="section-head">
             <div className="title-strong">
-              {draft.id ? t('contentHub.editPlatformProfile') : t('contentHub.createPlatformProfile')}
+              {draft.id
+                ? t('contentHub.editPlatformProfile')
+                : t('contentHub.createPlatformProfile')}
             </div>
             <button
               className="btn"
@@ -269,7 +271,8 @@ export default function ContentPlatformProfilesPanel({
               <span>v{profile.version}</span>
             </div>
             <div className="small muted">
-              {profile.platform} / {profile.is_active ? t('contentHub.active') : t('contentHub.inactive')}
+              {profile.platform} /{' '}
+              {profile.is_active ? t('contentHub.active') : t('contentHub.inactive')}
             </div>
             {!profile.is_system && (
               <span

@@ -191,7 +191,8 @@ export default function ContentItemEditor({ item, profiles, error, onSave, onDel
         <div>
           <h3 className="no-margin">{form.title || t('contentHub.untitled')}</h3>
           <div className="small muted">
-            {currentForm.platform.toUpperCase()} / {currentForm.type.toUpperCase()} / {currentItem.readiness_score}%
+            {currentForm.platform.toUpperCase()} / {currentForm.type.toUpperCase()} /{' '}
+            {currentItem.readiness_score}%
           </div>
         </div>
         <button className="btn danger" onClick={() => onDelete(currentItem.id)}>
@@ -201,16 +202,25 @@ export default function ContentItemEditor({ item, profiles, error, onSave, onDel
       {error && <div className="inline-hint error">{error}</div>}
       <div className="form-grid section-gap">
         <label className="form-field">
-          <span className="field-label">{t('contentHub.fields.title')}{requiredMarker('title')}</span>
+          <span className="field-label">
+            {t('contentHub.fields.title')}
+            {requiredMarker('title')}
+          </span>
           <input value={form.title} onChange={(event) => setField('title', event.target.value)} />
         </label>
         <label className="form-field">
-          <span className="field-label">{t('contentHub.fields.hook')}{requiredMarker('hook')}</span>
+          <span className="field-label">
+            {t('contentHub.fields.hook')}
+            {requiredMarker('hook')}
+          </span>
           <input value={form.hook} onChange={(event) => setField('hook', event.target.value)} />
         </label>
         <label className="form-field">
           <span className="field-label">{t('contentHub.fields.platform')}</span>
-          <select value={form.platform} onChange={(event) => setField('platform', event.target.value)}>
+          <select
+            value={form.platform}
+            onChange={(event) => setField('platform', event.target.value)}
+          >
             {PLATFORMS.map((platform) => (
               <option key={platform} value={platform}>
                 {platform}
@@ -240,7 +250,8 @@ export default function ContentItemEditor({ item, profiles, error, onSave, onDel
         </label>
         <label className="form-field">
           <span className="field-label">
-            {t('contentHub.fields.plannedDate')}{requiredMarker('planned_date')}
+            {t('contentHub.fields.plannedDate')}
+            {requiredMarker('planned_date')}
           </span>
           <input
             type="date"
@@ -250,7 +261,8 @@ export default function ContentItemEditor({ item, profiles, error, onSave, onDel
         </label>
         <label className="form-field">
           <span className="field-label">
-            {t('contentHub.fields.publishDate')}{requiredMarker('publish_date')}
+            {t('contentHub.fields.publishDate')}
+            {requiredMarker('publish_date')}
           </span>
           <input
             type="date"
@@ -260,7 +272,8 @@ export default function ContentItemEditor({ item, profiles, error, onSave, onDel
         </label>
         <label className="form-field">
           <span className="field-label">
-            {t('contentHub.fields.externalUrl')}{requiredMarker('external_url')}
+            {t('contentHub.fields.externalUrl')}
+            {requiredMarker('external_url')}
           </span>
           <input
             type="url"
@@ -270,7 +283,8 @@ export default function ContentItemEditor({ item, profiles, error, onSave, onDel
         </label>
         <label className="form-field wide">
           <span className="field-label">
-            {t('contentHub.fields.description')}{requiredMarker('description_md')}
+            {t('contentHub.fields.description')}
+            {requiredMarker('description_md')}
           </span>
           <textarea
             value={form.description_md}
@@ -278,14 +292,20 @@ export default function ContentItemEditor({ item, profiles, error, onSave, onDel
           />
         </label>
         <label className="form-field wide">
-          <span className="field-label">{t('contentHub.fields.script')}{requiredMarker('script_md')}</span>
+          <span className="field-label">
+            {t('contentHub.fields.script')}
+            {requiredMarker('script_md')}
+          </span>
           <textarea
             value={form.script_md}
             onChange={(event) => setField('script_md', event.target.value)}
           />
         </label>
         <label className="form-field wide">
-          <span className="field-label">{t('contentHub.fields.tags')}{requiredMarker('tags_csv')}</span>
+          <span className="field-label">
+            {t('contentHub.fields.tags')}
+            {requiredMarker('tags_csv')}
+          </span>
           <input
             value={form.tags_csv}
             placeholder={t('contentHub.tagsPlaceholder')}

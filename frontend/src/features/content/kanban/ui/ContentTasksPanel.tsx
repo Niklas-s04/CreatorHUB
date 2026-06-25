@@ -74,7 +74,9 @@ export default function ContentTasksPanel({ selectedItemId, tasks, onCreate, onU
           <span className="field-label">{t('contentHub.taskFields.type')}</span>
           <select
             value={draft.type}
-            onChange={(event) => setDraft({ ...draft, type: event.target.value as ContentTaskType })}
+            onChange={(event) =>
+              setDraft({ ...draft, type: event.target.value as ContentTaskType })
+            }
           >
             {TASK_TYPES.map((type) => (
               <option key={type} value={type}>
@@ -110,9 +112,7 @@ export default function ContentTasksPanel({ selectedItemId, tasks, onCreate, onU
           <input
             type="checkbox"
             checked={draft.required_for_publish}
-            onChange={(event) =>
-              setDraft({ ...draft, required_for_publish: event.target.checked })
-            }
+            onChange={(event) => setDraft({ ...draft, required_for_publish: event.target.checked })}
           />
           {t('contentHub.taskFields.required')}
         </label>
@@ -219,9 +219,7 @@ function EditableTask({
           <input
             type="checkbox"
             checked={task.required_for_publish}
-            onChange={(event) =>
-              onUpdate(task.id, { required_for_publish: event.target.checked })
-            }
+            onChange={(event) => onUpdate(task.id, { required_for_publish: event.target.checked })}
           />
           {t('contentHub.taskFields.required')}
         </label>

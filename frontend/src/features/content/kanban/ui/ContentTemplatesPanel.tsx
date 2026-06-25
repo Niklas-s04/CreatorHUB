@@ -55,7 +55,8 @@ function toDraft(template: ChecklistTemplate): TemplateDraft {
     applies_to_platform: template.applies_to_platform ?? '',
     applies_to_type: template.applies_to_type ?? '',
     is_shared: template.is_shared,
-    items: template.items.length > 0 ? template.items.map((item) => ({ ...item })) : [{ ...EMPTY_STEP }],
+    items:
+      template.items.length > 0 ? template.items.map((item) => ({ ...item })) : [{ ...EMPTY_STEP }],
   }
 }
 
