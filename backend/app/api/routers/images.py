@@ -34,7 +34,7 @@ def job_status(job_id: str, _: User = Depends(get_current_user)) -> JobStatusOut
     try:
         job = Job.fetch(job_id, connection=redis_conn)
     except Exception:
-        raise HTTPException(status_code=404, detail="Job not found")
+        raise HTTPException(status_code=404, detail="Job not found") from None
     status = job.get_status()
     result = None
     error = None

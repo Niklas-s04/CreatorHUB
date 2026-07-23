@@ -1,6 +1,11 @@
 from __future__ import annotations
 
+import enum
+import json
+import uuid
 from collections.abc import Generator
+from datetime import date, datetime, time, timezone
+from decimal import Decimal
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -12,7 +17,7 @@ from app.api import deps
 from app.api.routers import audit
 from app.models.audit import AuditLog
 from app.models.user import User
-from app.services.audit import record_audit_log
+from app.services.audit import _normalize, record_audit_log
 from tests.factories import create_user
 
 TEST_TABLES = [
@@ -147,18 +152,67 @@ def test_audit_log_redacts_sensitive_fields() -> None:
             action="auth.password.change",
             entity_type="user",
             entity_id=str(admin.id),
-            before={"password": "secret-value", "nested": {"token": "abc"}},
+            before={
+                "password": "secret-value",
+                "nested": {"token": "abc"},
+                "changed_at": datetime(2026, 7, 23, 12, 30, tzinfo=timezone.utc),
+                "amount": Decimal("19.9900"),
+            },
             after={"profile": {"mfa_secret": "totp-secret"}},
-            metadata={"refresh_token": "refresh-value", "note": "safe"},
+            metadata={
+                "refresh_token": "refresh-value",
+                "note": "safe",
+                "event_id": uuid.UUID("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"),
+            },
         )
         db.commit()
 
-        assert log.before == {"password": "***REDACTED***", "nested": {"token": "***REDACTED***"}}
+        assert log.before == {
+            "password": "***REDACTED***",
+            "nested": {"token": "***REDACTED***"},
+            "changed_at": "2026-07-23T12:30:00+00:00",
+            "amount": "19.9900",
+        }
         assert log.after == {"profile": {"mfa_secret": "***REDACTED***"}}
         assert log.meta["refresh_token"] == "***REDACTED***"
         assert log.meta["note"] == "safe"
+        assert log.meta["event_id"] == "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
     finally:
         db.close()
         for table in reversed(TEST_TABLES):
             table.drop(bind=engine, checkfirst=True)
         engine.dispose()
+
+
+def test_audit_normalize_makes_complex_values_and_dict_keys_json_safe() -> None:
+    class AuditValue(enum.Enum):
+        approved = "approved"
+
+    key = uuid.uuid4()
+    normalized = _normalize(
+        {
+            key: {
+                AuditValue.approved: (
+                    date(2026, 7, 23),
+                    datetime(2026, 7, 23, 12, 30, tzinfo=timezone.utc),
+                    time(12, 30, 45),
+                    Decimal("1234.5600"),
+                    uuid.UUID("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"),
+                ),
+                "sequence": range(3),
+            }
+        }
+    )
+
+    assert json.loads(json.dumps(normalized)) == {
+        str(key): {
+            "approved": [
+                "2026-07-23",
+                "2026-07-23T12:30:00+00:00",
+                "12:30:45",
+                "1234.5600",
+                "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+            ],
+            "sequence": [0, 1, 2],
+        }
+    }

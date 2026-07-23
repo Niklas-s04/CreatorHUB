@@ -13,6 +13,11 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null
 }
 
+function getDetails(source: Record<string, unknown>): unknown {
+  if (source.details !== undefined) return source.details
+  return source.detail
+}
+
 function normalizeDetail(detail: unknown): string | null {
   if (typeof detail === 'string' && detail.trim()) return detail
   if (!Array.isArray(detail)) return null
@@ -37,7 +42,7 @@ export function getErrorMessage(error: unknown): string {
   if (typeof source === 'string' && source.trim()) return source
 
   if (isRecord(source)) {
-    const detailMessage = normalizeDetail(source.detail)
+    const detailMessage = normalizeDetail(getDetails(source))
     if (detailMessage) return detailMessage
     if (typeof source.message === 'string' && source.message.trim()) return source.message
   }
@@ -48,10 +53,12 @@ export function getErrorMessage(error: unknown): string {
 
 export function getValidationFieldErrors(error: unknown): ValidationFieldErrors {
   const source = unwrapError(error)
-  if (!isRecord(source) || !Array.isArray(source.detail)) return {}
+  if (!isRecord(source)) return {}
+  const details = getDetails(source)
+  if (!Array.isArray(details)) return {}
 
   const result: ValidationFieldErrors = {}
-  source.detail.forEach((item) => {
+  details.forEach((item) => {
     if (!isRecord(item)) return
     const loc = Array.isArray(item.loc) ? item.loc : []
     const msg = typeof item.msg === 'string' ? item.msg : null
@@ -74,6 +81,11 @@ export function getErrorKind(error: unknown): ErrorKind {
   if (Object.keys(fieldErrors).length > 0) return 'domain'
 
   const source = unwrapError(error)
-  if (isRecord(source) && source.detail !== undefined) return 'domain'
+  if (isRecord(source)) {
+    if (typeof source.status === 'number') {
+      return source.status >= 400 && source.status < 500 ? 'domain' : 'technical'
+    }
+    if (source.details !== undefined || source.detail !== undefined) return 'domain'
+  }
   return 'technical'
 }

@@ -165,4 +165,4 @@ class Settings(BaseSettings):
         return v
 
 
-settings = Settings()
+settings = Settings()  # type: ignore[call-arg]  # Values are supplied by BaseSettings.

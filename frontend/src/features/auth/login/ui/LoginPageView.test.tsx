@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import LoginPage from './LoginPageView'
-import { getBootstrapStatus } from '../../../../api'
+import { getBootstrapStatus, login } from '../../../../api'
 
 const navigate = vi.fn()
 const toastSuccess = vi.fn()
@@ -87,6 +87,27 @@ describe('LoginPageView', () => {
     expect(navigate).toHaveBeenCalled()
   })
 
+  it('reports when login cancels a scheduled account deletion', async () => {
+    vi.mocked(login).mockResolvedValueOnce({ account_deletion_canceled: true })
+
+    render(
+      <MemoryRouter>
+        <LoginPage />
+      </MemoryRouter>
+    )
+
+    fireEvent.change(screen.getByLabelText('Username'), { target: { value: 'alice' } })
+    fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'secret123' } })
+    fireEvent.click(screen.getAllByRole('button', { name: 'Login' })[1])
+
+    await waitFor(() =>
+      expect(toastSuccess).toHaveBeenCalledWith(
+        'Die geplante Account-Löschung wurde durch deine Anmeldung abgebrochen.'
+      )
+    )
+    expect(navigate).toHaveBeenCalledWith('/')
+  })
+
   it('shows bootstrap setup mode when a token exists', async () => {
     sessionStorage.setItem('bootstrap_token', 'bootstrap-1')
 
@@ -98,6 +119,21 @@ describe('LoginPageView', () => {
 
     await waitFor(() => expect(screen.getByText(/Erststart: Admin-Passwort/)).toBeInTheDocument())
     expect(screen.getByDisplayValue('root')).toBeInTheDocument()
+  })
+
+  it('keeps the bootstrap token when its status cannot be checked temporarily', async () => {
+    sessionStorage.setItem('bootstrap_token', 'bootstrap-1')
+    vi.mocked(getBootstrapStatus).mockRejectedValueOnce(new Error('Backend unavailable'))
+
+    render(
+      <MemoryRouter>
+        <LoginPage />
+      </MemoryRouter>
+    )
+
+    expect(await screen.findByText('Backend unavailable')).toBeInTheDocument()
+    expect(sessionStorage.getItem('bootstrap_token')).toBe('bootstrap-1')
+    expect(screen.getByLabelText('Bootstrap-Token (nur Erstsetup)')).toHaveValue('bootstrap-1')
   })
 
   it('reveals password text only after using the eye toggle', () => {

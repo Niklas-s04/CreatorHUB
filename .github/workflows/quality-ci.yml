@@ -5,9 +5,17 @@ on:
     branches: ["**"]
   pull_request:
 
+permissions:
+  contents: read
+
+concurrency:
+  group: quality-ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   backend-quality:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     defaults:
       run:
         working-directory: backend
@@ -49,10 +57,11 @@ jobs:
         run: python -m pytest --cov=app --cov-report=term-missing --cov-report=xml
 
       - name: Backend dependency security audit
-        run: python -m pip_audit -r requirements.txt
+        run: python -m pip_audit -r requirements.txt -r requirements-dev.txt
 
   frontend-quality:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     defaults:
       run:
         working-directory: frontend
@@ -88,6 +97,7 @@ jobs:
 
   migrations-check:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     services:
       postgres:
         image: public.ecr.aws/docker/library/postgres:16-alpine
@@ -136,4 +146,60 @@ jobs:
         run: python -m alembic upgrade head
 
       - name: Verify Alembic state
-        run: python -m alembic current
+        run: python -m alembic current --check-heads
+
+      - name: Check model and migration consistency
+        run: python -m alembic check
+
+  end-to-end:
+    needs: [backend-quality, frontend-quality, migrations-check]
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend and browser dependencies
+        working-directory: frontend
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+
+      - name: Start isolated application stack
+        run: |
+          cp .env.test.example .env
+          docker compose up --build --detach
+
+      - name: Wait for application readiness
+        run: |
+          for attempt in {1..90}; do
+            if curl --fail --silent http://127.0.0.1:31080/healthz >/dev/null \
+              && curl --fail --silent http://127.0.0.1:31800/health/ready >/dev/null; then
+              exit 0
+            fi
+            sleep 2
+          done
+          docker compose ps
+          exit 1
+
+      - name: Run browser workflows
+        working-directory: frontend
+        env:
+          E2E_BASE_URL: http://127.0.0.1:31080
+          E2E_ADMIN_USER: admin
+          E2E_ADMIN_PASSWORD: test_admin_password_1234567890
+          E2E_BOOTSTRAP_TOKEN: test_bootstrap_token_1234567890
+        run: npm run e2e:ci
+
+      - name: Show service logs after failure
+        if: failure()
+        run: docker compose logs --no-color
+
+      - name: Stop isolated application stack
+        if: always()
+        run: docker compose down --volumes --remove-orphans

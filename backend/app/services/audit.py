@@ -1,6 +1,10 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+import enum
+import uuid
+from collections.abc import Mapping, Sequence, Set
+from datetime import date, datetime, time, timezone
+from decimal import Decimal
 from typing import Any
 
 from sqlalchemy.orm import Session
@@ -113,15 +117,39 @@ def _build_standard_metadata(
     return base_meta
 
 
+def _normalize_dict_key(value: Any) -> str:
+    normalized = _normalize(value)
+    if normalized is None:
+        return "null"
+    if isinstance(normalized, bool):
+        return "true" if normalized else "false"
+    if isinstance(normalized, str):
+        return normalized
+    return str(normalized)
+
+
 def _normalize(value: Any) -> Any:
-    if isinstance(value, dict):
-        return {k: _normalize(v) for k, v in value.items()}
-    if isinstance(value, (list, tuple)):
+    if isinstance(value, enum.Enum):
+        return _normalize(value.value)
+    if isinstance(value, uuid.UUID):
+        return str(value)
+    if isinstance(value, (datetime, date, time)):
+        return value.isoformat()
+    if isinstance(value, Decimal):
+        return str(value)
+    if isinstance(value, Mapping):
+        return {_normalize_dict_key(k): _normalize(v) for k, v in value.items()}
+    if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
         return [_normalize(v) for v in value]
-    enum_value = getattr(value, "value", None)
-    if enum_value is not None:
-        return enum_value
-    return value
+    if isinstance(value, Set):
+        return [_normalize(v) for v in value]
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    if isinstance(value, (bytes, bytearray)):
+        return value.decode("utf-8", errors="replace")
+    if hasattr(value, "__iter__"):
+        return [_normalize(v) for v in value]
+    return str(value)
 
 
 def redact_audit_data(value: Any) -> Any:

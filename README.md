@@ -51,7 +51,7 @@ The project combines product lifecycle workflows, media review, content task tra
 ## Prerequisites
 
 - Python 3.11 or newer
-- Node.js 20 or newer
+- Node.js 20.19 or newer within the 20.x line, or Node.js 22.12+
 - PostgreSQL
 - Redis
 - Bash for release/CI helper scripts
@@ -62,7 +62,7 @@ The project combines product lifecycle workflows, media review, content task tra
 ### 1. Clone the repository
 
 ```bash
-git clone https://github.com/Nxklass/CreatorHUB
+git clone https://github.com/Niklas-s04/CreatorHUB
 cd CreatorHUB
 ```
 

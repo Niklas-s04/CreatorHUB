@@ -99,7 +99,9 @@ def get_current_auth_context(
         if not sid or not jti:
             raise ValueError("missing session claims")
     except Exception:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token"
+        ) from None
 
     if is_token_revoked(db, jti=jti):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token revoked")
@@ -117,7 +119,9 @@ def get_current_auth_context(
     try:
         session_id = uuid.UUID(str(sid))
     except Exception:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid session")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid session"
+        ) from None
 
     session = (
         db.query(AuthSession)

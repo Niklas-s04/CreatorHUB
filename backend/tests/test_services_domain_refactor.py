@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Generator
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 
 import pytest
@@ -41,6 +41,7 @@ from app.models.knowledge import KnowledgeDoc, KnowledgeDocDraftLink, KnowledgeD
 from app.models.product import Product
 from app.models.user import User, UserRole
 from app.models.workflow import WorkflowStatus
+from app.schemas.common import SortOrder
 from app.schemas.content import (
     ContentItemCreate,
     ContentItemUpdate,
@@ -356,6 +357,17 @@ def test_email_handoff_requires_ready_state_and_note(service_db: Session) -> Non
     assert handed_off.handed_off_by_name == admin.username
     assert handed_off.handed_off_at is not None
 
+    reopened = email_router.set_draft_handoff(
+        draft_id=draft.id,
+        payload=EmailDraftHandoffRequest(status=EmailHandoffStatus.ready_for_send),
+        db=service_db,
+        current_user=admin,
+    )
+    assert reopened.handoff_status == EmailHandoffStatus.ready_for_send
+    assert reopened.handed_off_by_id is None
+    assert reopened.handed_off_by_name is None
+    assert reopened.handed_off_at is None
+
 
 def test_ai_draft_requires_human_approval_by_default(
     service_db: Session, monkeypatch: pytest.MonkeyPatch
@@ -389,6 +401,63 @@ def test_ai_draft_requires_human_approval_by_default(
     assert draft.approval_required is True
     assert draft.approval_status == EmailApprovalStatus.pending
     assert draft.handoff_status == EmailHandoffStatus.blocked
+
+
+def test_ai_draft_creation_is_atomic_and_audited_as_requesting_user(
+    service_db: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    admin = _create_admin(service_db, username="atomic_draft_admin")
+    _create_global_ai_profile(service_db, admin)
+
+    def _fake_generate(*_args, **_kwargs):
+        return {
+            "intent": "sponsoring",
+            "summary": "summary",
+            "risk_flags": [],
+            "questions_to_ask": [],
+            "draft_subject": "AW",
+            "draft_body": "Draft body",
+            "knowledge_doc_ids": [],
+        }
+
+    monkeypatch.setattr(email_router, "generate_email_draft", _fake_generate)
+    created = email_router.create_draft(
+        payload=email_router.EmailDraftRequest(
+            subject="Hi",
+            raw_body="Need your rates",
+            tone=EmailTone.neutral,
+        ),
+        db=service_db,
+        current_user=admin,
+    )
+    audit = (
+        service_db.query(AuditLog)
+        .filter(
+            AuditLog.action == "email.draft.create",
+            AuditLog.entity_id == str(created.id),
+        )
+        .one()
+    )
+    assert audit.actor_id == admin.id
+
+    draft_count = service_db.query(EmailDraft).count()
+
+    def _fail_event(*_args, **_kwargs):
+        raise RuntimeError("event persistence failed")
+
+    monkeypatch.setattr(email_router, "emit_domain_event", _fail_event)
+    with pytest.raises(RuntimeError, match="event persistence failed"):
+        email_router.create_draft(
+            payload=email_router.EmailDraftRequest(
+                subject="Second",
+                raw_body="Another request",
+                tone=EmailTone.neutral,
+            ),
+            db=service_db,
+            current_user=admin,
+        )
+    service_db.rollback()
+    assert service_db.query(EmailDraft).count() == draft_count
 
 
 def test_creator_ai_settings_without_profile_has_no_fake_defaults(service_db: Session) -> None:
@@ -598,6 +667,9 @@ def test_manual_draft_update_creates_new_revision_and_resets_approval(service_db
     assert updated.approved is False
     assert updated.approval_status == EmailApprovalStatus.pending
     assert updated.handoff_status == EmailHandoffStatus.blocked
+    assert updated.handed_off_at is None
+    assert updated.handed_off_by_id is None
+    assert updated.handed_off_by_name is None
     version_count = (
         service_db.query(EmailDraftVersion).filter(EmailDraftVersion.draft_id == draft.id).count()
     )
@@ -811,7 +883,18 @@ def test_content_publish_requires_approved_workflow_tasks_and_asset(service_db: 
         actor=admin,
     )
 
-    with pytest.raises(BusinessRuleViolation, match="tasks"):
+    service_db.add(
+        ContentTask(
+            content_item_id=item.id,
+            title="Explicit publish blocker",
+            status=TaskStatus.todo,
+            required_for_publish=True,
+            can_block_publish=True,
+        )
+    )
+    service_db.commit()
+
+    with pytest.raises(BusinessRuleViolation, match="checklist tasks"):
         content_service.update_item(
             service_db,
             item_id=item.id,
@@ -935,6 +1018,66 @@ def test_deal_service_upsert_and_update(
     assert service_db.query(AuditLog).filter(AuditLog.action == "deals.draft.update").count() == 1
 
 
+def test_deal_intake_partial_update_preserves_existing_values(
+    monkeypatch: pytest.MonkeyPatch, service_db: Session
+) -> None:
+    admin = _create_admin(service_db, username="admin_deal_partial")
+    thread = _create_email_thread(service_db)
+
+    monkeypatch.setattr(
+        deal_service,
+        "extract_deal_intake",
+        lambda *_args, **_kwargs: {
+            "brand_name": "Existing Brand",
+            "budget": "2500 EUR",
+            "deliverables": "Two videos",
+        },
+    )
+    created = deal_service.create_or_update_from_email(
+        service_db,
+        payload=DealDraftIntakeRequest(thread_id=thread.id, auto_extract=True),
+        actor=admin,
+    )
+    original_checklist = created.checklist
+
+    updated = deal_service.create_or_update_from_email(
+        service_db,
+        payload=DealDraftIntakeRequest(
+            thread_id=thread.id,
+            auto_extract=False,
+            notes="Only this field changes",
+        ),
+        actor=admin,
+    )
+
+    assert updated.brand_name == "Existing Brand"
+    assert updated.budget == "2500 EUR"
+    assert updated.deliverables == "Two videos"
+    assert updated.notes == "Only this field changes"
+    assert updated.checklist == original_checklist
+
+
+def test_deal_intake_create_enforces_advanced_status_checklist(
+    monkeypatch: pytest.MonkeyPatch, service_db: Session
+) -> None:
+    admin = _create_admin(service_db, username="admin_deal_create_status")
+    thread = _create_email_thread(service_db)
+    monkeypatch.setattr(deal_service, "extract_deal_intake", lambda *_args, **_kwargs: {})
+
+    with pytest.raises(BusinessRuleViolation, match="required checklist items missing"):
+        deal_service.create_or_update_from_email(
+            service_db,
+            payload=DealDraftIntakeRequest(
+                thread_id=thread.id,
+                auto_extract=False,
+                status=DealDraftStatus.negotiating,
+            ),
+            actor=admin,
+        )
+
+    assert service_db.query(DealDraft).filter(DealDraft.thread_id == thread.id).count() == 0
+
+
 def test_deal_service_blocks_negotiating_when_required_checklist_open(
     monkeypatch: pytest.MonkeyPatch, service_db: Session
 ) -> None:
@@ -1050,6 +1193,31 @@ def test_content_task_assignment_and_personal_worklist(service_db: Session) -> N
         filters=ContentTaskFilterParams(priority=TaskPriority.high),
     )
     assert any(entry.id == task.id for entry in personal)
+
+    later_task = content_service.create_task(
+        service_db,
+        payload=ContentTaskCreate(
+            content_item_id=item.id,
+            type=TaskType.edit,
+            status=TaskStatus.todo,
+            priority=TaskPriority.low,
+            assignee_user_id=editor.id,
+            due_date=date.today() + timedelta(days=2),
+        ),
+        actor=admin,
+    )
+    page, total, selected_sort = content_service.list_personal_tasks_page(
+        service_db,
+        user=editor,
+        filters=ContentTaskFilterParams(),
+        limit=10,
+        offset=0,
+        sort_by="due_date",
+        sort_order=SortOrder.desc,
+    )
+    assert total >= 2
+    assert selected_sort == "due_date"
+    assert page.index(later_task) < page.index(task)
 
 
 def test_content_task_saved_views(service_db: Session) -> None:

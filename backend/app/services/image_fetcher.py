@@ -162,6 +162,7 @@ def opengraph_images_from_page(
             timeout_read=timeout,
             max_bytes=min(settings.OUTBOUND_MAX_RESPONSE_BYTES, 2 * 1024 * 1024),
             max_redirects=1,
+            use_configured_allowlist=False,
         )
         html = response.text or ""
     except Exception:
@@ -190,7 +191,9 @@ def opengraph_images_from_page(
     # Normalize URLs from relative to absolute.
     normalized: list[str] = []
     for c in candidates:
-        normalized.append(_normalize_url(c, base=base))
+        normalized_url = _normalize_url(c, base=base)
+        if normalized_url:
+            normalized.append(normalized_url)
 
     # Doppelte URLs entfernen.
     seen: set[str] = set()

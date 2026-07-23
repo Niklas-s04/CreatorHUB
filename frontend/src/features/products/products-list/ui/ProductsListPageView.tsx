@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react'
+import React, { useCallback, useMemo, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useSearchParams } from 'react-router-dom'
 import { apiFetch, apiUrl } from '../../../../api'
@@ -159,12 +159,11 @@ export default function ProductsListPageView() {
   const [savedViews, setSavedViews] = useState<SavedView[]>(() => loadSavedViews())
   const [newViewName, setNewViewName] = useState('')
 
-  const initialColumns = useMemo(() => {
+  const [visibleColumns, setVisibleColumns] = useState<ProductColumnKey[]>(() => {
     const fromUrl = parseColumns(searchParams.get('cols'))
     if (fromUrl.length) return fromUrl
     return loadColumnsFromStorage()
-  }, [])
-  const [visibleColumns, setVisibleColumns] = useState<ProductColumnKey[]>(initialColumns)
+  })
   const [tableInteractionVersion, setTableInteractionVersion] = useState(0)
 
   const [exportDataset, setExportDataset] = useState<'products' | 'transactions' | 'value_history'>(
@@ -194,6 +193,18 @@ export default function ProductsListPageView() {
   )
   const productsQuery = useProductsListQuery(listParams)
 
+  const updateParams = useCallback(
+    (patch: Record<string, string | null>) => {
+      const next = new URLSearchParams(searchParams)
+      Object.entries(patch).forEach(([key, value]) => {
+        if (value === null || value === '') next.delete(key)
+        else next.set(key, value)
+      })
+      setSearchParams(next, { replace: true })
+    },
+    [searchParams, setSearchParams]
+  )
+
   React.useEffect(() => {
     const normalizedQ = debouncedQ.trim()
     if (normalizedQ === urlQ && debouncedStatus === urlStatus) return
@@ -203,7 +214,7 @@ export default function ProductsListPageView() {
       offset: '0',
     })
     setSelectedIds(new Set())
-  }, [debouncedQ, debouncedStatus, urlQ, urlStatus])
+  }, [debouncedQ, debouncedStatus, updateParams, urlQ, urlStatus])
 
   React.useEffect(() => {
     const table = document.getElementById('products-table-anchor')
@@ -211,7 +222,7 @@ export default function ProductsListPageView() {
     table.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }, [tableInteractionVersion])
 
-  const createMutation = useCreateProductMutation(listParams)
+  const createMutation = useCreateProductMutation()
 
   const items = productsQuery.data?.items ?? []
   const meta = productsQuery.data?.meta ?? {
@@ -220,15 +231,6 @@ export default function ProductsListPageView() {
     total: items.length,
     sort_by: urlSortBy,
     sort_order: urlSortOrder,
-  }
-
-  function updateParams(patch: Record<string, string | null>) {
-    const next = new URLSearchParams(searchParams)
-    Object.entries(patch).forEach(([key, value]) => {
-      if (value === null || value === '') next.delete(key)
-      else next.set(key, value)
-    })
-    setSearchParams(next, { replace: true })
   }
 
   async function load() {

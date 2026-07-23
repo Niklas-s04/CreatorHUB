@@ -39,6 +39,7 @@ os.environ.setdefault("SECURITY_SENSITIVE_ACTION_REQUIRE_STEP_UP_MFA", "false")
 
 import app.models  # noqa: F401
 from app.api import deps
+from app.api.error_handlers import install_error_handlers
 from app.api.routers import (
     assets,
     audit,
@@ -146,6 +147,7 @@ def app(db_session: Session) -> FastAPI:
             allow_methods=["*"],
             allow_headers=["*"],
         )
+    install_error_handlers(api)
 
     api.include_router(health.router, tags=["health"])
     api.include_router(auth.router, prefix="/api/v1/auth", tags=["auth"])

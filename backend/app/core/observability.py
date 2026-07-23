@@ -402,7 +402,7 @@ def monitor_once(app, settings: Settings) -> dict[str, Any]:
         "failed_jobs_total": failed_jobs,
         "alerts": get_alert_state(),
     }
-    setattr(app.state, "observability_snapshot", snapshot)
+    app.state.observability_snapshot = snapshot
     return snapshot
 
 
@@ -431,7 +431,7 @@ def configure_otel_tracing(app, settings: Settings, engine: Engine) -> TracingIn
 
     try:
         from opentelemetry import trace
-        from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+        from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
         from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
         from opentelemetry.instrumentation.redis import RedisInstrumentor
         from opentelemetry.instrumentation.requests import RequestsInstrumentor

@@ -100,6 +100,8 @@ def cancel_account_deletion(
     user: User,
     actor_ip: str | None = None,
     actor_user_agent: str | None = None,
+    *,
+    commit: bool = True,
 ) -> dict[str, Any]:
     """
     Cancel a scheduled account deletion.
@@ -120,6 +122,15 @@ def cancel_account_deletion(
         raise ValueError("No account deletion request to cancel")
 
     previous_deletion_requested_at = user.deletion_requested_at
+    deletion_requested_at = previous_deletion_requested_at
+    if deletion_requested_at.tzinfo is None:
+        deletion_requested_at = deletion_requested_at.replace(tzinfo=timezone.utc)
+    grace_period_ends_at = deletion_requested_at + timedelta(
+        days=settings.ACCOUNT_DELETION_GRACE_PERIOD_DAYS
+    )
+    if datetime.now(timezone.utc) >= grace_period_ends_at:
+        raise ValueError("Account deletion grace period has expired")
+
     was_active = bool(user.is_active)
     user.deletion_requested_at = None
     user.is_active = True
@@ -144,7 +155,8 @@ def cancel_account_deletion(
         },
     )
 
-    db.commit()
+    if commit:
+        db.commit()
 
     return {
         "deletion_canceled": True,

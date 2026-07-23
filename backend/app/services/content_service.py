@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import uuid
+from contextlib import nullcontext
 from datetime import date, timedelta
 
 from sqlalchemy.orm import Session
@@ -25,6 +26,7 @@ from app.models.content import (
 from app.models.product import Product, ProductStatus
 from app.models.user import User, UserRole
 from app.models.workflow import WorkflowStatus
+from app.schemas.common import SortOrder
 from app.schemas.content import (
     ContentChecklistTemplateCreate,
     ContentChecklistTemplateUpdate,
@@ -330,17 +332,6 @@ def _ensure_publish_ready(item: ContentItem, db: Session) -> None:
     if item.workflow_status != WorkflowStatus.approved:
         raise BusinessRuleViolation("Content must be approved before publishing")
 
-    open_tasks = (
-        db.query(ContentTask.id)
-        .filter(
-            ContentTask.content_item_id == item.id,
-            ContentTask.status != TaskStatus.done,
-        )
-        .count()
-    )
-    if open_tasks > 0:
-        raise BusinessRuleViolation("All content tasks must be done before publishing")
-
     blocking_tasks = (
         db.query(ContentTask.id)
         .filter(
@@ -386,6 +377,7 @@ def _ensure_publish_ready(item: ContentItem, db: Session) -> None:
 
 
 def _refresh_item_readiness(db: Session, *, item: ContentItem) -> None:
+    db.flush()
     missing_required_base_fields = _missing_required_base_fields(db, item=item)
     missing_required_platform_fields = _validate_platform_meta(
         db,
@@ -398,6 +390,7 @@ def _refresh_item_readiness(db: Session, *, item: ContentItem) -> None:
             ContentTask.content_item_id == item.id,
             ContentTask.status != TaskStatus.done,
             ContentTask.required_for_publish.is_(True),
+            ContentTask.can_block_publish.is_(True),
         )
         .count()
     )
@@ -418,6 +411,16 @@ def _refresh_item_readiness(db: Session, *, item: ContentItem) -> None:
     )
 
 
+def refresh_item_readiness(db: Session, *, item_id: uuid.UUID) -> ContentItem | None:
+    """Recompute persisted readiness after a related task or asset mutation."""
+    db.flush()
+    item = db.query(ContentItem).filter(ContentItem.id == item_id).first()
+    if item is None:
+        return None
+    _refresh_item_readiness(db, item=item)
+    return item
+
+
 def list_items(db: Session, *, product_id: uuid.UUID | None = None) -> list[ContentItem]:
     q = db.query(ContentItem)
     if product_id:
@@ -426,7 +429,14 @@ def list_items(db: Session, *, product_id: uuid.UUID | None = None) -> list[Cont
     return [_enrich_content_item(item, db) for item in items]
 
 
-def create_item(db: Session, *, payload: ContentItemCreate, actor: User | None) -> ContentItem:
+def create_item(
+    db: Session,
+    *,
+    payload: ContentItemCreate,
+    actor: User | None,
+    commit: bool = True,
+) -> ContentItem:
+    """Create a content item, optionally inside a caller-owned transaction."""
     _ensure_product_link_valid(db, product_id=payload.product_id)
     item_data = payload.model_dump()
     item_data["title"] = _normalize_optional_text(item_data.get("title"))
@@ -461,7 +471,8 @@ def create_item(db: Session, *, payload: ContentItemCreate, actor: User | None) 
         target_status=item.workflow_status,
         review_reason=item.review_reason,
     )
-    with transaction_boundary(db):
+    transaction = transaction_boundary(db) if commit else nullcontext()
+    with transaction:
         db.add(item)
         db.flush()
         _ensure_primary_asset_link_valid(
@@ -472,8 +483,8 @@ def create_item(db: Session, *, payload: ContentItemCreate, actor: User | None) 
             workflow_status=item.workflow_status,
             fallback=item.editorial_status,
         )
-        _refresh_item_readiness(db, item=item)
         created_tasks = ensure_default_tasks_for_item(db, item)
+        _refresh_item_readiness(db, item=item)
         _append_item_revision(
             db,
             item=item,
@@ -505,6 +516,7 @@ def create_item(db: Session, *, payload: ContentItemCreate, actor: User | None) 
                 "default_tasks_created": created_tasks,
             },
         )
+        db.flush()
     db.refresh(item)
     return _enrich_content_item(item, db)
 
@@ -796,22 +808,28 @@ def list_personal_tasks_page(
     filters: ContentTaskFilterParams,
     limit: int,
     offset: int,
-) -> tuple[list[ContentTask], int]:
+    sort_by: str,
+    sort_order: SortOrder,
+) -> tuple[list[ContentTask], int, str]:
     q = _apply_task_filters(db.query(ContentTask), filters=filters)
     q = q.filter(
         (ContentTask.assignee_user_id == user.id)
         | ((ContentTask.assignee_user_id.is_(None)) & (ContentTask.assignee_role == user.role))
     )
     total = q.order_by(None).count()
-    items = (
-        q.order_by(
-            ContentTask.priority.desc(), ContentTask.due_date.asc(), ContentTask.updated_at.desc()
-        )
-        .offset(offset)
-        .limit(limit)
-        .all()
-    )
-    return items, total
+    allowed_sort_fields = {
+        "created_at",
+        "updated_at",
+        "status",
+        "type",
+        "due_date",
+        "priority",
+    }
+    selected_sort = sort_by if sort_by in allowed_sort_fields else "updated_at"
+    sort_column = getattr(ContentTask, selected_sort)
+    ordering = sort_column.asc() if sort_order == SortOrder.asc else sort_column.desc()
+    items = q.order_by(ordering).offset(offset).limit(limit).all()
+    return items, total, selected_sort
 
 
 def list_task_views(db: Session, *, user: User) -> list[ContentTaskView]:
@@ -993,9 +1011,9 @@ def delete_task(db: Session, *, task_id: uuid.UUID, actor: User | None) -> None:
             before=snapshot,
         )
         item = db.query(ContentItem).filter(ContentItem.id == task.content_item_id).first()
+        db.delete(task)
         if item:
             _refresh_item_readiness(db, item=item)
-        db.delete(task)
 
 
 def _validate_task_assignment(
@@ -1505,7 +1523,9 @@ def get_planning_view(
         )
 
     required_open_tasks = [
-        task for task in tasks if task.required_for_publish and task.status != TaskStatus.done
+        task
+        for task in tasks
+        if task.required_for_publish and task.can_block_publish and task.status != TaskStatus.done
     ]
     if required_open_tasks:
         blockers.append("Required checklist tasks are open")

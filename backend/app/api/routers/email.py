@@ -661,11 +661,9 @@ def create_draft(
         },
     )
 
-    db.commit()
-    db.refresh(draft)
     record_audit_log(
         db,
-        actor=None,
+        actor=current_user,
         action="email.draft.create",
         entity_type="email_draft",
         entity_id=str(draft.id),
@@ -680,7 +678,7 @@ def create_draft(
     )
     emit_domain_event(
         db,
-        actor=None,
+        actor=current_user,
         event_name="email.risk.checked",
         entity_type="email_draft",
         entity_id=str(draft.id),
@@ -692,6 +690,7 @@ def create_draft(
         description="Email draft risk check completed",
     )
     db.commit()
+    db.refresh(draft)
     return draft
 
 
@@ -872,11 +871,9 @@ def refine_draft(
         },
     )
 
-    db.commit()
-    db.refresh(draft)
     record_audit_log(
         db,
-        actor=None,
+        actor=current_user,
         action="email.draft.refine",
         entity_type="email_draft",
         entity_id=str(draft.id),
@@ -891,7 +888,7 @@ def refine_draft(
     )
     emit_domain_event(
         db,
-        actor=None,
+        actor=current_user,
         event_name="email.risk.checked",
         entity_type="email_draft",
         entity_id=str(draft.id),
@@ -903,6 +900,7 @@ def refine_draft(
         description="Email draft risk check completed",
     )
     db.commit()
+    db.refresh(draft)
     return draft
 
 
@@ -1050,6 +1048,9 @@ def update_draft_content(
     draft.approval_required = True
     draft.handoff_status = EmailHandoffStatus.blocked
     draft.handoff_note = None
+    draft.handed_off_at = None
+    draft.handed_off_by_id = None
+    draft.handed_off_by_name = None
 
     reason = (payload.change_reason or "").strip() or "Manual editorial update"
     _append_draft_version(db, draft=draft, actor=current_user, reason=reason)
@@ -1121,6 +1122,10 @@ def set_draft_handoff(
         draft.handed_off_at = utcnow()
         draft.handed_off_by_id = current_user.id
         draft.handed_off_by_name = current_user.username
+    else:
+        draft.handed_off_at = None
+        draft.handed_off_by_id = None
+        draft.handed_off_by_name = None
 
     _add_draft_suggestion(
         db,

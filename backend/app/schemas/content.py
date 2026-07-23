@@ -4,7 +4,7 @@ import uuid
 from datetime import date, datetime
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.models.content import (
     ChecklistPhase,
@@ -64,6 +64,20 @@ class ContentItemUpdate(BaseModel):
     editorial_owner_name: str | None = None
     primary_asset_id: uuid.UUID | None = None
     last_change_summary: str | None = None
+
+    @model_validator(mode="after")
+    def required_patch_fields_must_not_be_null(self) -> "ContentItemUpdate":
+        for field in (
+            "platform",
+            "type",
+            "status",
+            "platform_meta_json",
+            "workflow_status",
+            "editorial_status",
+        ):
+            if field in self.model_fields_set and getattr(self, field) is None:
+                raise ValueError(f"{field} must not be null")
+        return self
 
 
 class ContentItemRevisionOut(BaseModel):
@@ -135,6 +149,19 @@ class ContentTaskUpdate(BaseModel):
     can_block_publish: bool | None = None
     checklist_snapshot_id: uuid.UUID | None = None
     notes: str | None = None
+
+    @model_validator(mode="after")
+    def required_patch_fields_must_not_be_null(self) -> "ContentTaskUpdate":
+        for field in (
+            "type",
+            "status",
+            "priority",
+            "required_for_publish",
+            "can_block_publish",
+        ):
+            if field in self.model_fields_set and getattr(self, field) is None:
+                raise ValueError(f"{field} must not be null")
+        return self
 
 
 class ContentTaskOut(ContentTaskCreate):

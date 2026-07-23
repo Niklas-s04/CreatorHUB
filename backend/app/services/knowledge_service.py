@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import uuid
+from typing import Any
 
 from sqlalchemy.orm import Session
 
@@ -10,6 +11,7 @@ from app.models.knowledge import (
     KnowledgeDocDraftLink,
     KnowledgeDocType,
     KnowledgeDocVersion,
+    KnowledgeSourceReviewStatus,
 )
 from app.models.user import User
 from app.models.workflow import WorkflowStatus
@@ -53,38 +55,46 @@ KNOWLEDGE_VERSION_FIELDS: set[str] = {
     "outdated_reason",
     "outdated_at",
 }
+KNOWLEDGE_PROMPT_TYPES: tuple[KnowledgeDocType, ...] = (
+    KnowledgeDocType.brand_voice,
+    KnowledgeDocType.policy,
+    KnowledgeDocType.template,
+)
+KNOWLEDGE_PROMPT_WORKFLOW_STATUSES: tuple[WorkflowStatus, ...] = (
+    WorkflowStatus.approved,
+    WorkflowStatus.published,
+)
 
 
-def get_knowledge_bundle(db: Session) -> dict[str, str]:
-    """Return concatenated brand_voice, policy, templates."""
-    docs = db.query(KnowledgeDoc).filter(KnowledgeDoc.is_outdated.is_(False)).all()
-    parts = {"brand_voice": [], "policy": [], "template": []}
-    for d in docs:
-        if d.type == KnowledgeDocType.brand_voice:
-            parts["brand_voice"].append(f"# {d.title}\n{d.content}")
-        elif d.type == KnowledgeDocType.policy:
-            parts["policy"].append(f"# {d.title}\n{d.content}")
-        elif d.type == KnowledgeDocType.template:
-            parts["template"].append(f"# {d.title}\n{d.content}")
-    return {
-        "brand_voice": "\n\n".join(parts["brand_voice"]).strip(),
-        "policy": "\n\n".join(parts["policy"]).strip(),
-        "templates": "\n\n".join(parts["template"]).strip(),
-    }
+def _prompt_ready_docs(db: Session) -> list[KnowledgeDoc]:
+    return (
+        db.query(KnowledgeDoc)
+        .filter(
+            KnowledgeDoc.is_outdated.is_(False),
+            KnowledgeDoc.workflow_status.in_(KNOWLEDGE_PROMPT_WORKFLOW_STATUSES),
+            KnowledgeDoc.source_review_status == KnowledgeSourceReviewStatus.approved,
+            KnowledgeDoc.type.in_(KNOWLEDGE_PROMPT_TYPES),
+        )
+        .order_by(KnowledgeDoc.created_at.asc(), KnowledgeDoc.id.asc())
+        .all()
+    )
 
 
-def get_knowledge_bundle_with_doc_ids(db: Session) -> tuple[dict[str, str], list[uuid.UUID]]:
-    docs = db.query(KnowledgeDoc).filter(KnowledgeDoc.is_outdated.is_(False)).all()
-    parts = {"brand_voice": [], "policy": [], "template": []}
+def _build_knowledge_bundle(
+    docs: list[KnowledgeDoc],
+) -> tuple[dict[str, str], list[uuid.UUID]]:
+    parts: dict[str, list[str]] = {"brand_voice": [], "policy": [], "template": []}
     doc_ids: list[uuid.UUID] = []
     for d in docs:
-        doc_ids.append(d.id)
         if d.type == KnowledgeDocType.brand_voice:
             parts["brand_voice"].append(f"# {d.title}\n{d.content}")
         elif d.type == KnowledgeDocType.policy:
             parts["policy"].append(f"# {d.title}\n{d.content}")
         elif d.type == KnowledgeDocType.template:
             parts["template"].append(f"# {d.title}\n{d.content}")
+        else:
+            continue
+        doc_ids.append(d.id)
     return (
         {
             "brand_voice": "\n\n".join(parts["brand_voice"]).strip(),
@@ -93,6 +103,16 @@ def get_knowledge_bundle_with_doc_ids(db: Session) -> tuple[dict[str, str], list
         },
         doc_ids,
     )
+
+
+def get_knowledge_bundle(db: Session) -> dict[str, str]:
+    """Return approved, source-reviewed brand voice, policy, and templates."""
+    bundle, _ = _build_knowledge_bundle(_prompt_ready_docs(db))
+    return bundle
+
+
+def get_knowledge_bundle_with_doc_ids(db: Session) -> tuple[dict[str, str], list[uuid.UUID]]:
+    return _build_knowledge_bundle(_prompt_ready_docs(db))
 
 
 def _validate_doc_fields(*, title: str | None = None, content: str | None = None) -> None:
@@ -273,8 +293,8 @@ def update_doc(
         outdated_reason=next_outdated_reason,
     )
 
-    before: dict[str, str] = {}
-    after: dict[str, str] = {}
+    before: dict[str, Any] = {}
+    after: dict[str, Any] = {}
     previous_review_reason = doc.review_reason
 
     changed_fields = {key for key in updates.keys() if getattr(doc, key) != updates[key]}

@@ -1,10 +1,22 @@
 from __future__ import annotations
 
+import uuid
+
+import pytest
+from sqlalchemy import UniqueConstraint
 from sqlalchemy.orm import Session
 
 from app.models.content import ContentItem
 from app.models.product import Product
+from app.models.project import (
+    Project,
+    ProjectCategory,
+    project_content_links,
+    project_product_links,
+)
 from app.models.user import UserRole
+from app.schemas.content import ContentItemCreate
+from app.services import content_service, project_service
 from tests.factories import create_tokens_for_user, create_user
 
 
@@ -98,6 +110,75 @@ def test_project_full_lifecycle_with_inline_content_and_product(
     assert update_response.json()["preview_attention_required"] is True
 
 
+def test_project_and_category_names_reject_whitespace(client, db_session: Session) -> None:
+    editor = create_user(db_session, username="project_blank_name_editor", role=UserRole.editor)
+    token, _ = create_tokens_for_user(db_session, user=editor)
+
+    project_response = client.post(
+        "/api/v1/projects",
+        json={"title": "   "},
+        headers=_auth(token),
+    )
+    category_response = client.post(
+        "/api/v1/projects/categories",
+        json={"name": "   "},
+        headers=_auth(token),
+    )
+
+    assert project_response.status_code == 422
+    assert category_response.status_code == 422
+    assert project_response.json()["code"] == "VALIDATION_ERROR"
+    assert category_response.json()["code"] == "VALIDATION_ERROR"
+
+
+def test_create_linked_content_rolls_back_content_when_link_audit_fails(
+    db_session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    editor = create_user(
+        db_session,
+        username="project_atomic_content_editor",
+        role=UserRole.editor,
+    )
+    project = Project(title="Atomic content project")
+    db_session.add(project)
+    db_session.commit()
+
+    def _fail_link_audit(*_args, **_kwargs):
+        raise RuntimeError("forced project link audit failure")
+
+    monkeypatch.setattr(project_service, "record_audit_log", _fail_link_audit)
+
+    with pytest.raises(RuntimeError, match="forced project link audit failure"):
+        project_service.create_linked_content(
+            db_session,
+            project_id=project.id,
+            payload=ContentItemCreate(title="Must roll back"),
+            actor=editor,
+        )
+
+    db_session.expire_all()
+    assert db_session.query(ContentItem).filter(ContentItem.title == "Must roll back").count() == 0
+    persisted_project = db_session.query(Project).filter(Project.id == project.id).one()
+    assert persisted_project.content_items == []
+
+
+def test_content_create_keeps_standalone_commit_default(db_session: Session) -> None:
+    editor = create_user(
+        db_session,
+        username="standalone_content_editor",
+        role=UserRole.editor,
+    )
+
+    item = content_service.create_item(
+        db_session,
+        payload=ContentItemCreate(title="Standalone committed content"),
+        actor=editor,
+    )
+    db_session.rollback()
+
+    assert db_session.query(ContentItem).filter(ContentItem.id == item.id).one().title == item.title
+
+
 def test_project_links_existing_records_and_supports_reciprocal_filters(
     client, db_session: Session
 ) -> None:
@@ -146,3 +227,83 @@ def test_viewer_can_read_but_cannot_create_projects(client, db_session: Session)
 
     assert list_response.status_code == 200
     assert create_response.status_code == 403
+
+
+def test_project_owner_must_exist_and_can_be_cleared(client, db_session: Session) -> None:
+    editor = create_user(db_session, username="project_owner_editor", role=UserRole.editor)
+    owner = create_user(db_session, username="project_owner", role=UserRole.viewer)
+    token, _ = create_tokens_for_user(db_session, user=editor)
+
+    invalid_create = client.post(
+        "/api/v1/projects",
+        json={
+            "title": "Invalid owner",
+            "owner_user_id": "00000000-0000-0000-0000-000000000001",
+        },
+        headers=_auth(token),
+    )
+    assert invalid_create.status_code == 400
+
+    create_response = client.post(
+        "/api/v1/projects",
+        json={"title": "Owned project", "owner_user_id": str(owner.id)},
+        headers=_auth(token),
+    )
+    assert create_response.status_code == 200
+    project = create_response.json()
+    assert project["owner_user_id"] == str(owner.id)
+
+    invalid_update = client.patch(
+        f"/api/v1/projects/{project['id']}",
+        json={"owner_user_id": "00000000-0000-0000-0000-000000000001"},
+        headers=_auth(token),
+    )
+    assert invalid_update.status_code == 400
+
+    clear_response = client.patch(
+        f"/api/v1/projects/{project['id']}",
+        json={"owner_user_id": None},
+        headers=_auth(token),
+    )
+    assert clear_response.status_code == 200
+    assert clear_response.json()["owner_user_id"] is None
+
+
+def test_deleting_project_owner_sets_reference_to_null(client, db_session: Session) -> None:
+    editor = create_user(db_session, username="project_owner_delete_editor", role=UserRole.editor)
+    owner = create_user(db_session, username="project_owner_delete", role=UserRole.viewer)
+    token, _ = create_tokens_for_user(db_session, user=editor)
+    response = client.post(
+        "/api/v1/projects",
+        json={"title": "Owner deletion", "owner_user_id": str(owner.id)},
+        headers=_auth(token),
+    )
+    assert response.status_code == 200
+    project_id = uuid.UUID(response.json()["id"])
+
+    db_session.delete(owner)
+    db_session.commit()
+    db_session.expire_all()
+
+    project = db_session.query(Project).filter(Project.id == project_id).one()
+    assert project.owner_user_id is None
+
+
+def test_reciprocal_project_link_columns_are_indexed() -> None:
+    content_indexes = {index.name for index in project_content_links.indexes}
+    product_indexes = {index.name for index in project_product_links.indexes}
+
+    assert "ix_project_content_links_content_item_id" in content_indexes
+    assert "ix_project_product_links_product_id" in product_indexes
+
+
+def test_project_category_name_has_case_insensitive_unique_index() -> None:
+    indexes = {index.name: index for index in ProjectCategory.__table__.indexes}
+    name_index = indexes["ix_project_categories_name_ci"]
+
+    assert name_index.unique is True
+    assert "lower(" in str(name_index.expressions[0]).lower()
+    assert not any(
+        isinstance(constraint, UniqueConstraint)
+        for constraint in ProjectCategory.__table__.constraints
+    )

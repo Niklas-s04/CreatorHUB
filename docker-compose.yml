@@ -22,6 +22,19 @@ services:
       timeout: 3s
       retries: 10
 
+  migrate:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?Missing DATABASE_URL environment variable}
+    depends_on:
+      db:
+        condition: service_healthy
+    command: ["python", "-m", "alembic", "upgrade", "head"]
+
   backend:
     build:
       context: ./backend
@@ -40,8 +53,14 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     ports:
       - "${BACKEND_BIND_HOST:-127.0.0.1}:${BACKEND_PORT:-31800}:31800"
+    volumes:
+      - uploads_data:/data/uploads
+      - cache_data:/data/cache
+      - exports_data:/data/exports
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:31800/health/ready | grep -q '\"status\":\"ready\"' || exit 1"]
       interval: 20s
@@ -63,9 +82,15 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
       backend:
         condition: service_healthy
     command: ["python", "-m", "app.workers.run_worker"]
+    volumes:
+      - uploads_data:/data/uploads
+      - cache_data:/data/cache
+      - exports_data:/data/exports
     healthcheck:
       test: ["CMD", "python", "-c", "from app.workers.queue import redis_conn; redis_conn.ping()"]
       interval: 30s
@@ -92,3 +117,6 @@ services:
 
 volumes:
   db_data:
+  uploads_data:
+  cache_data:
+  exports_data:

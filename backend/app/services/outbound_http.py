@@ -83,8 +83,9 @@ def _resolve_host(hostname: str) -> set[str]:
     ips: set[str] = set()
     for r in records:
         sockaddr = r[4]
-        if sockaddr and sockaddr[0]:
-            ips.add(sockaddr[0])
+        resolved_ip = sockaddr[0] if sockaddr else None
+        if isinstance(resolved_ip, str) and resolved_ip:
+            ips.add(resolved_ip)
     return ips
 
 
@@ -96,6 +97,7 @@ def _validate_url(
     allowed_ports: set[int],
     allowed_hosts: set[str] | None,
     sensitive_hosts: set[str] | None,
+    allow_localhost: bool = False,
 ) -> tuple[str, str, int]:
     parsed = urlparse(url)
     scheme = (parsed.scheme or "").lower()
@@ -103,7 +105,7 @@ def _validate_url(
 
     if not host:
         raise OutboundRequestError("Missing host")
-    if host == "localhost":
+    if host == "localhost" and not allow_localhost:
         raise OutboundRequestError("localhost blocked")
 
     if require_https and scheme != "https":
@@ -128,19 +130,19 @@ def _validate_url(
         raise OutboundRequestError("Sensitive target requires explicit allowlist")
 
     try:
-        ip = ipaddress.ip_address(host)
-        ips = {str(ip)}
-    except ValueError:
+        parsed_ip = ipaddress.ip_address(host)
+        ips = {str(parsed_ip)}
+    except ValueError as exc:
         ips1 = _resolve_host(host)
         time.sleep(0.02)
         ips2 = _resolve_host(host)
         ips = ips1 & ips2
         if not ips:
-            raise OutboundRequestError("DNS resolution unstable or empty")
+            raise OutboundRequestError("DNS resolution unstable or empty") from exc
 
     if not allow_private_ips and settings.OUTBOUND_BLOCK_PRIVATE_RANGES:
-        for ip in ips:
-            if _is_blocked_ip(ip):
+        for resolved_ip in ips:
+            if _is_blocked_ip(resolved_ip):
                 raise OutboundRequestError("Target resolves to blocked IP range")
 
     return scheme, host, port
@@ -191,7 +193,10 @@ def request_outbound(
     retries: int | None = None,
     require_https: bool | None = None,
     allow_private_ips: bool = False,
+    allow_localhost: bool = False,
     allowed_hosts: set[str] | None = None,
+    allowed_ports: set[int] | None = None,
+    use_configured_allowlist: bool = True,
     db: Session | None = None,
 ) -> OutboundResponse:
     request_headers = {"User-Agent": "creatorhub-outbound/1.0", **(headers or {})}
@@ -206,7 +211,14 @@ def request_outbound(
     retry_count = retries if retries is not None else settings.OUTBOUND_RETRIES
     enforce_https = settings.OUTBOUND_REQUIRE_HTTPS if require_https is None else require_https
 
-    ports = _allowed_ports()
+    ports = set(allowed_ports) if allowed_ports is not None else _allowed_ports()
+    effective_allowed_hosts = (
+        {host.lower().strip(".") for host in allowed_hosts}
+        if allowed_hosts is not None
+        else _allowlist_hosts()
+        if use_configured_allowlist
+        else None
+    )
     sensitive_hosts = _sensitive_allowlist_hosts()
 
     session = requests.Session()
@@ -234,8 +246,9 @@ def request_outbound(
                 current_url,
                 require_https=enforce_https,
                 allow_private_ips=allow_private_ips,
+                allow_localhost=allow_localhost,
                 allowed_ports=ports,
-                allowed_hosts=allowed_hosts,
+                allowed_hosts=effective_allowed_hosts,
                 sensitive_hosts=sensitive_hosts,
             )
             resp = session.request(

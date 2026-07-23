@@ -8,10 +8,22 @@ export type ProductDto = {
   category: string | null
   condition: string | null
   status: ProductStatusDto
+  purchase_price: number | null
+  purchase_date: string | null
   current_value: number | null
   currency: string | null
+  storage_location: string | null
+  serial_number: string | null
   quantity: number | null
   notes_md: string | null
+  workflow_status: string | null
+  review_reason: string | null
+  project_ids: string[]
+  status_changed_at: string | null
+  reviewed_by_id: string | null
+  reviewed_by_name: string | null
+  reviewed_at: string | null
+  created_at: string | null
   updated_at: string | null
 }
 
@@ -29,11 +41,13 @@ export type ProductAssetDto = {
 
 export type ProductTransactionDto = {
   id: string
-  tx_type: string
-  tx_date: string | null
+  product_id: string
+  type: string
+  date: string
   amount: number | null
-  currency: string | null
-  note: string | null
+  currency: string
+  counterparty: string | null
+  notes: string | null
 }
 
 export type KnowledgeDocDto = {
@@ -107,11 +121,26 @@ export type ProductDetailVm = {
   title: string
   brand: string
   model: string
+  category: string
   status: ProductStatusDto
   condition: string
+  purchasePrice: number | null
+  purchaseDate: string
   currentValue: number | null
   currency: string
+  storageLocation: string
+  serialNumber: string
+  quantity: number
   notes: string
+  workflowStatus: string
+  reviewReason: string
+  projectIds: string[]
+  statusChangedAt: string
+  reviewedById: string
+  reviewedByName: string
+  reviewedAt: string
+  createdAt: string
+  updatedAt: string
 }
 
 export type ProductAssetVm = {

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { apiFetch } from '../../../../api'
 import { PRODUCT_STATUS_OPTIONS } from '../../../../entities/product/model'
@@ -15,6 +15,13 @@ import { useAuthz } from '../../../../shared/hooks/useAuthz'
 import { useI18n } from '../../../../shared/i18n/i18n'
 import { getErrorMessage } from '../../../../shared/lib/errors'
 import { ListSkeleton } from '../../../../shared/ui/states/ListSkeleton'
+import {
+  buildProductMasterPatch,
+  initialMasterForm,
+  masterFormsEqual,
+  productToMasterForm,
+} from '../model/productMasterForm'
+import { useImageSearchJobPolling } from '../model/useImageSearchJobPolling'
 import { AssetCard } from './AssetCard'
 import { useThumb } from './useThumb'
 
@@ -51,21 +58,6 @@ type EmailThreadRef = {
   updated_at: string
 }
 
-type ProductMasterForm = {
-  title: string
-  brand: string
-  model: string
-  category: string
-  condition: string
-  storage_location: string
-  serial_number: string
-  purchase_price: string
-  purchase_date: string
-  current_value: string
-  currency: string
-  notes_md: string
-}
-
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null
 }
@@ -88,23 +80,6 @@ function formatDate(value?: string | null): string {
   }
 }
 
-function initialMasterForm(): ProductMasterForm {
-  return {
-    title: '',
-    brand: '',
-    model: '',
-    category: '',
-    condition: 'good',
-    storage_location: '',
-    serial_number: '',
-    purchase_price: '',
-    purchase_date: '',
-    current_value: '',
-    currency: 'EUR',
-    notes_md: '',
-  }
-}
-
 export default function ProductDetailPageView() {
   const { id } = useParams()
   const { hasPermission } = useAuthz()
@@ -112,9 +87,13 @@ export default function ProductDetailPageView() {
 
   const [err, setErr] = useState<string | null>(null)
   const [masterSaving, setMasterSaving] = useState(false)
-  const [masterForm, setMasterForm] = useState<ProductMasterForm>(initialMasterForm)
+  const [masterForm, setMasterForm] = useState(initialMasterForm)
+  const [masterBaseline, setMasterBaseline] = useState(initialMasterForm)
+  const masterProductIdRef = useRef<string | null>(null)
+  const contentTitleInputRef = useRef<HTMLInputElement>(null)
 
   const [status, setStatus] = useState('active')
+  const [statusBaseline, setStatusBaseline] = useState('active')
   const [txDate, setTxDate] = useState(() => new Date().toISOString().slice(0, 10))
   const [amount, setAmount] = useState('')
   const [statusSaving, setStatusSaving] = useState(false)
@@ -166,31 +145,32 @@ export default function ProductDetailPageView() {
     return approved.find((asset) => asset.isPrimary) || approved[0] || null
   }, [effectiveAssets])
   const primaryThumb = useThumb(primary ? String(primary.id) : null)
+  const masterDirty = !masterFormsEqual(masterForm, masterBaseline)
+  const statusDirty = status !== statusBaseline
 
   useEffect(() => {
     if (!product) return
-    setMasterForm({
-      title: product.title || '',
-      brand: product.brand || '',
-      model: product.model || '',
-      category: '',
-      condition: product.condition || 'good',
-      storage_location: '',
-      serial_number: '',
-      purchase_price: '',
-      purchase_date: '',
-      current_value: product.currentValue != null ? String(product.currentValue) : '',
-      currency: 'EUR',
-      notes_md: product.notes || '',
-    })
-    setStatus(product.status)
-    if (!imageQuery) {
+
+    const nextForm = productToMasterForm(product)
+    const productChanged = masterProductIdRef.current !== product.id
+
+    if (productChanged || !masterDirty) {
+      masterProductIdRef.current = product.id
+      setMasterForm(nextForm)
+      setMasterBaseline(nextForm)
+    }
+
+    if (productChanged || !statusDirty) {
+      setStatus(product.status)
+      setStatusBaseline(product.status)
+    }
+    if (productChanged) {
       const q = [product.brand, product.model, product.title].filter(Boolean).join(' ')
       setImageQuery(q)
     }
-  }, [product])
+  }, [masterDirty, product, statusDirty])
 
-  async function loadWorkspaceData() {
+  const loadWorkspaceData = useCallback(async () => {
     if (!id || !product) return
     try {
       setErr(null)
@@ -306,38 +286,26 @@ export default function ProductDetailPageView() {
     } finally {
       setWorkspaceLoading(false)
     }
-  }
+  }, [canReadContent, canReadEmail, canViewAudit, id, product])
 
   useEffect(() => {
     void loadWorkspaceData()
-  }, [id, product?.id, canReadContent, canViewAudit, canReadEmail])
+  }, [loadWorkspaceData])
 
   async function saveMasterData() {
-    if (!id || !canWriteProduct) return
+    if (!id || !canWriteProduct || !masterDirty) return
+    const submittedForm = { ...masterForm }
+
     setMasterSaving(true)
     try {
       setErr(null)
+      const patch = buildProductMasterPatch(submittedForm, masterBaseline)
+      if (!Object.keys(patch).length) return
       await apiFetch(`/products/${id}`, {
         method: 'PATCH',
-        body: JSON.stringify({
-          title: masterForm.title.trim(),
-          brand: masterForm.brand.trim() || null,
-          model: masterForm.model.trim() || null,
-          category: masterForm.category.trim() || null,
-          condition: masterForm.condition,
-          storage_location: masterForm.storage_location.trim() || null,
-          serial_number: masterForm.serial_number.trim() || null,
-          purchase_price: masterForm.purchase_price
-            ? Number(masterForm.purchase_price.replace(',', '.'))
-            : null,
-          purchase_date: masterForm.purchase_date || null,
-          current_value: masterForm.current_value
-            ? Number(masterForm.current_value.replace(',', '.'))
-            : null,
-          currency: masterForm.currency.trim() || 'EUR',
-          notes_md: masterForm.notes_md || null,
-        }),
+        body: JSON.stringify(patch),
       })
+      setMasterBaseline(submittedForm)
       await productQuery.refetch()
     } catch (e: unknown) {
       setErr(getErrorMessage(e))
@@ -359,6 +327,7 @@ export default function ProductDetailPageView() {
           amount: amount ? Number(amount.replace(',', '.')) : null,
         }),
       })
+      setStatusBaseline(status)
       setAmount('')
       await Promise.all([productQuery.refetch(), transactionsQuery.refetch(), loadWorkspaceData()])
     } catch (e: unknown) {
@@ -459,35 +428,33 @@ export default function ProductDetailPageView() {
     }
   }
 
-  async function pollJob() {
-    if (!jobId) return
-    try {
-      const result = parseImageSearchJobDto(await apiFetch<unknown>(`/images/jobs/${jobId}`))
-      setJobStatus(result.status)
-      if (result.status === 'finished') {
-        setJobResult(result.result)
-        await Promise.all([assetsQuery.refetch(), loadWorkspaceData()])
-      }
-      if (result.status === 'failed') {
-        setErr(result.error || 'Job failed')
-      }
-    } catch (e: unknown) {
-      setErr(getErrorMessage(e))
-    }
-  }
+  useImageSearchJobPolling({
+    jobId,
+    poll: async (currentJobId) =>
+      parseImageSearchJobDto(await apiFetch<unknown>(`/images/jobs/${currentJobId}`)),
+    onStatus: setJobStatus,
+    onFinished: (result) => {
+      setJobResult(result)
+      setJobId(null)
+      void assetsQuery.refetch()
+    },
+    onFailed: (error) => {
+      setErr(error || 'Job failed')
+      setJobId(null)
+    },
+    onError: (error) => {
+      setErr(getErrorMessage(error))
+      setJobId(null)
+    },
+  })
 
-  useEffect(() => {
-    if (!jobId) return
-    let timer: ReturnType<typeof setTimeout> | null = null
-    const tick = async () => {
-      await pollJob()
-      timer = setTimeout(tick, 1200)
-    }
-    void tick()
-    return () => {
-      if (timer) clearTimeout(timer)
-    }
-  }, [jobId])
+  function prepareContentReference() {
+    document.getElementById('content')?.scrollIntoView?.({
+      behavior: 'smooth',
+      block: 'start',
+    })
+    contentTitleInputRef.current?.focus()
+  }
 
   async function review(assetId: string, state: 'approved' | 'rejected') {
     if (!canReviewAsset) return
@@ -602,11 +569,7 @@ export default function ProductDetailPageView() {
           </Link>
           <button
             className="btn primary"
-            onClick={() => {
-              ;<h3>
-                {language === 'en' ? 'Value history & transactions' : 'Wertverlauf & Transaktionen'}
-              </h3>
-            }}
+            onClick={prepareContentReference}
             disabled={!canManageContent}
           >
             {language === 'en' ? 'Prepare content reference' : 'Content-Bezug vorbereiten'}
@@ -622,7 +585,7 @@ export default function ProductDetailPageView() {
           <button
             className="btn primary"
             onClick={saveMasterData}
-            disabled={!canWriteProduct || masterSaving}
+            disabled={!canWriteProduct || masterSaving || !masterDirty}
           >
             {masterSaving
               ? language === 'en'
@@ -978,6 +941,7 @@ export default function ProductDetailPageView() {
 
         <div className="row">
           <input
+            ref={contentTitleInputRef}
             className="grow"
             value={contentTitle}
             onChange={(event) => setContentTitle(event.target.value)}

@@ -52,6 +52,7 @@ export default function SettingsPage() {
   const [err, setErr] = useState<string | null>(null)
   const [errKind, setErrKind] = useState<ErrorKind>('technical')
   const [loading, setLoading] = useState(true)
+  const [loadFailed, setLoadFailed] = useState(false)
 
   const changePasswordForm = useForm<ChangePasswordFormValues>({
     resolver: zodResolver(changePasswordSchema),
@@ -80,6 +81,7 @@ export default function SettingsPage() {
       setErr(null)
       setErrKind('technical')
       setLoading(true)
+      setLoadFailed(false)
       const d = await apiFetch<unknown>('/knowledge')
       setDocs(
         parseKnowledgeDocsPage(d)
@@ -95,6 +97,7 @@ export default function SettingsPage() {
       setHistory(loginRows)
       setMfaEnabled(mfa.enabled)
     } catch (e: unknown) {
+      setLoadFailed(true)
       setErrKind(getErrorKind(e))
       setErr(getErrorMessage(e))
     } finally {
@@ -196,7 +199,7 @@ export default function SettingsPage() {
     }
   }
 
-  async function save(doc: KnowledgeDocVm) {
+  async function save(doc: KnowledgeDocVm): Promise<boolean> {
     try {
       setErr(null)
       await apiFetch(`/knowledge/${doc.id}`, {
@@ -218,11 +221,13 @@ export default function SettingsPage() {
       })
       await load()
       toast.success(t('settings.documentSaved'))
+      return true
     } catch (e: unknown) {
       const message = getErrorMessage(e)
       setErrKind(getErrorKind(e))
       setErr(message)
       toast.error(message)
+      return false
     }
   }
 
@@ -242,7 +247,7 @@ export default function SettingsPage() {
         </div>
       )}
 
-      {!loading && err && (
+      {!loading && loadFailed && err && (
         <ErrorState
           title={t('settings.loadError')}
           message={err}
@@ -252,7 +257,7 @@ export default function SettingsPage() {
         />
       )}
 
-      {!loading && !err && (
+      {!loading && !loadFailed && (
         <>
           <div className="card section-gap">
             <h3>{t('settings.appLanguageCardTitle')}</h3>
@@ -593,7 +598,7 @@ export default function SettingsPage() {
 
 type DocEditorProps = {
   doc: KnowledgeDocVm
-  onSave: (doc: KnowledgeDocVm) => void
+  onSave: (doc: KnowledgeDocVm) => Promise<boolean>
 }
 
 function DocEditor({ doc, onSave }: DocEditorProps) {
@@ -654,8 +659,8 @@ function DocEditor({ doc, onSave }: DocEditorProps) {
     reset,
   ])
 
-  function submit(values: KnowledgeDocFormValues) {
-    onSave({
+  async function submit(values: KnowledgeDocFormValues) {
+    const saved = await onSave({
       ...doc,
       title: values.title,
       content: values.content,
@@ -669,7 +674,7 @@ function DocEditor({ doc, onSave }: DocEditorProps) {
       isOutdated: values.isOutdated,
       outdatedReason: values.outdatedReason,
     })
-    reset(values)
+    if (saved) reset(values)
   }
 
   return (

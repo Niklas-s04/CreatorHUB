@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import uuid
 from datetime import date, datetime
-from typing import Any
+from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.models.product import ProductCondition, ProductStatus, TransactionType, ValueSource
 from app.models.workflow import WorkflowStatus
@@ -27,27 +27,63 @@ class ProductBase(BaseModel):
     workflow_status: WorkflowStatus = WorkflowStatus.draft
     review_reason: str | None = None
 
+    @field_validator("title")
+    @classmethod
+    def product_title_must_not_be_blank(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("title must not be blank")
+        return value
+
 
 class ProductCreate(ProductBase):
-    pass
+    status: Literal[ProductStatus.active] = ProductStatus.active
+    workflow_status: Literal[WorkflowStatus.draft] = WorkflowStatus.draft
+    review_reason: Literal[None] = None
+
+    @model_validator(mode="after")
+    def monetary_values_must_not_be_negative(self) -> "ProductCreate":
+        for field in ("purchase_price", "current_value"):
+            value = getattr(self, field)
+            if value is not None and value < 0:
+                raise ValueError(f"{field} must not be negative")
+        return self
 
 
 class ProductUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     title: str | None = None
     brand: str | None = None
     model: str | None = None
     category: str | None = None
     condition: ProductCondition | None = None
-    purchase_price: float | None = None
+    purchase_price: float | None = Field(default=None, ge=0)
     purchase_date: date | None = None
-    current_value: float | None = None
+    current_value: float | None = Field(default=None, ge=0)
     currency: str | None = None
     storage_location: str | None = None
     serial_number: str | None = None
     notes_md: str | None = None
-    status: ProductStatus | None = None
     workflow_status: WorkflowStatus | None = None
     review_reason: str | None = None
+
+    @field_validator("title")
+    @classmethod
+    def product_title_must_not_be_blank(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        value = value.strip()
+        if not value:
+            raise ValueError("title must not be blank")
+        return value
+
+    @model_validator(mode="after")
+    def required_patch_fields_must_not_be_null(self) -> "ProductUpdate":
+        for field in ("title", "condition", "currency", "workflow_status"):
+            if field in self.model_fields_set and getattr(self, field) is None:
+                raise ValueError(f"{field} must not be null")
+        return self
 
 
 class ProductOut(ProductBase):
@@ -66,7 +102,7 @@ class ProductOut(ProductBase):
 class ProductTransactionCreate(BaseModel):
     type: TransactionType
     date: date
-    amount: float | None = None
+    amount: float | None = Field(default=None, ge=0)
     currency: str = "EUR"
     counterparty: str | None = None
     notes: str | None = None
@@ -81,7 +117,7 @@ class ProductTransactionOut(ProductTransactionCreate):
 
 class ProductValueHistoryCreate(BaseModel):
     date: date
-    value: float
+    value: float = Field(ge=0)
     currency: str = "EUR"
     source: ValueSource = ValueSource.manual
 
@@ -96,7 +132,7 @@ class ProductValueHistoryOut(ProductValueHistoryCreate):
 class ProductStatusChange(BaseModel):
     status: ProductStatus
     date: date
-    amount: float | None = None
+    amount: float | None = Field(default=None, ge=0)
     currency: str = "EUR"
     notes: str | None = None
     counterparty: str | None = None

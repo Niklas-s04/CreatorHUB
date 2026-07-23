@@ -11,6 +11,7 @@ from app.models.registration_request import RegistrationRequestStatus
 class TokenOut(BaseModel):
     access_token: str
     token_type: str = "bearer"
+    account_deletion_canceled: bool = False
 
 
 class SessionOut(BaseModel):

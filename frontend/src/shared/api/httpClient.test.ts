@@ -48,6 +48,10 @@ describe('createHttpClient', () => {
     expect(request?.credentials).toBe('include')
     expect(headers.get('Content-Type')).toBe('application/json')
     expect(headers.get('X-Test')).toBe('yes')
+    expect(request).not.toHaveProperty('timeoutMs')
+    expect(request).not.toHaveProperty('retries')
+    expect(request).not.toHaveProperty('retryDelayMs')
+    expect(request).not.toHaveProperty('shouldRetry')
   })
 
   it('returns text responses without JSON parsing', async () => {
@@ -84,7 +88,7 @@ describe('createHttpClient', () => {
       }).request('/profile')
     ).rejects.toMatchObject({ status: 401, details: 'expired' })
 
-    expect(onUnauthorized).toHaveBeenCalledTimes(2)
+    expect(onUnauthorized).toHaveBeenCalledTimes(1)
   })
 
   it('retries idempotent network failures', async () => {
@@ -143,5 +147,51 @@ describe('createHttpClient', () => {
 
     expect(onUnauthorizedRetry).toHaveBeenCalledTimes(1)
     expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+
+  it('shares one refresh across parallel unauthorized requests', async () => {
+    let resolveRefresh: (() => void) | undefined
+    const refreshPending = new Promise<void>((resolve) => {
+      resolveRefresh = resolve
+    })
+    const onUnauthorizedRetry = vi.fn(() => refreshPending)
+    const fetchMock = vi.mocked(fetch)
+    fetchMock
+      .mockResolvedValueOnce(textResponse('expired', 401))
+      .mockResolvedValueOnce(textResponse('expired', 401))
+      .mockResolvedValueOnce(jsonResponse({ id: 1 }))
+      .mockResolvedValueOnce(jsonResponse({ id: 2 }))
+
+    const client = createClient({ onUnauthorizedRetry })
+    const first = client.request('/first')
+    const second = client.request('/second')
+    await vi.waitFor(() => expect(onUnauthorizedRetry).toHaveBeenCalledTimes(1))
+    resolveRefresh?.()
+
+    await expect(Promise.all([first, second])).resolves.toEqual([{ id: 1 }, { id: 2 }])
+    expect(onUnauthorizedRetry).toHaveBeenCalledTimes(1)
+  })
+
+  it('honors a caller abort signal without retrying', async () => {
+    const fetchMock = vi.mocked(fetch)
+    fetchMock.mockImplementation(
+      (_input, init) =>
+        new Promise((_resolve, reject) => {
+          init?.signal?.addEventListener(
+            'abort',
+            () => reject(new DOMException('Aborted', 'AbortError')),
+            { once: true }
+          )
+        })
+    )
+    const controller = new AbortController()
+    const result = createClient().request('/slow', {
+      signal: controller.signal,
+      retries: 2,
+    })
+    controller.abort()
+
+    await expect(result).rejects.toMatchObject({ name: 'AbortError' })
+    expect(fetchMock).toHaveBeenCalledTimes(1)
   })
 })

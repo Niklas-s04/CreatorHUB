@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 from typing import Optional
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import AnyHttpUrl, BaseModel, ConfigDict, model_validator
 
 from app.models.asset import AssetKind, AssetOwnerType, AssetReviewState, AssetSource
 from app.models.workflow import WorkflowStatus
@@ -39,11 +39,25 @@ class AssetBase(BaseModel):
     is_primary: bool = False
 
 
-class AssetCreateWeb(AssetBase):
-    pass
+class AssetCreateWeb(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    owner_type: AssetOwnerType
+    owner_id: uuid.UUID
+    kind: AssetKind = AssetKind.image
+    url: AnyHttpUrl
+    title: Optional[str] = None
+    license_type: Optional[str] = None
+    attribution: Optional[str] = None
+    source_name: Optional[str] = None
+    source_url: Optional[str] = None
+    license_url: Optional[str] = None
+    is_primary: bool = False
 
 
 class AssetUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     title: Optional[str] = None
     license_type: Optional[str] = None
     attribution: Optional[str] = None
@@ -55,6 +69,13 @@ class AssetUpdate(BaseModel):
     workflow_status: Optional[WorkflowStatus] = None
     review_reason: Optional[str] = None
     is_primary: Optional[bool] = None
+
+    @model_validator(mode="after")
+    def required_patch_fields_must_not_be_null(self) -> "AssetUpdate":
+        for field in ("review_state", "workflow_status", "is_primary"):
+            if field in self.model_fields_set and getattr(self, field) is None:
+                raise ValueError(f"{field} must not be null")
+        return self
 
 
 class AssetOut(AssetBase):

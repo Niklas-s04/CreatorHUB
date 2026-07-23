@@ -200,10 +200,10 @@ class TestDeleteAccountEndpoint:
             "set-cookie" in response.headers or "Set-Cookie" in response.headers or True
         )  # Flexible check
 
-    def test_delete_account_blocks_relogin_during_grace_period(
+    def test_relogin_during_grace_period_restores_account(
         self, db_session: Session, client, user_for_deletion
     ):
-        """Sprint-strict deletion deactivates the user, so re-login is blocked."""
+        """Verified login restores an account while its deletion grace period is active."""
         user, token = user_for_deletion
 
         delete_response = client.delete(
@@ -211,6 +211,41 @@ class TestDeleteAccountEndpoint:
             headers=_csrf_headers(client, token),
         )
         assert delete_response.status_code == status.HTTP_200_OK
+
+        relogin_response = client.post(
+            "/api/v1/auth/token",
+            data={"username": user.username, "password": "test_password_123"},
+        )
+        assert relogin_response.status_code == status.HTTP_200_OK
+        assert relogin_response.json()["account_deletion_canceled"] is True
+        db_session.refresh(user)
+        assert user.is_active is True
+        assert user.deletion_requested_at is None
+        assert (
+            db_session.query(AuditLog)
+            .filter(
+                AuditLog.actor_id == user.id,
+                AuditLog.action == "user.account.deletion_canceled",
+            )
+            .count()
+            == 1
+        )
+
+    def test_relogin_after_grace_period_does_not_restore_account(
+        self, db_session: Session, client, user_for_deletion
+    ):
+        """A delayed purge must not extend the documented restoration window."""
+        user, token = user_for_deletion
+        delete_response = client.delete(
+            "/api/v1/user/account",
+            headers=_csrf_headers(client, token),
+        )
+        assert delete_response.status_code == status.HTTP_200_OK
+
+        user.deletion_requested_at = _utcnow() - timedelta(
+            days=settings.ACCOUNT_DELETION_GRACE_PERIOD_DAYS + 1
+        )
+        db_session.commit()
 
         relogin_response = client.post(
             "/api/v1/auth/token",
@@ -421,7 +456,7 @@ class TestPurgeDeletedUsers:
     def test_purge_creates_summary_audit_log(self, db_session: Session):
         """Purge should create a summary audit log for compliance."""
         # Create multiple eligible users
-        for i in range(3):
+        for _ in range(3):
             user = create_user(
                 db_session,
                 username=f"testuser_{uuid.uuid4().hex[:8]}",

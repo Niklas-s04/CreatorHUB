@@ -105,14 +105,16 @@ describe('apiFetch step-up retry flow', () => {
   it('submits login and bootstrap auth requests', async () => {
     const fetchMock = vi.mocked(fetch)
     fetchMock
-      .mockResolvedValueOnce(textResponse('ok'))
+      .mockResolvedValueOnce(jsonResponse({ account_deletion_canceled: true }))
       .mockResolvedValueOnce(jsonResponse({ admin_username: 'admin', needs_password_setup: true }))
       .mockResolvedValueOnce(textResponse('ok'))
       .mockResolvedValueOnce(
         jsonResponse({ id: 'request-1', username: 'new-user', status: 'pending' })
       )
 
-    await login('admin', 'secret', ' 123456 ')
+    await expect(login('admin', 'secret', ' 123456 ')).resolves.toEqual({
+      account_deletion_canceled: true,
+    })
     await expect(getBootstrapStatus('bootstrap-token')).resolves.toEqual({
       admin_username: 'admin',
       needs_password_setup: true,
@@ -137,6 +139,16 @@ describe('apiFetch step-up retry flow', () => {
 
     await expect(login('admin', 'wrong')).rejects.toThrow('invalid credentials')
     expect(getToken()).toBeNull()
+  })
+
+  it('preserves the response status for failed bootstrap checks', async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(textResponse('temporarily unavailable', 503))
+
+    await expect(getBootstrapStatus('bootstrap-token')).rejects.toMatchObject({
+      name: 'ApiError',
+      status: 503,
+      message: 'temporarily unavailable',
+    })
   })
 
   it('keeps normal auth timeouts short and allows longer admin setup requests', async () => {
@@ -212,6 +224,31 @@ describe('apiFetch step-up retry flow', () => {
     setToken('1')
     await expect(deleteAccount()).resolves.toEqual({ ok: 'true', message: 'deleted' })
     expect(getToken()).toBeNull()
+  })
+
+  it('treats forbidden sessions as anonymous', async () => {
+    const fetchMock = vi.mocked(fetch)
+    fetchMock.mockResolvedValueOnce(textResponse('forbidden', 403))
+    setToken('1')
+
+    await expect(checkSession()).resolves.toBe(false)
+
+    expect(getToken()).toBeNull()
+  })
+
+  it('preserves the auth hint and propagates server or network failures', async () => {
+    const fetchMock = vi.mocked(fetch)
+    fetchMock.mockImplementation(async () => textResponse('server unavailable', 500))
+    setToken('1')
+
+    await expect(checkSession()).rejects.toThrow('server unavailable')
+    expect(getToken()).toBe('1')
+
+    fetchMock.mockReset()
+    fetchMock.mockRejectedValueOnce(new Error('network unavailable'))
+
+    await expect(checkSession()).rejects.toThrow('network unavailable')
+    expect(getToken()).toBe('1')
   })
 
   it('maps auth and admin helper functions to their API endpoints', async () => {

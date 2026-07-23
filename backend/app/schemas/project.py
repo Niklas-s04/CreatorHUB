@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 from datetime import date, datetime
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.models.content import ContentPlatform, ContentStatus, ContentType
 from app.models.product import ProductStatus
@@ -16,12 +16,30 @@ class ProjectCategoryCreate(BaseModel):
     description: str | None = None
     is_active: bool = True
 
+    @field_validator("name")
+    @classmethod
+    def category_name_must_not_be_blank(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("name must not be blank")
+        return value
+
 
 class ProjectCategoryUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=120)
     color: str | None = Field(default=None, pattern=r"^#[0-9a-fA-F]{6}$")
     description: str | None = None
     is_active: bool | None = None
+
+    @field_validator("name")
+    @classmethod
+    def category_name_must_not_be_blank(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        value = value.strip()
+        if not value:
+            raise ValueError("name must not be blank")
+        return value
 
     @model_validator(mode="after")
     def required_patch_fields_must_not_be_null(self) -> "ProjectCategoryUpdate":
@@ -58,6 +76,14 @@ class ProjectBase(BaseModel):
     preview_status: PreviewStatus = PreviewStatus.not_required
     preview_due_date: date | None = None
     preview_notes: str | None = None
+
+    @field_validator("title")
+    @classmethod
+    def project_title_must_not_be_blank(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("title must not be blank")
+        return value
 
     @model_validator(mode="after")
     def validate_project_dates_and_preview(self) -> "ProjectBase":
@@ -96,9 +122,26 @@ class ProjectUpdate(BaseModel):
     preview_due_date: date | None = None
     preview_notes: str | None = None
 
+    @field_validator("title")
+    @classmethod
+    def project_title_must_not_be_blank(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        value = value.strip()
+        if not value:
+            raise ValueError("title must not be blank")
+        return value
+
     @model_validator(mode="after")
     def required_patch_fields_must_not_be_null(self) -> "ProjectUpdate":
-        for field in ("title", "status", "priority", "progress_percent", "preview_required"):
+        for field in (
+            "title",
+            "status",
+            "priority",
+            "progress_percent",
+            "preview_required",
+            "preview_status",
+        ):
             if field in self.model_fields_set and getattr(self, field) is None:
                 raise ValueError(f"{field} must not be null")
         return self

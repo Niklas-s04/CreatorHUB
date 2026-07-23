@@ -5,6 +5,7 @@ import Sidebar from './components/Sidebar'
 import CookieConsentBanner from './components/CookieConsentBanner'
 import { checkSession } from './api'
 import { GlobalLoading } from './shared/ui/states/GlobalLoading'
+import { ErrorState } from './shared/ui/states/ErrorState'
 import { Breadcrumbs } from './shared/ui/navigation/Breadcrumbs'
 import { LanguageProvider, useI18n } from './shared/i18n/i18n'
 import { StepUpProvider } from './shared/auth/StepUpProvider'
@@ -22,41 +23,56 @@ const AdminPage = lazy(() => import('./pages/AdminPage'))
 const AuditPage = lazy(() => import('./pages/AuditPage'))
 const OperationsPage = lazy(() => import('./pages/OperationsPage'))
 
-function RequireAuth() {
-  const [state, setState] = useState<'loading' | 'ok' | 'no'>('loading')
-  const { t } = useI18n()
+type SessionCheckState = 'loading' | 'authenticated' | 'guest' | 'error'
+
+function useSessionCheck() {
+  const [state, setState] = useState<SessionCheckState>('loading')
+  const [attempt, setAttempt] = useState(0)
 
   useEffect(() => {
     let mounted = true
-    checkSession().then((ok) => {
-      if (mounted) setState(ok ? 'ok' : 'no')
-    })
+    void checkSession()
+      .then((ok) => {
+        if (mounted) setState(ok ? 'authenticated' : 'guest')
+      })
+      .catch(() => {
+        if (mounted) setState('error')
+      })
     return () => {
       mounted = false
     }
-  }, [])
+  }, [attempt])
+
+  return {
+    state,
+    retry: () => {
+      setState('loading')
+      setAttempt((current) => current + 1)
+    },
+  }
+}
+
+function RequireAuth() {
+  const { state, retry } = useSessionCheck()
+  const { t } = useI18n()
 
   if (state === 'loading') return <GlobalLoading label={t('app.loadingSession')} />
-  if (state === 'no') return <Navigate to="/login" replace />
+  if (state === 'error') {
+    return <ErrorState message={t('app.sessionCheckFailed')} onRetry={retry} />
+  }
+  if (state === 'guest') return <Navigate to="/login" replace />
   return <Outlet />
 }
 
 function PublicOnly() {
-  const [state, setState] = useState<'loading' | 'authed' | 'guest'>('loading')
+  const { state, retry } = useSessionCheck()
   const { t } = useI18n()
 
-  useEffect(() => {
-    let mounted = true
-    checkSession().then((ok) => {
-      if (mounted) setState(ok ? 'authed' : 'guest')
-    })
-    return () => {
-      mounted = false
-    }
-  }, [])
-
   if (state === 'loading') return <GlobalLoading label={t('app.loadingSession')} />
-  if (state === 'authed') return <Navigate to="/dashboard" replace />
+  if (state === 'error') {
+    return <ErrorState message={t('app.sessionCheckFailed')} onRetry={retry} />
+  }
+  if (state === 'authenticated') return <Navigate to="/dashboard" replace />
   return <Outlet />
 }
 
@@ -183,6 +199,7 @@ function AppInner() {
               <Route path="/content" element={<ContentPage />} />
               <Route path="/projects" element={<ProjectsPage />} />
               <Route path="/email" element={<EmailPage />} />
+              <Route path="/deals" element={<Navigate to="/email" replace />} />
               <Route path="/settings" element={<SettingsPage />} />
               <Route path="/admin" element={<AdminPage />} />
               <Route path="/audit" element={<AuditPage />} />

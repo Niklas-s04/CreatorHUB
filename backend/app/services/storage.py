@@ -138,16 +138,16 @@ def _optional_malware_scan(data: bytes) -> None:
 def _image_metadata(path: Path) -> Tuple[int | None, int | None, str | None]:
     try:
         with Image.open(path) as img:
-            img = img.convert("RGB")
-            width, height = img.size
-            phash = _average_hash(img)
+            converted = img.convert("RGB")
+            width, height = converted.size
+            phash = _average_hash(converted)
             return width, height, phash
     except Exception:
         return None, None, None
 
 
 def _average_hash(img: Image.Image, hash_size: int = 8) -> str:
-    gray = img.convert("L").resize((hash_size, hash_size), Image.LANCZOS)
+    gray = img.convert("L").resize((hash_size, hash_size), Image.Resampling.LANCZOS)
     pixels = list(gray.tobytes())
     avg = sum(pixels) / len(pixels)
     bits = 0
@@ -258,6 +258,7 @@ def cache_download(
         require_https=True,
         max_bytes=settings.OUTBOUND_MAX_RESPONSE_BYTES,
         max_redirects=1,
+        use_configured_allowlist=False,
     )
     data = response.content
     parsed = urlparse(response.url)

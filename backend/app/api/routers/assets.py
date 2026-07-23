@@ -21,6 +21,7 @@ from app.models.workflow import WorkflowStatus
 from app.schemas.asset import AssetCreateWeb, AssetOut, AssetUpdate
 from app.schemas.common import Page, SortOrder
 from app.services.audit import record_audit_log
+from app.services.content_service import refresh_item_readiness
 from app.services.domain_events import emit_domain_event
 from app.services.domain_rules import validate_asset_consistency, validate_asset_review_state_change
 from app.services.errors import BusinessRuleViolation
@@ -71,6 +72,23 @@ def _upload_purpose_allowed(owner_type: AssetOwnerType, kind: AssetKind) -> bool
     if kind == AssetKind.image:
         return True
     return False
+
+
+def _clear_other_primary_product_images(
+    db: Session,
+    *,
+    owner_id: uuid.UUID,
+    exclude_asset_id: uuid.UUID | None = None,
+) -> None:
+    query = db.query(Asset).filter(
+        Asset.owner_type == AssetOwnerType.product,
+        Asset.owner_id == owner_id,
+        Asset.kind == AssetKind.image,
+        Asset.is_primary.is_(True),
+    )
+    if exclude_asset_id is not None:
+        query = query.filter(Asset.id != exclude_asset_id)
+    query.update({Asset.is_primary: False}, synchronize_session="fetch")
 
 
 def _max_upload_bytes(kind: AssetKind) -> int:
@@ -134,6 +152,28 @@ def _delivery_headers(asset: Asset, path: str) -> tuple[str | None, str, dict[st
     return media_type, filename, headers
 
 
+def _refresh_content_owner_readiness(db: Session, *, asset: Asset) -> None:
+    if asset.owner_type == AssetOwnerType.content:
+        refresh_item_readiness(db, item_id=asset.owner_id)
+
+
+def _resolve_asset_delivery_path(path: str | None) -> Path:
+    if not path:
+        raise HTTPException(status_code=404, detail="File not available")
+    try:
+        candidate = Path(path).resolve(strict=True)
+        allowed_roots = (
+            Path(settings.UPLOADS_DIR).resolve(strict=False),
+            Path(settings.CACHE_DIR).resolve(strict=False),
+        )
+    except (OSError, RuntimeError, ValueError) as exc:
+        raise HTTPException(status_code=404, detail="File not available") from exc
+
+    if not candidate.is_file() or not any(candidate.is_relative_to(root) for root in allowed_roots):
+        raise HTTPException(status_code=404, detail="File not available")
+    return candidate
+
+
 @router.get("", response_model=Page[AssetOut])
 def list_assets(
     owner_type: AssetOwnerType,
@@ -160,7 +200,7 @@ def list_assets(
     )
     items = q.offset(offset).limit(limit).all()
     return to_page(
-        items=items,
+        items=[AssetOut.model_validate(item) for item in items],
         total=total,
         limit=limit,
         offset=offset,
@@ -218,7 +258,7 @@ def list_library_assets(
     )
     items = q.offset(offset).limit(limit).all()
     return to_page(
-        items=items,
+        items=[AssetOut.model_validate(item) for item in items],
         total=total,
         limit=limit,
         offset=offset,
@@ -299,12 +339,14 @@ async def upload_asset(
     if existing:
         _delete_unreferenced_file(stored.local_path)
         # Do not create a duplicate database row.
-        return existing
+        return AssetOut.model_validate(existing)
 
     db.add(asset)
+    db.flush()
+    _refresh_content_owner_readiness(db, asset=asset)
     db.commit()
     db.refresh(asset)
-    return asset
+    return AssetOut.model_validate(asset)
 
 
 @router.post("/web", response_model=AssetOut)
@@ -313,26 +355,18 @@ def create_web_asset(
     db: Session = Depends(get_db),
     _: User = Depends(require_permission(Permission.asset_upload)),
 ) -> AssetOut:
-    existing = None
-    if payload.hash:
-        existing = (
-            db.query(Asset)
-            .filter(
-                Asset.hash == payload.hash,
-                Asset.owner_type == payload.owner_type,
-                Asset.owner_id == payload.owner_id,
-            )
-            .first()
-        )
-    if existing:
-        return existing
     data = payload.model_dump()
-    data["review_state"] = AssetReviewState.needs_review
+    data.update(
+        source=AssetSource.web,
+        url=str(payload.url),
+        review_state=AssetReviewState.needs_review,
+        workflow_status=WorkflowStatus.draft,
+    )
     try:
         validate_workflow_status_change(
             current_status=data["workflow_status"],
             target_status=data["workflow_status"],
-            review_reason=data.get("review_reason"),
+            review_reason=None,
         )
     except BusinessRuleViolation as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -342,17 +376,22 @@ def create_web_asset(
             kind=data["kind"],
             is_primary=bool(data.get("is_primary", False)),
             review_state=data["review_state"],
-            local_path=data.get("local_path"),
+            local_path=None,
             url=data.get("url"),
         )
     except BusinessRuleViolation as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
+    if data.get("is_primary") is True:
+        _clear_other_primary_product_images(db, owner_id=data["owner_id"])
+
     asset = Asset(**data)
     db.add(asset)
+    db.flush()
+    _refresh_content_owner_readiness(db, asset=asset)
     db.commit()
     db.refresh(asset)
-    return asset
+    return AssetOut.model_validate(asset)
 
 
 @router.patch("/{asset_id}", response_model=AssetOut)
@@ -433,11 +472,11 @@ def update_asset(
         and asset.owner_type == AssetOwnerType.product
         and asset.kind == AssetKind.image
     ):
-        db.query(Asset).filter(
-            Asset.owner_type == asset.owner_type,
-            Asset.owner_id == asset.owner_id,
-            Asset.kind == AssetKind.image,
-        ).update({Asset.is_primary: False})
+        _clear_other_primary_product_images(
+            db,
+            owner_id=asset.owner_id,
+            exclude_asset_id=asset.id,
+        )
         asset.is_primary = True
         data.pop("is_primary", None)
 
@@ -523,9 +562,11 @@ def update_asset(
                 f"Asset review state changed: {original_review_state.value} -> {asset.review_state.value}"
             ),
         )
+    db.flush()
+    _refresh_content_owner_readiness(db, asset=asset)
     db.commit()
     db.refresh(asset)
-    return asset
+    return AssetOut.model_validate(asset)
 
 
 @router.get("/{asset_id}/file")
@@ -560,17 +601,20 @@ def get_asset_file(
         asset.size_bytes = stored.size_bytes
         asset.width = stored.width
         asset.height = stored.height
+        db.flush()
+        _refresh_content_owner_readiness(db, asset=asset)
         db.commit()
         path = stored.local_path
 
-    if not path or not os.path.exists(path):
-        raise HTTPException(status_code=404, detail="File not available")
-    size = asset.size_bytes or os.path.getsize(path)
+    resolved_path = _resolve_asset_delivery_path(path)
+    size = resolved_path.stat().st_size
     if size > settings.ASSET_MAX_DELIVERY_BYTES:
         raise HTTPException(status_code=413, detail="Asset exceeds delivery size limit")
 
-    media_type, filename, headers = _delivery_headers(asset, path)
-    return FileResponse(path, filename=filename, media_type=media_type, headers=headers)
+    media_type, filename, headers = _delivery_headers(asset, str(resolved_path))
+    return FileResponse(
+        str(resolved_path), filename=filename, media_type=media_type, headers=headers
+    )
 
 
 @router.get("/{asset_id}/thumb")
@@ -598,25 +642,27 @@ def get_asset_thumb(
         asset.size_bytes = stored.size_bytes
         asset.width = stored.width
         asset.height = stored.height
+        db.flush()
+        _refresh_content_owner_readiness(db, asset=asset)
         db.commit()
         path = stored.local_path
 
-    if not path or not os.path.exists(path):
-        raise HTTPException(status_code=404, detail="File not available")
+    resolved_path = _resolve_asset_delivery_path(path)
 
     try:
-        thumb = ensure_thumbnail(path)
+        thumb = ensure_thumbnail(str(resolved_path))
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    resolved_thumb = _resolve_asset_delivery_path(thumb)
 
     headers = {
-        "Content-Disposition": f'inline; filename="{os.path.basename(thumb)}"',
+        "Content-Disposition": f'inline; filename="{resolved_thumb.name}"',
         "Cache-Control": "private, max-age=300",
     }
-    thumb_mime, _ = mimetypes.guess_type(thumb)
+    thumb_mime, _ = mimetypes.guess_type(str(resolved_thumb))
     return FileResponse(
-        thumb,
-        filename=os.path.basename(thumb),
+        str(resolved_thumb),
+        filename=resolved_thumb.name,
         media_type=thumb_mime or "application/octet-stream",
         headers=headers,
     )
@@ -653,7 +699,7 @@ def review_queue(
     )
     items = q.offset(offset).limit(limit).all()
     return to_page(
-        items=items,
+        items=[AssetOut.model_validate(item) for item in items],
         total=total,
         limit=limit,
         offset=offset,

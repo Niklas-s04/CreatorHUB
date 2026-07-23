@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import date
+from enum import Enum
 
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -32,6 +33,16 @@ def _normalized_text(value: str | None) -> str | None:
     return value or None
 
 
+def _audit_value(value: object) -> object:
+    if isinstance(value, Enum):
+        return value.value
+    if isinstance(value, uuid.UUID):
+        return str(value)
+    if isinstance(value, date):
+        return value.isoformat()
+    return value
+
+
 def _get_project(db: Session, project_id: uuid.UUID) -> Project:
     project = db.query(Project).filter(Project.id == project_id).first()
     if not project:
@@ -48,6 +59,13 @@ def _get_category(db: Session, category_id: uuid.UUID) -> ProjectCategory:
     if not category:
         raise BusinessRuleViolation("Project category not found")
     return category
+
+
+def _validate_owner(db: Session, owner_user_id: uuid.UUID | None) -> None:
+    if owner_user_id is None:
+        return
+    if not db.query(User.id).filter(User.id == owner_user_id).first():
+        raise BusinessRuleViolation("Project owner not found")
 
 
 def _ensure_unique_category_name(
@@ -200,6 +218,7 @@ def _resolve_products(db: Session, ids: list[uuid.UUID]) -> list[Product]:
 def create_project(db: Session, *, payload: ProjectCreate, actor: User) -> Project:
     if payload.category_id:
         _get_category(db, payload.category_id)
+    _validate_owner(db, payload.owner_user_id)
     content_items = _resolve_content_items(db, payload.content_item_ids)
     products = _resolve_products(db, payload.product_ids)
     fields = payload.model_dump(exclude={"content_item_ids", "product_ids"})
@@ -238,6 +257,8 @@ def update_project(
     updates = payload.model_dump(exclude_unset=True)
     if "category_id" in updates and updates["category_id"]:
         _get_category(db, updates["category_id"])
+    if "owner_user_id" in updates:
+        _validate_owner(db, updates["owner_user_id"])
     if "title" in updates:
         updates["title"] = updates["title"].strip()
     for key in ("owner_name", "goal", "brief_md", "requirements_md", "notes_md", "preview_notes"):
@@ -246,12 +267,7 @@ def update_project(
     start_date = updates.get("start_date", project.start_date)
     due_date = updates.get("due_date", project.due_date)
     _validate_dates(start_date, due_date)
-    before = {
-        key: getattr(project, key).value
-        if hasattr(getattr(project, key), "value")
-        else getattr(project, key)
-        for key in updates
-    }
+    before = {key: _audit_value(getattr(project, key)) for key in updates}
     with transaction_boundary(db):
         for key, value in updates.items():
             setattr(project, key, value)
@@ -263,12 +279,7 @@ def update_project(
             entity_type="project",
             entity_id=str(project.id),
             before=before,
-            after={
-                key: getattr(project, key).value
-                if hasattr(getattr(project, key), "value")
-                else getattr(project, key)
-                for key in updates
-            },
+            after={key: _audit_value(getattr(project, key)) for key in updates},
         )
     db.refresh(project)
     return enrich_project(project)
@@ -288,6 +299,25 @@ def delete_project(db: Session, *, project_id: uuid.UUID, actor: User) -> None:
         db.delete(project)
 
 
+def _attach_content(
+    db: Session,
+    *,
+    project: Project,
+    content_item: ContentItem,
+    actor: User,
+) -> None:
+    project.content_items.append(content_item)
+    record_audit_log(
+        db,
+        actor=actor,
+        action="project.content.link",
+        entity_type="project",
+        entity_id=str(project.id),
+        metadata={"content_item_id": str(content_item.id)},
+    )
+    db.flush()
+
+
 def link_content(
     db: Session, *, project_id: uuid.UUID, content_item_id: uuid.UUID, actor: User
 ) -> Project:
@@ -297,15 +327,7 @@ def link_content(
         raise NotFoundError("Content item not found")
     if content_item not in project.content_items:
         with transaction_boundary(db):
-            project.content_items.append(content_item)
-            record_audit_log(
-                db,
-                actor=actor,
-                action="project.content.link",
-                entity_type="project",
-                entity_id=str(project.id),
-                metadata={"content_item_id": str(content_item.id)},
-            )
+            _attach_content(db, project=project, content_item=content_item, actor=actor)
     return enrich_project(project)
 
 
@@ -378,8 +400,15 @@ def create_linked_content(
     db: Session, *, project_id: uuid.UUID, payload: ContentItemCreate, actor: User
 ) -> Project:
     project = _get_project(db, project_id)
-    content_item = content_service.create_item(db, payload=payload, actor=actor)
-    return link_content(db, project_id=project.id, content_item_id=content_item.id, actor=actor)
+    with transaction_boundary(db):
+        content_item = content_service.create_item(
+            db,
+            payload=payload,
+            actor=actor,
+            commit=False,
+        )
+        _attach_content(db, project=project, content_item=content_item, actor=actor)
+    return enrich_project(project)
 
 
 def create_linked_product(

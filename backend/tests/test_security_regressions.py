@@ -102,7 +102,7 @@ def test_csrf_blocks_account_delete_without_header_regression() -> None:
 
     response = client.delete("/api/auth/account")
     assert response.status_code == 403
-    assert response.json()["detail"] == "CSRF validation failed"
+    assert response.json()["message"] == "CSRF validation failed"
 
 
 def test_upload_image_bomb_rejected_regression(
@@ -126,8 +126,8 @@ def test_upload_image_bomb_rejected_regression(
     )
 
     assert response.status_code == 400
-    detail = response.json()["detail"].lower()
-    assert "pixel" in detail or "validation" in detail or "signature" in detail
+    message = response.json()["message"].lower()
+    assert "pixel" in message or "validation" in message or "signature" in message
 
 
 def test_cookie_secure_flag_set_regression(

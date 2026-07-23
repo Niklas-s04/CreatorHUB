@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { apiFetch } from '../../../../api'
+import { useAuthz } from '../../../../shared/hooks/useAuthz'
 import { useI18n } from '../../../../shared/i18n/i18n'
 import ContentItemEditor from './ContentItemEditor'
 import ContentPlanningPanel from './ContentPlanningPanel'
@@ -73,6 +74,8 @@ function profilePayload(draft: ProfileDraft) {
 
 export default function ContentKanbanPageView() {
   const { t } = useI18n()
+  const { hasPermission } = useAuthz()
+  const canManage = hasPermission('content.manage')
   const [activeTab, setActiveTab] = useState<TabKey>('board')
   const [items, setItems] = useState<ContentItem[]>([])
   const [tasks, setTasks] = useState<ContentTask[]>([])
@@ -84,6 +87,13 @@ export default function ContentKanbanPageView() {
   const [newTitle, setNewTitle] = useState('')
   const [newPlatform, setNewPlatform] = useState('youtube')
   const [newType, setNewType] = useState('review')
+  const selectedIdRef = useRef(selectedId)
+  selectedIdRef.current = selectedId
+  const visibleTabs = useMemo(
+    () =>
+      canManage ? TAB_KEYS : TAB_KEYS.filter((tab) => tab !== 'templates' && tab !== 'platforms'),
+    [canManage]
+  )
 
   const selected = useMemo(
     () => items.find((item) => item.id === selectedId) ?? null,
@@ -116,13 +126,14 @@ export default function ContentKanbanPageView() {
     setTasks(tasksPage.items ?? [])
     setProfiles(profileData)
     setTemplates(templateData)
-    if (selectedId && loadedItems.find((item) => item.id === selectedId)) {
-      await loadPlanning(selectedId)
-    } else if (selectedId) {
+    const currentSelectedId = selectedIdRef.current
+    if (currentSelectedId && loadedItems.find((item) => item.id === currentSelectedId)) {
+      await loadPlanning(currentSelectedId)
+    } else if (currentSelectedId) {
       setSelectedId(null)
       setPlanning(null)
     }
-  }, [loadPlanning, selectedId])
+  }, [loadPlanning])
 
   useEffect(() => {
     loadAll().catch((loadError) => setError(errorMessage(loadError)))
@@ -133,8 +144,14 @@ export default function ContentKanbanPageView() {
     loadPlanning(selectedId).catch((loadError) => setError(errorMessage(loadError)))
   }, [selectedId, loadPlanning])
 
+  useEffect(() => {
+    if (!canManage && (activeTab === 'templates' || activeTab === 'platforms')) {
+      setActiveTab('board')
+    }
+  }, [activeTab, canManage])
+
   async function createItem() {
-    if (!newTitle.trim()) return
+    if (!canManage || !newTitle.trim()) return
     setError(null)
     try {
       const created = await api<ContentItem>('/content/items', {
@@ -157,6 +174,7 @@ export default function ContentKanbanPageView() {
   }
 
   async function updateItem(itemId: string, patch: Partial<ContentItem>) {
+    if (!canManage) return
     setError(null)
     try {
       const updated = await api<ContentItem>(`/content/items/${itemId}`, {
@@ -172,6 +190,7 @@ export default function ContentKanbanPageView() {
   }
 
   async function deleteItem(itemId: string) {
+    if (!canManage) return
     await api(`/content/items/${itemId}`, { method: 'DELETE' })
     setItems((prev) => prev.filter((item) => item.id !== itemId))
     setTasks((prev) => prev.filter((task) => task.content_item_id !== itemId))
@@ -180,6 +199,7 @@ export default function ContentKanbanPageView() {
   }
 
   async function createTask(itemId: string, draft: Partial<ContentTask>) {
+    if (!canManage) return
     const created = await api<ContentTask>('/content/tasks', {
       method: 'POST',
       body: JSON.stringify({ content_item_id: itemId, status: 'todo', ...draft }),
@@ -189,6 +209,7 @@ export default function ContentKanbanPageView() {
   }
 
   async function updateTask(taskId: string, patch: Partial<ContentTask>) {
+    if (!canManage) return
     const updated = await api<ContentTask>(`/content/tasks/${taskId}`, {
       method: 'PATCH',
       body: JSON.stringify(patch),
@@ -198,7 +219,7 @@ export default function ContentKanbanPageView() {
   }
 
   async function applyTemplate(templateId: string) {
-    if (!selectedId) return
+    if (!canManage || !selectedId) return
     await api(`/content/items/${selectedId}/apply-template`, {
       method: 'POST',
       body: JSON.stringify({
@@ -208,10 +229,10 @@ export default function ContentKanbanPageView() {
       }),
     })
     await loadAll()
-    await loadPlanning(selectedId)
   }
 
   async function createTemplate(draft: TemplateDraft) {
+    if (!canManage) return
     await api('/content/checklist-templates', {
       method: 'POST',
       body: JSON.stringify(templatePayload(draft)),
@@ -220,6 +241,7 @@ export default function ContentKanbanPageView() {
   }
 
   async function updateTemplate(templateId: string, draft: TemplateDraft) {
+    if (!canManage) return
     await api(`/content/checklist-templates/${templateId}`, {
       method: 'PATCH',
       body: JSON.stringify(templatePayload(draft)),
@@ -228,11 +250,13 @@ export default function ContentKanbanPageView() {
   }
 
   async function deleteTemplate(templateId: string) {
+    if (!canManage) return
     await api(`/content/checklist-templates/${templateId}`, { method: 'DELETE' })
     setTemplates(await api<ChecklistTemplate[]>('/content/checklist-templates'))
   }
 
   async function createProfile(draft: ProfileDraft) {
+    if (!canManage) return
     await api('/content/platform-profiles', {
       method: 'POST',
       body: JSON.stringify(profilePayload(draft)),
@@ -241,6 +265,7 @@ export default function ContentKanbanPageView() {
   }
 
   async function updateProfile(profileId: string, draft: ProfileDraft) {
+    if (!canManage) return
     const payload = profilePayload(draft)
     await api(`/content/platform-profiles/${profileId}`, {
       method: 'PATCH',
@@ -254,6 +279,7 @@ export default function ContentKanbanPageView() {
   }
 
   async function deleteProfile(profileId: string) {
+    if (!canManage) return
     await api(`/content/platform-profiles/${profileId}`, { method: 'DELETE' })
     setProfiles(await api<PlatformProfile[]>('/content/platform-profiles'))
   }
@@ -285,32 +311,39 @@ export default function ContentKanbanPageView() {
           <div className="page-subtitle">{t('contentHub.subtitle')}</div>
         </div>
         <div className="page-actions">
-          <div className="control-row">
-            <input
-              id="content-new-title"
-              className="composer-input"
-              placeholder={t('contentHub.newVideoTitlePlaceholder')}
-              value={newTitle}
-              onChange={(event) => setNewTitle(event.target.value)}
-            />
-            <select value={newPlatform} onChange={(event) => setNewPlatform(event.target.value)}>
-              {PLATFORMS.map((platform) => (
-                <option key={platform} value={platform}>
-                  {platform}
-                </option>
-              ))}
-            </select>
-            <select value={newType} onChange={(event) => setNewType(event.target.value)}>
-              {CONTENT_TYPES.map((type) => (
-                <option key={type} value={type}>
-                  {type}
-                </option>
-              ))}
-            </select>
-          </div>
-          <button className="btn primary" onClick={() => createItem()}>
-            {t('contentHub.addVideo')}
-          </button>
+          {canManage && (
+            <>
+              <div className="control-row">
+                <input
+                  id="content-new-title"
+                  className="composer-input"
+                  placeholder={t('contentHub.newVideoTitlePlaceholder')}
+                  value={newTitle}
+                  onChange={(event) => setNewTitle(event.target.value)}
+                />
+                <select
+                  value={newPlatform}
+                  onChange={(event) => setNewPlatform(event.target.value)}
+                >
+                  {PLATFORMS.map((platform) => (
+                    <option key={platform} value={platform}>
+                      {platform}
+                    </option>
+                  ))}
+                </select>
+                <select value={newType} onChange={(event) => setNewType(event.target.value)}>
+                  {CONTENT_TYPES.map((type) => (
+                    <option key={type} value={type}>
+                      {type}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <button className="btn primary" onClick={() => createItem()}>
+                {t('contentHub.addVideo')}
+              </button>
+            </>
+          )}
           <button
             className="btn"
             onClick={() => loadAll().catch((loadError) => setError(errorMessage(loadError)))}
@@ -323,7 +356,7 @@ export default function ContentKanbanPageView() {
       {error && <div className="inline-hint error">{error}</div>}
 
       <div className="control-row" role="tablist" aria-label={t('contentHub.tabsAriaLabel')}>
-        {TAB_KEYS.map((tab) => (
+        {visibleTabs.map((tab) => (
           <button
             key={tab}
             role="tab"
@@ -367,19 +400,33 @@ export default function ContentKanbanPageView() {
             </div>
           </div>
           <div className="content-side stack">
-            <ContentItemEditor
-              item={selected}
-              profiles={profiles}
-              error={error}
-              onSave={updateItem}
-              onDelete={deleteItem}
-            />
-            <ContentTasksPanel
-              selectedItemId={selectedId}
-              tasks={selectedTasks}
-              onCreate={createTask}
-              onUpdate={updateTask}
-            />
+            {canManage ? (
+              <>
+                <ContentItemEditor
+                  item={selected}
+                  profiles={profiles}
+                  error={error}
+                  onSave={updateItem}
+                  onDelete={deleteItem}
+                />
+                <ContentTasksPanel
+                  selectedItemId={selectedId}
+                  tasks={selectedTasks}
+                  onCreate={createTask}
+                  onUpdate={updateTask}
+                />
+              </>
+            ) : selected ? (
+              <div className="card stack">
+                <h3 className="no-margin">{selected.title || selected.id.slice(0, 8)}</h3>
+                <div className="small muted">
+                  {selected.platform.toUpperCase()} / {selected.type.toUpperCase()} /{' '}
+                  {selected.readiness_score}%
+                </div>
+              </div>
+            ) : (
+              <div className="card muted">{t('contentHub.selectItem')}</div>
+            )}
           </div>
         </div>
       )}
@@ -412,11 +459,12 @@ export default function ContentKanbanPageView() {
           planning={planning}
           templates={templates}
           selectedItemId={selectedId}
+          canManage={canManage}
           onApplyTemplate={applyTemplate}
         />
       )}
 
-      {activeTab === 'templates' && (
+      {canManage && activeTab === 'templates' && (
         <ContentTemplatesPanel
           templates={templates}
           onCreate={createTemplate}
@@ -425,7 +473,7 @@ export default function ContentKanbanPageView() {
         />
       )}
 
-      {activeTab === 'platforms' && (
+      {canManage && activeTab === 'platforms' && (
         <ContentPlatformProfilesPanel
           profiles={profiles}
           onCreate={createProfile}

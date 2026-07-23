@@ -8,4 +8,4 @@ omit =
 [report]
 show_missing = True
 skip_covered = False
-fail_under = 30
+fail_under = 70

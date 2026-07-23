@@ -270,15 +270,21 @@ def list_my_tasks(
         status=status,
         overdue_only=overdue_only,
     )
-    items, total = content_service.list_personal_tasks_page(
-        db, user=current_user, filters=filters, limit=limit, offset=offset
+    items, total, selected_sort = content_service.list_personal_tasks_page(
+        db,
+        user=current_user,
+        filters=filters,
+        limit=limit,
+        offset=offset,
+        sort_by=sort_by,
+        sort_order=sort_order,
     )
     return to_page(
         items=items,
         total=total,
         limit=limit,
         offset=offset,
-        sort_by=sort_by,
+        sort_by=selected_sort,
         sort_order=sort_order,
     )
 

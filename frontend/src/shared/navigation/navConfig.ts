@@ -120,6 +120,7 @@ export function routeLabel(pathname: string, language: Language = 'de'): string 
   if (pathname.startsWith('/products/')) return translate(language, 'breadcrumbs.productDetail')
   if (pathname === '/assets') return translate(language, 'nav.assets')
   if (pathname === '/content') return translate(language, 'nav.contentPlan')
+  if (pathname === '/deals') return translate(language, 'nav.emailThreads')
   if (pathname === '/email') return translate(language, 'nav.emailThreads')
   if (pathname === '/admin') return translate(language, 'nav.administration')
   if (pathname === '/audit') return translate(language, 'nav.audit')

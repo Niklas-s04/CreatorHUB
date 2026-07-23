@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useI18n } from '../../../../shared/i18n/i18n'
 import {
   CONTENT_TYPES,
@@ -58,14 +58,61 @@ function fieldValueToString(value: string | number | boolean | null | undefined)
   return String(value)
 }
 
+function toUpdateValues(form: ItemForm): Partial<ContentItem> {
+  return {
+    title: emptyToNull(form.title),
+    hook: emptyToNull(form.hook),
+    script_md: emptyToNull(form.script_md),
+    description_md: emptyToNull(form.description_md),
+    tags_csv: emptyToNull(form.tags_csv),
+    platform: form.platform,
+    type: form.type,
+    status: form.status as ContentItem['status'],
+    planned_date: form.planned_date || null,
+    publish_date: form.publish_date || null,
+    external_url: emptyToNull(form.external_url),
+    platform_meta_json: form.platform_meta_json,
+  }
+}
+
+function buildDirtyPatch(form: ItemForm, baseline: ItemForm): Partial<ContentItem> {
+  const current = toUpdateValues(form)
+  const original = toUpdateValues(baseline)
+  return Object.fromEntries(
+    Object.entries(current).filter(([key, value]) => {
+      const originalValue = original[key as keyof ContentItem]
+      return JSON.stringify(value) !== JSON.stringify(originalValue)
+    })
+  ) as Partial<ContentItem>
+}
+
 export default function ContentItemEditor({ item, profiles, error, onSave, onDelete }: Props) {
   const { t } = useI18n()
   const [form, setForm] = useState<ItemForm | null>(() => (item ? toForm(item) : null))
+  const [baseline, setBaseline] = useState<ItemForm | null>(() => (item ? toForm(item) : null))
+  const itemIdRef = useRef(item?.id ?? null)
   const [saving, setSaving] = useState(false)
+  const formDirty = useMemo(
+    () => Boolean(form && baseline && JSON.stringify(form) !== JSON.stringify(baseline)),
+    [baseline, form]
+  )
 
   useEffect(() => {
-    setForm(item ? toForm(item) : null)
-  }, [item])
+    if (!item) {
+      itemIdRef.current = null
+      setForm(null)
+      setBaseline(null)
+      return
+    }
+
+    const next = toForm(item)
+    const itemChanged = itemIdRef.current !== item.id
+    if (itemChanged || !formDirty) {
+      itemIdRef.current = item.id
+      setForm(next)
+      setBaseline(next)
+    }
+  }, [formDirty, item])
 
   const activeProfile = useMemo(
     () => profiles.find((profile) => profile.platform === form?.platform && profile.is_active),
@@ -111,22 +158,13 @@ export default function ContentItemEditor({ item, profiles, error, onSave, onDel
   async function save() {
     setSaving(true)
     try {
-      await onSave(currentItem.id, {
-        title: emptyToNull(currentForm.title),
-        hook: emptyToNull(currentForm.hook),
-        script_md: emptyToNull(currentForm.script_md),
-        description_md: emptyToNull(currentForm.description_md),
-        tags_csv: emptyToNull(currentForm.tags_csv),
-        platform: currentForm.platform,
-        type: currentForm.type,
-        status: currentForm.status as ContentItem['status'],
-        planned_date: currentForm.planned_date || null,
-        publish_date: currentForm.publish_date || null,
-        external_url: emptyToNull(currentForm.external_url),
-        platform_meta_json: currentForm.platform_meta_json,
-      })
+      const patch = baseline ? buildDirtyPatch(currentForm, baseline) : toUpdateValues(currentForm)
+      if (Object.keys(patch).length > 0) {
+        await onSave(currentItem.id, patch)
+      }
+      setBaseline(currentForm)
     } catch {
-      setForm(toForm(currentItem))
+      // The parent displays the API error; retain the user's draft for a retry.
     } finally {
       setSaving(false)
     }

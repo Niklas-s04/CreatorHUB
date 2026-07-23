@@ -161,7 +161,7 @@ type CreateProductInput = {
   current_value?: number
 }
 
-export function useCreateProductMutation(listParams: ProductsListParams) {
+export function useCreateProductMutation() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: async (payload: CreateProductInput) => {

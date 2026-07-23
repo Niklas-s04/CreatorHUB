@@ -66,7 +66,7 @@ function formatDate(value: string, locale: 'de-DE' | 'en-US' = 'de-DE') {
       month: '2-digit',
       year: '2-digit',
     })
-  } catch (e) {
+  } catch {
     return value
   }
 }
@@ -182,7 +182,7 @@ export default function AssetsPage() {
     offset,
   })
   const assetsPage = assetsQuery.data
-  const assets = assetsPage?.items ?? []
+  const assets = useMemo(() => assetsPage?.items ?? [], [assetsPage?.items])
   const totalAssets = assetsPage?.meta.total ?? assets.length
   const loading = assetsQuery.isLoading || assetsQuery.isFetching
   const queryErr = assetsQuery.error ? getErrorMessage(assetsQuery.error) : null
@@ -210,7 +210,7 @@ export default function AssetsPage() {
           const url = URL.createObjectURL(blob)
           thumbCacheRef.current[asset.id] = url
           setThumbs((prev) => ({ ...prev, [asset.id]: url }))
-        } catch (error) {
+        } catch {
           // Vorschaufehler bewusst ignorieren.
         }
       })()

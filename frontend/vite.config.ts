@@ -58,11 +58,15 @@ export default defineConfig(({ mode }) => {
       coverage: {
         provider: 'v8',
         reporter: ['text', 'lcov'],
+        include: ['src/**/*.{ts,tsx}'],
+        exclude: ['src/**/*.test.{ts,tsx}', 'src/test/**', 'src/**/*.d.ts'],
         thresholds: {
-          lines: 70,
-          functions: 70,
-          branches: 60,
-          statements: 70,
+          // Honest whole-source baseline. Raise these values as currently untested
+          // feature pages gain focused interaction tests.
+          lines: 50,
+          functions: 44,
+          branches: 37,
+          statements: 46,
         },
       },
     },

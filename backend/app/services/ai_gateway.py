@@ -25,7 +25,20 @@ def ollama_chat(
     force_json: bool = True,
 ) -> tuple[str, dict]:
     """Call Ollama chat API and return (content, meta)."""
-    url = f"{settings.OLLAMA_URL.rstrip('/')}/api/chat"
+    base_url = settings.OLLAMA_URL.rstrip("/")
+    parsed_base = urlparse(base_url)
+    scheme = parsed_base.scheme.lower()
+    host = (parsed_base.hostname or "").lower().strip(".")
+    if scheme not in {"http", "https"} or not host:
+        raise OllamaError("OLLAMA_URL must be an absolute HTTP(S) URL")
+    if parsed_base.username or parsed_base.password:
+        raise OllamaError("OLLAMA_URL must not contain credentials")
+    try:
+        port = parsed_base.port or (443 if scheme == "https" else 80)
+    except ValueError as exc:
+        raise OllamaError("OLLAMA_URL contains an invalid port") from exc
+
+    url = f"{base_url}/api/chat"
     messages: list[dict[str, Any]] = []
     if system:
         messages.append({"role": "system", "content": system})
@@ -38,18 +51,18 @@ def ollama_chat(
     if force_json:
         payload["format"] = "json"
 
-    host = (urlparse(url).hostname or "").lower()
-    allow_hosts = {host} if host else None
-
     t0 = time.time()
     response = request_outbound(
         url=url,
         method="POST",
         json_body=payload,
         timeout_read=180,
-        require_https=False,
+        require_https=scheme == "https",
         allow_private_ips=True,
-        allowed_hosts=allow_hosts,
+        allow_localhost=host == "localhost",
+        allowed_hosts={host},
+        allowed_ports={port},
+        max_redirects=0,
     )
     dt = time.time() - t0
 

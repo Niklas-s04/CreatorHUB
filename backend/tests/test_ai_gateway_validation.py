@@ -4,6 +4,37 @@ import pytest
 
 from app.services import ai_gateway
 from app.services.ai_gateway import AiOutputTechnicalError
+from app.services.outbound_http import OutboundResponse
+
+
+def test_ollama_chat_derives_a_narrow_outbound_policy_from_ollama_url(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict = {}
+
+    def _fake_request_outbound(**kwargs):
+        captured.update(kwargs)
+        return OutboundResponse(
+            status_code=200,
+            url=kwargs["url"],
+            content=b'{"message":{"content":"ok"}}',
+            headers={"content-type": "application/json"},
+            elapsed_ms=1,
+        )
+
+    monkeypatch.setattr(ai_gateway.settings, "OLLAMA_URL", "http://localhost:11434")
+    monkeypatch.setattr(ai_gateway, "request_outbound", _fake_request_outbound)
+
+    content, _meta = ai_gateway.ollama_chat(model="model", system="system", user="user")
+
+    assert content == "ok"
+    assert captured["url"] == "http://localhost:11434/api/chat"
+    assert captured["allowed_hosts"] == {"localhost"}
+    assert captured["allowed_ports"] == {11434}
+    assert captured["allow_private_ips"] is True
+    assert captured["allow_localhost"] is True
+    assert captured["require_https"] is False
+    assert captured["max_redirects"] == 0
 
 
 def test_safe_ollama_json_uses_fallback_on_invalid_json(monkeypatch: pytest.MonkeyPatch) -> None:

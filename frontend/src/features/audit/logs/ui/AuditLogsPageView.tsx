@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { apiFetch, apiUrl } from '../../../../api'
 import { useI18n } from '../../../../shared/i18n/i18n'
 import { useAuthz } from '../../../../shared/hooks/useAuthz'
@@ -113,22 +113,7 @@ export default function AuditLogsPageView() {
   const [categoryFilter, setCategoryFilter] = useState('')
   const [criticalOnly, setCriticalOnly] = useState(false)
 
-  function buildQuery() {
-    const params = new URLSearchParams()
-    params.set('limit', String(limit))
-    params.set('offset', String(offset))
-    params.set('sort_by', 'created_at')
-    params.set('sort_order', 'desc')
-    if (actionFilter.trim()) params.set('action', actionFilter.trim())
-    if (entityTypeFilter.trim()) params.set('entity_type', entityTypeFilter.trim())
-    if (actorFilter.trim()) params.set('actor', actorFilter.trim())
-    if (searchFilter.trim()) params.set('search', searchFilter.trim())
-    if (categoryFilter) params.set('category', categoryFilter)
-    if (criticalOnly) params.set('critical_only', 'true')
-    return params.toString()
-  }
-
-  async function load() {
+  const load = useCallback(async () => {
     if (!canViewAudit) {
       setEntries([])
       setLoading(false)
@@ -138,8 +123,19 @@ export default function AuditLogsPageView() {
     try {
       setErr(null)
       setLoading(true)
+      const params = new URLSearchParams()
+      params.set('limit', String(limit))
+      params.set('offset', String(offset))
+      params.set('sort_by', 'created_at')
+      params.set('sort_order', 'desc')
+      if (actionFilter.trim()) params.set('action', actionFilter.trim())
+      if (entityTypeFilter.trim()) params.set('entity_type', entityTypeFilter.trim())
+      if (actorFilter.trim()) params.set('actor', actorFilter.trim())
+      if (searchFilter.trim()) params.set('search', searchFilter.trim())
+      if (categoryFilter) params.set('category', categoryFilter)
+      if (criticalOnly) params.set('critical_only', 'true')
       const response = await apiFetch<PageLike<AuditEntry> & { meta?: { total?: number } }>(
-        `/audit?${buildQuery()}`
+        `/audit?${params.toString()}`
       )
       const parsed = parseAuditEntries(response)
       setEntries(parsed)
@@ -149,23 +145,22 @@ export default function AuditLogsPageView() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [
+    actionFilter,
+    actorFilter,
+    canViewAudit,
+    categoryFilter,
+    criticalOnly,
+    entityTypeFilter,
+    limit,
+    offset,
+    searchFilter,
+  ])
 
   useEffect(() => {
     if (authzLoading) return
     void load()
-  }, [
-    authzLoading,
-    canViewAudit,
-    limit,
-    offset,
-    actionFilter,
-    entityTypeFilter,
-    actorFilter,
-    searchFilter,
-    categoryFilter,
-    criticalOnly,
-  ])
+  }, [authzLoading, load])
 
   function resetFilters() {
     setActionFilter('')

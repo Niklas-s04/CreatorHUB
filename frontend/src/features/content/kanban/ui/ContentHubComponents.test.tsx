@@ -73,6 +73,63 @@ describe('Content Hub components', () => {
     )
   })
 
+  it('keeps a dirty item draft across refetches and failed saves', async () => {
+    const onSave = vi.fn().mockRejectedValue(new Error('Save failed'))
+    const view = render(
+      <ContentItemEditor
+        item={item}
+        profiles={[profile]}
+        error={null}
+        onSave={onSave}
+        onDelete={vi.fn()}
+      />
+    )
+
+    const title = screen.getByLabelText(/Titel/)
+    fireEvent.change(title, { target: { value: 'Unsaved local title' } })
+    view.rerender(
+      <ContentItemEditor
+        item={{ ...item, title: 'Refetched server title', readiness_score: 30 }}
+        profiles={[profile]}
+        error={null}
+        onSave={onSave}
+        onDelete={vi.fn()}
+      />
+    )
+    expect(screen.getByLabelText(/Titel/)).toHaveValue('Unsaved local title')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Speichern' }))
+    await waitFor(() => expect(onSave).toHaveBeenCalled())
+    expect(screen.getByLabelText(/Titel/)).toHaveValue('Unsaved local title')
+  })
+
+  it('patches only locally changed fields after a concurrent refetch', async () => {
+    const onSave = vi.fn().mockResolvedValue(undefined)
+    const view = render(
+      <ContentItemEditor
+        item={item}
+        profiles={[profile]}
+        error={null}
+        onSave={onSave}
+        onDelete={vi.fn()}
+      />
+    )
+
+    fireEvent.change(screen.getByLabelText(/Titel/), { target: { value: 'Local title' } })
+    view.rerender(
+      <ContentItemEditor
+        item={{ ...item, description_md: 'Concurrent server description' }}
+        profiles={[profile]}
+        error={null}
+        onSave={onSave}
+        onDelete={vi.fn()}
+      />
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Speichern' }))
+
+    await waitFor(() => expect(onSave).toHaveBeenCalledWith('content-1', { title: 'Local title' }))
+  })
+
   it('creates a template with multiple checklist steps', async () => {
     const onCreate = vi.fn().mockResolvedValue(undefined)
     render(

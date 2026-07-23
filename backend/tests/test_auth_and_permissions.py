@@ -91,7 +91,7 @@ def test_me_rejects_refresh_token_type(client, db_session: Session) -> None:
 
     response = client.get("/api/auth/me", headers=_auth_header(refresh_token))
     assert response.status_code == 401
-    assert response.json()["detail"] == "Invalid token"
+    assert response.json()["message"] == "Invalid token"
 
 
 def test_me_rejects_revoked_token(client, db_session: Session) -> None:
@@ -109,7 +109,7 @@ def test_me_rejects_revoked_token(client, db_session: Session) -> None:
 
     response = client.get("/api/auth/me", headers=_auth_header(access_token))
     assert response.status_code == 401
-    assert response.json()["detail"] == "Token revoked"
+    assert response.json()["message"] == "Token revoked"
 
 
 def test_create_user_requires_admin_role(client, db_session: Session) -> None:
@@ -123,7 +123,7 @@ def test_create_user_requires_admin_role(client, db_session: Session) -> None:
     )
 
     assert response.status_code == 403
-    assert response.json()["detail"] == "Insufficient permissions"
+    assert response.json()["message"] == "Insufficient permissions"
 
 
 def test_create_user_writes_audit_log(client, db_session: Session) -> None:
@@ -233,7 +233,7 @@ def test_approve_registration_requires_step_up_mfa_when_enabled(
         headers=_auth_header(token),
     )
     assert denied.status_code == 403
-    assert denied.json()["detail"] == "Step-up authentication required"
+    assert denied.json()["message"] == "Step-up authentication required"
 
     session = db_session.query(AuthSession).filter(AuthSession.user_id == admin.id).first()
     assert session is not None
@@ -260,7 +260,7 @@ def test_mfa_step_up_requires_enabled_mfa(client, db_session: Session) -> None:
     )
 
     assert response.status_code == 409
-    assert response.json()["detail"] == "MFA must be enabled before step-up"
+    assert response.json()["message"] == "MFA must be enabled before step-up"
 
 
 def test_mfa_step_up_sets_short_lived_session_verification(
@@ -338,7 +338,7 @@ def test_sensitive_action_rejects_expired_step_up(
     )
 
     assert denied.status_code == 403
-    assert denied.json()["detail"] == "Step-up authentication required"
+    assert denied.json()["message"] == "Step-up authentication required"
 
 
 def test_reject_registration_stores_reason_and_history(client, db_session: Session) -> None:
@@ -383,7 +383,7 @@ def test_update_user_blocks_self_role_or_status_change(client, db_session: Sessi
     )
 
     assert response.status_code == 400
-    assert "Self role/status changes" in response.json()["detail"]
+    assert "Self role/status changes" in response.json()["message"]
 
 
 def test_update_user_writes_revision_safe_audit_log(client, db_session: Session) -> None:

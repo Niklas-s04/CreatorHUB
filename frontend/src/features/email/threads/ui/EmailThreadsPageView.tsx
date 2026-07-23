@@ -233,7 +233,7 @@ function formatDate(value?: string) {
   if (!value) return ''
   try {
     return new Date(value).toLocaleString()
-  } catch (e) {
+  } catch {
     return value
   }
 }
@@ -243,7 +243,7 @@ function safeParseList(value: string | null): string[] {
   try {
     const arr = JSON.parse(value)
     return Array.isArray(arr) ? arr : []
-  } catch (e) {
+  } catch {
     return []
   }
 }
@@ -312,14 +312,20 @@ export default function EmailPage() {
   const [dealSaving, setDealSaving] = useState(false)
   const [dealAutoLoading, setDealAutoLoading] = useState(false)
   const [dealErr, setDealErr] = useState<string | null>(null)
+  const dealDraftRef = useRef(threadDetail?.deal_draft ?? null)
+  dealDraftRef.current = threadDetail?.deal_draft ?? null
+  const loadThreadsRef = useRef(loadThreads)
+  loadThreadsRef.current = loadThreads
+  const loadCreatorProfilesRef = useRef(loadCreatorProfiles)
+  loadCreatorProfilesRef.current = loadCreatorProfiles
 
   useEffect(() => {
-    void loadThreads()
+    void loadThreadsRef.current()
   }, [threadsPageSize, threadsOffset])
 
   useEffect(() => {
     if (!hasPermission('email.generate')) return
-    void loadCreatorProfiles()
+    void loadCreatorProfilesRef.current()
   }, [hasPermission])
 
   useEffect(() => {
@@ -340,7 +346,7 @@ export default function EmailPage() {
   }, [activeDraftId, threadDetail])
 
   useEffect(() => {
-    setDealForm(buildDealFormState(threadDetail?.deal_draft || null))
+    setDealForm(buildDealFormState(dealDraftRef.current))
     setDealErr(null)
   }, [threadDetail?.deal_draft?.id, threadDetail?.id])
 

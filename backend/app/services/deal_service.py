@@ -47,7 +47,7 @@ def _snapshot_deal_draft(draft: DealDraft) -> dict[str, str | None]:
     }
 
 
-def _apply_fields(target: DealDraft, data: dict[str, str | None]) -> None:
+def _apply_fields(target: DealDraft, data: dict[str, Any]) -> None:
     for field, value in data.items():
         setattr(target, field, value)
 
@@ -55,12 +55,15 @@ def _apply_fields(target: DealDraft, data: dict[str, str | None]) -> None:
 def _merge_intake_values(
     extracted: dict[str, str | None],
     overrides: dict[str, Any],
-) -> dict[str, str | None]:
-    body = {key: extracted.get(key) for key in DEAL_DRAFT_FIELD_KEYS}
-    for key in DEAL_DRAFT_FIELD_KEYS:
-        override_value = overrides.get(key)
-        if override_value is not None:
-            body[key] = str(override_value)
+) -> dict[str, Any]:
+    body: dict[str, Any] = {
+        key: value
+        for key, value in extracted.items()
+        if key in DEAL_DRAFT_FIELD_KEYS and value is not None
+    }
+    for key, override_value in overrides.items():
+        if key in DEAL_DRAFT_FIELD_KEYS:
+            body[key] = override_value
     return body
 
 
@@ -105,11 +108,18 @@ def create_or_update_from_email(
         if payload.auto_extract or not draft:
             extracted = extract_deal_intake(db, subject=thread.subject, raw_body=thread.raw_body)
 
-        overrides = payload.model_dump(exclude={"thread_id", "auto_extract", "status"})
+        overrides = payload.model_dump(
+            exclude_unset=True,
+            exclude={
+                "thread_id",
+                "auto_extract",
+                "status",
+                "workflow_status",
+                "review_reason",
+            },
+        )
         body = _merge_intake_values(extracted, overrides)
-        if payload.product_id is not None:
-            body["product_id"] = payload.product_id
-        body["checklist"] = payload.checklist
+        body.pop("checklist", None)
 
         next_status = payload.status or (draft.status if draft else DealDraftStatus.intake)
         requested_workflow_status = payload.workflow_status
@@ -187,6 +197,13 @@ def create_or_update_from_email(
                 status=new_draft.status,
                 override=payload.checklist,
             )
+            if new_draft.status in {DealDraftStatus.negotiating, DealDraftStatus.won}:
+                missing_items = missing_required_items(new_draft.checklist)
+                if missing_items:
+                    raise BusinessRuleViolation(
+                        "Deal cannot move forward, required checklist items missing: "
+                        + ", ".join(missing_items)
+                    )
             db.add(new_draft)
             db.flush()
             if target_workflow_status != WorkflowStatus.draft or new_draft.review_reason:

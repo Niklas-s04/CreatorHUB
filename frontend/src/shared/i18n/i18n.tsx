@@ -9,6 +9,7 @@ const translations = {
   de: {
     app: {
       loadingSession: 'Session wird geprüft…',
+      sessionCheckFailed: 'Die Sitzung konnte nicht geprüft werden. Bitte versuche es erneut.',
       loadingPage: 'Seite wird geladen…',
       loadingApplication: 'Lade Anwendung…',
       menuOpen: 'Navigation öffnen',
@@ -99,6 +100,8 @@ const translations = {
       submitResetRequest: 'Reset anfordern',
       submitResetConfirm: 'Passwort setzen',
       loginSuccess: 'Login erfolgreich',
+      accountDeletionCanceled:
+        'Die geplante Account-Löschung wurde durch deine Anmeldung abgebrochen.',
       adminPasswordSet: 'Admin-Passwort wurde gesetzt',
       registrationRequested: 'Registrierungsanfrage gesendet',
       resetRequested: 'Passwort-Reset angefordert',
@@ -277,6 +280,7 @@ const translations = {
   en: {
     app: {
       loadingSession: 'Checking session…',
+      sessionCheckFailed: 'The session could not be checked. Please try again.',
       loadingPage: 'Loading page…',
       loadingApplication: 'Loading application…',
       menuOpen: 'Open menu',
@@ -367,6 +371,7 @@ const translations = {
       submitResetRequest: 'Request reset',
       submitResetConfirm: 'Set password',
       loginSuccess: 'Login successful',
+      accountDeletionCanceled: 'The scheduled account deletion was canceled when you signed in.',
       adminPasswordSet: 'Admin password was set',
       registrationRequested: 'Registration request sent',
       resetRequested: 'Password reset requested',

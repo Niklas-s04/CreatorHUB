@@ -89,7 +89,8 @@ The most important environment variables are grouped by purpose in `.env.example
 ### Authentication and Sessions
 
 - `JWT_SECRET`
-- `JWT_EXPIRE_MINUTES`
+- `JWT_ACCESS_EXPIRE_MINUTES`
+- `JWT_REFRESH_EXPIRE_MINUTES`
 - `BOOTSTRAP_ADMIN_USERNAME`
 - `BOOTSTRAP_ADMIN_PASSWORD`
 - `BOOTSTRAP_INSTALL_TOKEN`
@@ -222,6 +223,9 @@ docker compose up --build
 ```
 
 The Docker stack runs PostgreSQL, Redis, backend, worker, and frontend together.
+Before backend and worker start, the one-shot `migrate` service upgrades the database to the
+current Alembic head. Named volumes persist uploads and exports and share the application cache
+between backend and worker.
 
 ### Shutdown Behavior
 

@@ -68,4 +68,4 @@ def test_password_reset_confirm_rejects_context_mismatch(client, db_session, mon
     )
 
     assert confirm_response.status_code == 400
-    assert "context mismatch" in confirm_response.json()["detail"].lower()
+    assert "context mismatch" in confirm_response.json()["message"].lower()

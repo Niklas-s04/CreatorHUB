@@ -61,7 +61,7 @@ def test_csrf_required_for_logout_when_authenticated(client, db_session: Session
 
     response = client.post("/api/auth/logout")
     assert response.status_code == 403
-    assert response.json()["detail"] == "CSRF validation failed"
+    assert response.json()["message"] == "CSRF validation failed"
 
 
 def test_logout_rotates_csrf_cookie(client, db_session: Session) -> None:

@@ -13,6 +13,10 @@ export type BootstrapStatus = {
   needs_password_setup: boolean
 }
 
+export type LoginResult = {
+  account_deletion_canceled: boolean
+}
+
 export type AuthSession = {
   id: string
   created_at: string
@@ -198,7 +202,11 @@ const httpClient = createHttpClient({
   },
 })
 
-export async function login(username: string, password: string, otp?: string): Promise<void> {
+export async function login(
+  username: string,
+  password: string,
+  otp?: string
+): Promise<LoginResult> {
   const body = new URLSearchParams()
   body.set('username', username)
   body.set('password', password)
@@ -210,7 +218,15 @@ export async function login(username: string, password: string, otp?: string): P
     body,
   })
   if (!res.ok) throw new Error(await res.text())
+
+  let accountDeletionCanceled = false
+  if ((res.headers.get('content-type') || '').includes('application/json')) {
+    const payload = (await res.json()) as { account_deletion_canceled?: unknown }
+    accountDeletionCanceled = payload.account_deletion_canceled === true
+  }
+
   setToken('1')
+  return { account_deletion_canceled: accountDeletionCanceled }
 }
 
 export async function refreshSession(): Promise<void> {
@@ -222,10 +238,14 @@ export async function refreshSession(): Promise<void> {
 }
 
 export async function getBootstrapStatus(bootstrapToken: string): Promise<BootstrapStatus> {
+  const path = '/auth/bootstrap-status'
   const res = await authFetch('/auth/bootstrap-status', {
     headers: { 'X-Bootstrap-Token': bootstrapToken },
   })
-  if (!res.ok) throw new Error(await res.text())
+  if (!res.ok) {
+    const details = await res.text()
+    throw new ApiError(details || res.statusText, res.status, path, details)
+  }
   return res.json()
 }
 
@@ -295,9 +315,12 @@ export async function checkSession(): Promise<boolean> {
     await apiFetch('/auth/me')
     setToken('1')
     return true
-  } catch {
-    setToken(null)
-    return false
+  } catch (error: unknown) {
+    if (error instanceof ApiError && (error.status === 401 || error.status === 403)) {
+      setToken(null)
+      return false
+    }
+    throw error
   }
 }
 

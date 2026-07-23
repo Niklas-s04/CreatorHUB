@@ -5,6 +5,8 @@ const baseURL = process.env.E2E_BASE_URL || 'http://localhost:31080'
 export default defineConfig({
   testDir: './e2e',
   fullyParallel: false,
+  // The E2E suite intentionally shares one isolated stack and bootstraps its admin once.
+  workers: process.env.CI ? 1 : undefined,
   retries: process.env.CI ? 1 : 0,
   reporter: process.env.CI ? [['list'], ['html', { open: 'never' }]] : 'list',
   timeout: 120_000,

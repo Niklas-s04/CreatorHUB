@@ -7,17 +7,12 @@ type ErrorStateProps = {
   retryLabel?: string
 }
 
-export function ErrorState({
-  title = 'Fehler beim Laden',
-  message,
-  onRetry,
-  retryLabel,
-}: ErrorStateProps) {
+export function ErrorState({ title, message, onRetry, retryLabel }: ErrorStateProps) {
   const { t } = useI18n()
 
   return (
     <div className="error-state card state-card error" role="alert">
-      <div className="title-strong">{title || t('common.loadError')}</div>
+      <div className="title-strong">{title ?? t('common.loadError')}</div>
       <div className="error mt8">{message}</div>
       {onRetry ? (
         <div className="mt12">

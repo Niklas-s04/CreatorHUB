@@ -128,11 +128,13 @@ describe('products queries and mutations', () => {
       .mockResolvedValueOnce([
         {
           id: 'tx-21',
-          tx_type: 'buy',
-          tx_date: '2024-01-01',
+          product_id: '7',
+          type: 'buy',
+          date: '2024-01-01',
           amount: 42,
           currency: 'EUR',
-          note: null,
+          counterparty: null,
+          notes: null,
         },
       ])
 
@@ -194,7 +196,7 @@ describe('products queries and mutations', () => {
     const invalidateQueries = vi.spyOn(queryClient, 'invalidateQueries')
     ;(apiFetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(undefined)
 
-    const createHook = renderHook(() => useCreateProductMutation({}), {
+    const createHook = renderHook(() => useCreateProductMutation(), {
       wrapper: createWrapper(queryClient),
     })
     await act(async () => {

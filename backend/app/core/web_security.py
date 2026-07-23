@@ -10,9 +10,10 @@ from fastapi import Request
 from redis import Redis
 from redis.exceptions import RedisError
 from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.responses import JSONResponse, Response
+from starlette.responses import Response
 from starlette.types import ASGIApp
 
+from app.core.api_errors import api_error_response
 from app.core.logging_config import log_security_event
 from app.core.security import decode_token, validate_csrf_token
 
@@ -82,8 +83,9 @@ class RequestSizeLimitMiddleware(BaseHTTPMiddleware):
                             "max_body_size": self.max_body_size,
                         },
                     )
-                    return JSONResponse(
-                        status_code=413, content={"detail": "Request body too large"}
+                    return api_error_response(
+                        status_code=413,
+                        message="Request body too large",
                     )
             except ValueError:
                 log_security_event(
@@ -91,8 +93,9 @@ class RequestSizeLimitMiddleware(BaseHTTPMiddleware):
                     request=request,
                     details={"content_length": content_length},
                 )
-                return JSONResponse(
-                    status_code=400, content={"detail": "Invalid Content-Length header"}
+                return api_error_response(
+                    status_code=400,
+                    message="Invalid Content-Length header",
                 )
         return await call_next(request)
 
@@ -211,14 +214,14 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                 request=request,
                 details={"path": path, "ip": ip, "limit": limit, "mode": "redis"},
             )
-            return JSONResponse(status_code=429, content={"detail": "Too many requests"})
+            return api_error_response(status_code=429, message="Too many requests")
         if redis_limited is None and self._is_limited((ip, path), now, limit):
             log_security_event(
                 "request_rate_limited",
                 request=request,
                 details={"path": path, "ip": ip, "limit": limit, "mode": "in_memory"},
             )
-            return JSONResponse(status_code=429, content={"detail": "Too many requests"})
+            return api_error_response(status_code=429, message="Too many requests")
 
         return await call_next(request)
 
@@ -255,7 +258,7 @@ class CsrfProtectionMiddleware(BaseHTTPMiddleware):
         csrf_header = request.headers.get("x-csrf-token")
         if not csrf_cookie or not csrf_header or csrf_cookie != csrf_header:
             log_security_event("csrf_validation_failed", request=request)
-            return JSONResponse(status_code=403, content={"detail": "CSRF validation failed"})
+            return api_error_response(status_code=403, message="CSRF validation failed")
 
         try:
             payload = decode_token(auth_cookie)
@@ -267,6 +270,6 @@ class CsrfProtectionMiddleware(BaseHTTPMiddleware):
                 raise ValueError("invalid csrf token")
         except Exception:
             log_security_event("csrf_validation_failed", request=request)
-            return JSONResponse(status_code=403, content={"detail": "CSRF validation failed"})
+            return api_error_response(status_code=403, message="CSRF validation failed")
 
         return await call_next(request)

@@ -79,7 +79,12 @@ async function setupAdminPassword(page: Page, password: string): Promise<void> {
     throw new Error('Admin password setup required, but E2E_BOOTSTRAP_TOKEN is not set.')
   }
 
-  await page.getByPlaceholder(/Install-Token|Install token/i).fill(E2E_BOOTSTRAP_TOKEN)
+  const tokenInput = page.getByPlaceholder(/Install-Token|Install token/i)
+  if (!(await tokenInput.isVisible().catch(() => false))) {
+    await page.getByRole('button', { name: /Erstsetup|First setup/i }).click()
+  }
+
+  await tokenInput.fill(E2E_BOOTSTRAP_TOKEN)
   await page.getByRole('button', { name: /Erstsetup prüfen|Check first setup/i }).click()
 
   const form = page.locator('form')
@@ -99,12 +104,12 @@ export async function login(page: Page, username: string, password: string): Pro
     .catch(() => false)
 
   if (!onProtectedRoute) {
-    const setupVisible = await page
-      .getByRole('button', { name: /Admin-Passwort setzen|Set admin password/i })
+    const setupAvailable = await page
+      .getByRole('button', { name: /Erstsetup|First setup/i })
       .isVisible()
       .catch(() => false)
 
-    if (setupVisible) {
+    if (setupAvailable) {
       await setupAdminPassword(page, password)
     }
   }

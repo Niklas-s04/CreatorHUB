@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useForm, type UseFormRegisterReturn } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useNavigate } from 'react-router-dom'
@@ -22,6 +22,7 @@ import { InlineHint } from '../../../../shared/ui/states/InlineHint'
 import { useToast } from '../../../../shared/ui/toast/ToastProvider'
 import { useI18n } from '../../../../shared/i18n/i18n'
 import { AppLogo } from '../../../../shared/ui/brand/AppLogo'
+import { ApiError } from '../../../../shared/api/httpClient'
 
 type PasswordFieldProps = {
   id: string
@@ -160,12 +161,15 @@ export default function LoginPage() {
   const resetToken = watch('resetToken')
   useUnsavedChangesWarning(isDirty && !busy)
 
-  function setMode(nextMode: AuthFormValues['mode']) {
-    setValue('mode', nextMode, { shouldValidate: true, shouldDirty: false })
-    setErr(null)
-    setErrKind('technical')
-    setMsg(null)
-  }
+  const setMode = useCallback(
+    (nextMode: AuthFormValues['mode']) => {
+      setValue('mode', nextMode, { shouldValidate: true, shouldDirty: false })
+      setErr(null)
+      setErrKind('technical')
+      setMsg(null)
+    },
+    [setValue]
+  )
 
   useEffect(() => {
     ;(async () => {
@@ -173,9 +177,9 @@ export default function LoginPage() {
         const token = sessionStorage.getItem('bootstrap_token') || ''
         if (!token) return
         setShowBootstrapPanel(true)
+        setValue('bootstrapToken', token, { shouldDirty: false })
         const status = await getBootstrapStatus(token)
         setAdminUsername(status.admin_username)
-        setValue('bootstrapToken', token, { shouldDirty: false })
         if (status.needs_password_setup) {
           setMode('setup')
           setValue('username', status.admin_username, { shouldDirty: false })
@@ -185,9 +189,18 @@ export default function LoginPage() {
           sessionStorage.removeItem('bootstrap_token')
           setValue('bootstrapToken', '', { shouldDirty: false })
         }
-      } catch {}
+      } catch (error: unknown) {
+        if (error instanceof ApiError && [401, 403, 404].includes(error.status)) {
+          sessionStorage.removeItem('bootstrap_token')
+          setValue('bootstrapToken', '', { shouldDirty: false })
+          setShowBootstrapPanel(false)
+          return
+        }
+        setErr(getErrorMessage(error))
+        setErrKind('technical')
+      }
     })()
-  }, [setValue])
+  }, [setMode, setValue])
 
   async function onSubmit(values: AuthFormValues) {
     setErr(null)
@@ -220,9 +233,12 @@ export default function LoginPage() {
           toast.success(t('login.resetRequested'))
         }
       } else {
-        await login(values.username, values.password, values.otp)
+        const loginResult = await login(values.username, values.password, values.otp)
         reset(undefined, { keepValues: false })
         toast.success(t('login.loginSuccess'))
+        if (loginResult?.account_deletion_canceled) {
+          toast.success(t('login.accountDeletionCanceled'))
+        }
         nav('/')
       }
     } catch (e: unknown) {

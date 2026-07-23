@@ -10,19 +10,58 @@ import {
 
 describe('validators', () => {
   it('parses product and related arrays', () => {
-    expect(parseProductDto({ id: 'product-1' })).toMatchObject({
+    expect(
+      parseProductDto({
+        id: 'product-1',
+        category: 'Camera',
+        purchase_price: 1499,
+        purchase_date: '2024-02-03',
+        storage_location: 'Shelf A',
+        serial_number: 'SERIAL-1',
+        quantity: 2,
+        currency: 'USD',
+        project_ids: ['project-1', 4],
+      })
+    ).toMatchObject({
       id: 'product-1',
       title: 'Unbenanntes Produkt',
       status: 'active',
+      category: 'Camera',
+      purchase_price: 1499,
+      purchase_date: '2024-02-03',
+      storage_location: 'Shelf A',
+      serial_number: 'SERIAL-1',
+      quantity: 2,
+      currency: 'USD',
+      project_ids: ['project-1'],
     })
     expect(parseProductAssetsDtoArray([{ id: 'asset-1', review_state: 'bad' }])[0]).toMatchObject({
       id: 'asset-1',
       review_state: 'pending',
       is_primary: false,
     })
-    expect(parseProductTransactionsDtoArray([{ id: 'tx-1', amount: 4 }])[0]).toMatchObject({
+    expect(
+      parseProductTransactionsDtoArray([
+        {
+          id: 'tx-1',
+          product_id: 'product-1',
+          type: 'purchase',
+          date: '2026-07-23',
+          amount: 4,
+          currency: 'EUR',
+          counterparty: 'Store',
+          notes: 'Receipt',
+        },
+      ])[0]
+    ).toEqual({
       id: 'tx-1',
+      product_id: 'product-1',
+      type: 'purchase',
+      date: '2026-07-23',
       amount: 4,
+      currency: 'EUR',
+      counterparty: 'Store',
+      notes: 'Receipt',
     })
     expect(parseContentTasksDtoArray([{ id: 'task-1', title: null }])[0]).toMatchObject({
       id: 'task-1',

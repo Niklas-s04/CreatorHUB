@@ -295,13 +295,16 @@ def login(
     user_agent = request.headers.get("user-agent")
 
     user = db.query(User).filter(User.username == username).first()
+    pending_account_deletion = bool(
+        user and not user.is_active and user.deletion_requested_at is not None
+    )
 
     if user and user.role == UserRole.admin and user.needs_password_setup:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail="Admin password setup required"
         )
 
-    if user and not user.is_active:
+    if user and not user.is_active and not pending_account_deletion:
         suspicious = is_suspicious_login(
             db, user=user, ip_address=ip_address, user_agent=user_agent, success=False
         )
@@ -381,6 +384,34 @@ def login(
                 status_code=status.HTTP_401_UNAUTHORIZED, detail="MFA required or invalid"
             )
 
+    account_deletion_canceled = False
+    if pending_account_deletion:
+        try:
+            cancel_account_deletion(
+                db,
+                user=user,
+                actor_ip=ip_address,
+                actor_user_agent=user_agent,
+                commit=False,
+            )
+            account_deletion_canceled = True
+        except ValueError:
+            record_login_attempt(
+                db,
+                user=user,
+                username=username,
+                ip_address=ip_address,
+                user_agent=user_agent,
+                success=False,
+                suspicious=False,
+                reason="account_deletion_grace_period_expired",
+            )
+            db.commit()
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Incorrect username or password",
+            ) from None
+
     user.failed_login_attempts = 0
     user.locked_until = None
     suspicious = is_suspicious_login(
@@ -407,7 +438,10 @@ def login(
     db.commit()
 
     _set_auth_cookies(response, access_token, refresh_token, session)
-    return TokenOut(access_token=access_token)
+    return TokenOut(
+        access_token=access_token,
+        account_deletion_canceled=account_deletion_canceled,
+    )
 
 
 @router.get("/bootstrap-status", response_model=AdminBootstrapStatusOut)
@@ -499,7 +533,7 @@ def refresh_token(request: Request, response: Response, db: Session = Depends(ge
         _clear_auth_cookies(response)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token"
-        )
+        ) from None
 
     if is_token_revoked(db, jti=jti):
         _clear_auth_cookies(response)
@@ -521,7 +555,9 @@ def refresh_token(request: Request, response: Response, db: Session = Depends(ge
         session_id = uuid.UUID(str(sid))
     except Exception:
         _clear_auth_cookies(response)
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid session")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid session"
+        ) from None
 
     session = (
         db.query(AuthSession)
@@ -1755,8 +1791,8 @@ def request_user_account_deletion(
             actor_user_agent=request.headers.get("user-agent"),
         )
         return result
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.post("/users/me/account-deletion/cancel", response_model=dict)
@@ -1780,5 +1816,5 @@ def cancel_user_account_deletion(
             actor_user_agent=request.headers.get("user-agent"),
         )
         return result
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc

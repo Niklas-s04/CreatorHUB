@@ -85,7 +85,12 @@ def test_csrf_blocks_missing_header_when_authenticated() -> None:
 
     response = client.post("/api/protected")
     assert response.status_code == 403
-    assert response.json()["detail"] == "CSRF validation failed"
+    assert response.json() == {
+        "code": "FORBIDDEN",
+        "message": "CSRF validation failed",
+        "status": 403,
+        "details": None,
+    }
 
 
 def test_csrf_allows_valid_cookie_and_header() -> None:

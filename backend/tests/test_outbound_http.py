@@ -88,3 +88,57 @@ def test_request_outbound_rejects_large_response(monkeypatch: pytest.MonkeyPatch
             allow_private_ips=False,
             max_bytes=2,
         )
+
+
+def test_request_outbound_uses_configured_allowlist_by_default(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    session = FakeSession([FakeResponse(200, {"content-type": "text/plain"}, [b"ok"])])
+    monkeypatch.setattr(outbound_http.requests, "Session", lambda: session)
+    monkeypatch.setattr(outbound_http, "_resolve_host", lambda hostname: {"93.184.216.34"})
+    monkeypatch.setattr(outbound_http.settings, "OUTBOUND_ALLOWLIST_HOSTS", "example.com")
+
+    with pytest.raises(outbound_http.OutboundRequestError, match="not in allowlist"):
+        outbound_http.request_outbound(url="https://unlisted.example/file")
+
+    assert session.requests == []
+
+    response = outbound_http.request_outbound(url="https://example.com/file")
+
+    assert response.status_code == 200
+    assert session.requests == [("GET", "https://example.com/file")]
+
+
+def test_request_outbound_allows_exact_local_ollama_policy(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    session = FakeSession([FakeResponse(200, {"content-type": "application/json"}, [b"{}"])])
+    monkeypatch.setattr(outbound_http.requests, "Session", lambda: session)
+    monkeypatch.setattr(outbound_http, "_resolve_host", lambda hostname: {"127.0.0.1"})
+
+    response = outbound_http.request_outbound(
+        url="http://localhost:11434/api/chat",
+        method="POST",
+        require_https=False,
+        allow_private_ips=True,
+        allow_localhost=True,
+        allowed_hosts={"localhost"},
+        allowed_ports={11434},
+        max_redirects=0,
+    )
+
+    assert response.status_code == 200
+    assert session.requests == [("POST", "http://localhost:11434/api/chat")]
+
+
+def test_local_ollama_policy_rejects_a_different_port() -> None:
+    with pytest.raises(outbound_http.OutboundRequestError, match="Port 11435 is not allowed"):
+        outbound_http._validate_url(
+            "http://localhost:11435/api/chat",
+            require_https=False,
+            allow_private_ips=True,
+            allow_localhost=True,
+            allowed_ports={11434},
+            allowed_hosts={"localhost"},
+            sensitive_hosts=None,
+        )

@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import SettingsAccountPageView from './SettingsAccountPageView'
-import { revokeSession } from '../../../../api'
+import { apiFetch, revokeSession } from '../../../../api'
 
 const navigate = vi.fn()
 const toastSuccess = vi.fn()
@@ -122,5 +122,40 @@ describe('SettingsAccountPageView', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /Session auf Other Device beenden/i }))
     await waitFor(() => expect(revokeSession).toHaveBeenCalledWith('s-other'))
+  })
+
+  it('keeps a knowledge document dirty when saving fails', async () => {
+    vi.mocked(apiFetch).mockImplementation(async (path: string, options?: RequestInit) => {
+      if (path === '/knowledge') {
+        return [
+          {
+            id: 'doc-1',
+            type: 'policy',
+            title: 'Original title',
+            content: 'Original content',
+          },
+        ]
+      }
+      if (path === '/knowledge/doc-1' && options?.method === 'PATCH') {
+        throw new Error('Save failed')
+      }
+      throw new Error(`Unexpected apiFetch path: ${path}`)
+    })
+
+    render(
+      <MemoryRouter>
+        <SettingsAccountPageView />
+      </MemoryRouter>
+    )
+
+    const title = await screen.findByLabelText('Titel')
+    fireEvent.change(title, { target: { value: 'Unsaved title' } })
+    const saveButton = screen.getByRole('button', { name: 'Speichern' })
+    await waitFor(() => expect(saveButton).toBeEnabled())
+    fireEvent.click(saveButton)
+
+    await waitFor(() => expect(toastError).toHaveBeenCalledWith('Save failed'))
+    expect(screen.getByLabelText('Titel')).toHaveValue('Unsaved title')
+    expect(saveButton).toBeEnabled()
   })
 })

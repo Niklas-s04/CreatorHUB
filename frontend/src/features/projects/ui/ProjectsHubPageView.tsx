@@ -1,10 +1,17 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { apiFetch } from '../../../api'
 import { useAuthz } from '../../../shared/hooks/useAuthz'
 import { useI18n } from '../../../shared/i18n/i18n'
 import { getErrorMessage } from '../../../shared/lib/errors'
 import { useToast } from '../../../shared/ui/toast/ToastProvider'
+import { fetchAllPages } from '../paging'
+import {
+  buildProjectUpdatePayload,
+  isProjectDirty,
+  mergeProjectKeepingDirtyFields,
+  normalizeCategoryPatch,
+} from '../projectForm'
 import {
   PREVIEW_STATUSES,
   PROJECT_PRIORITIES,
@@ -177,15 +184,20 @@ export default function ProjectsHubPageView() {
   const { language } = useI18n()
   const text = copy[language]
   const toast = useToast()
-  const { hasPermission } = useAuthz()
+  const { hasPermission, loading: authzLoading } = useAuthz()
   const canManage = hasPermission('project.manage')
   const canDelete = hasPermission('project.delete')
+  const canReadContent = hasPermission('content.read') || hasPermission('content.manage')
+  const canManageContent = hasPermission('content.manage')
+  const canReadProducts = hasPermission('product.read') || hasPermission('product.write')
+  const canWriteProducts = hasPermission('product.write')
   const [projects, setProjects] = useState<Project[]>([])
   const [categories, setCategories] = useState<ProjectCategory[]>([])
   const [contentOptions, setContentOptions] = useState<ContentOption[]>([])
   const [productOptions, setProductOptions] = useState<ProductOption[]>([])
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [form, setForm] = useState<Project | null>(null)
+  const [formBaseline, setFormBaseline] = useState<Project | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -208,61 +220,146 @@ export default function ProjectsHubPageView() {
   const [inlineProductModel, setInlineProductModel] = useState('')
   const [newCategoryName, setNewCategoryName] = useState('')
   const [newCategoryColor, setNewCategoryColor] = useState('#5aa0ff')
+  const formDirty = useMemo(() => isProjectDirty(form, formBaseline), [form, formBaseline])
+  const selectedIdRef = useRef(selectedId)
+  const formRef = useRef(form)
+  const formBaselineRef = useRef(formBaseline)
+  const formDirtyRef = useRef(formDirty)
+  selectedIdRef.current = selectedId
+  formRef.current = form
+  formBaselineRef.current = formBaseline
+  formDirtyRef.current = formDirty
 
-  async function loadCollections() {
+  const syncProject = useCallback((project: Project, preserveDirty = false) => {
+    const currentForm = formRef.current
+    const currentBaseline = formBaselineRef.current
+    const nextForm =
+      preserveDirty && currentForm && currentBaseline
+        ? mergeProjectKeepingDirtyFields(project, currentForm, currentBaseline)
+        : project
+
+    formRef.current = nextForm
+    formBaselineRef.current = project
+    setForm(nextForm)
+    setFormBaseline(project)
+    setProjects((current) => {
+      const exists = current.some((item) => item.id === project.id)
+      if (!exists) return [project, ...current]
+      return current.map((item) => (item.id === project.id ? project : item))
+    })
+  }, [])
+
+  const loadCollections = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
-      const [projectPage, categoryItems, contentPage, productPage] = await Promise.all([
-        apiFetch<Page<Project>>('/projects?limit=100&sort_by=updated_at&sort_order=desc'),
-        apiFetch<ProjectCategory[]>('/projects/categories?include_inactive=true'),
-        apiFetch<Page<ContentOption>>(
-          '/content/items?limit=100&sort_by=updated_at&sort_order=desc'
+      const contentRequest = canReadContent
+        ? fetchAllPages<ContentOption>(
+            (path) => apiFetch<Page<ContentOption>>(path),
+            '/content/items?sort_by=updated_at&sort_order=desc'
+          )
+            .then((items) => ({ items, error: null as unknown }))
+            .catch((relationError: unknown) => ({
+              items: [] as ContentOption[],
+              error: relationError,
+            }))
+        : Promise.resolve({ items: [] as ContentOption[], error: null as unknown })
+      const productRequest = canReadProducts
+        ? fetchAllPages<ProductOption>(
+            (path) => apiFetch<Page<ProductOption>>(path),
+            '/products?sort_by=updated_at&sort_order=desc'
+          )
+            .then((items) => ({ items, error: null as unknown }))
+            .catch((relationError: unknown) => ({
+              items: [] as ProductOption[],
+              error: relationError,
+            }))
+        : Promise.resolve({ items: [] as ProductOption[], error: null as unknown })
+
+      const [projectItems, categoryItems, contentResult, productResult] = await Promise.all([
+        fetchAllPages<Project>(
+          (path) => apiFetch<Page<Project>>(path),
+          '/projects?sort_by=updated_at&sort_order=desc'
         ),
-        apiFetch<Page<ProductOption>>('/products?limit=100&sort_by=updated_at&sort_order=desc'),
+        apiFetch<ProjectCategory[]>('/projects/categories?include_inactive=true'),
+        contentRequest,
+        productRequest,
       ])
-      setProjects(projectPage.items)
+      setProjects(projectItems)
       setCategories(categoryItems)
-      setContentOptions(contentPage.items)
-      setProductOptions(productPage.items)
+      if (!contentResult.error) setContentOptions(contentResult.items)
+      if (!productResult.error) setProductOptions(productResult.items)
+
+      const relationErrors = [contentResult.error, productResult.error].filter(Boolean)
+      if (relationErrors.length) {
+        setError(relationErrors.map(getErrorMessage).join(' '))
+      }
+
       const hashProjectId = window.location.hash.startsWith('#project-')
         ? window.location.hash.slice('#project-'.length)
         : null
-      setSelectedId(
-        (current) =>
-          current ??
-          projectPage.items.find((item) => item.id === hashProjectId)?.id ??
-          projectPage.items[0]?.id ??
-          null
+      const currentId = selectedIdRef.current
+      const currentStillExists = Boolean(
+        currentId && projectItems.some((item) => item.id === currentId)
       )
+      if (!currentStillExists) {
+        const nextId =
+          projectItems.find((item) => item.id === hashProjectId)?.id ?? projectItems[0]?.id ?? null
+        if (
+          !formDirtyRef.current ||
+          window.confirm(
+            language === 'de' ? 'Ungespeicherte Änderungen verwerfen?' : 'Discard unsaved changes?'
+          )
+        ) {
+          selectedIdRef.current = nextId
+          setSelectedId(nextId)
+        }
+      }
     } catch (loadError) {
       setError(getErrorMessage(loadError))
     } finally {
       setLoading(false)
     }
-  }
+  }, [canReadContent, canReadProducts, language])
 
   useEffect(() => {
-    void loadCollections()
-  }, [])
+    if (!authzLoading) void loadCollections()
+  }, [authzLoading, loadCollections])
 
   useEffect(() => {
     if (!selectedId) {
+      formRef.current = null
+      formBaselineRef.current = null
       setForm(null)
+      setFormBaseline(null)
       return
     }
     let live = true
     apiFetch<Project>(`/projects/${selectedId}`)
       .then((project) => {
-        if (live) setForm(project)
+        if (!live) return
+        const currentForm = formRef.current
+        const currentBaseline = formBaselineRef.current
+        const preserveDirty =
+          Boolean(currentForm && currentBaseline) &&
+          currentForm?.id === project.id &&
+          currentBaseline?.id === project.id &&
+          isProjectDirty(currentForm, currentBaseline)
+        syncProject(project, preserveDirty)
       })
       .catch((loadError) => {
-        if (live) setError(getErrorMessage(loadError))
+        if (!live) return
+        setError(getErrorMessage(loadError))
+        const currentFormId = formRef.current?.id ?? null
+        if (currentFormId && currentFormId !== selectedId) {
+          selectedIdRef.current = currentFormId
+          setSelectedId(currentFormId)
+        }
       })
     return () => {
       live = false
     }
-  }, [selectedId])
+  }, [selectedId, syncProject])
 
   const filteredProjects = useMemo(() => {
     const normalized = query.trim().toLocaleLowerCase()
@@ -291,17 +388,42 @@ export default function ProjectsHubPageView() {
     return productOptions.filter((item) => !linked.has(item.id))
   }, [productOptions, form?.products])
 
-  function syncProject(project: Project) {
-    setForm(project)
-    setProjects((current) => {
-      const exists = current.some((item) => item.id === project.id)
-      if (!exists) return [project, ...current]
-      return current.map((item) => (item.id === project.id ? project : item))
+  function setField<K extends keyof Project>(field: K, value: Project[K]) {
+    if (!canManage) return
+    setForm((current) => {
+      const next = current ? { ...current, [field]: value } : current
+      formRef.current = next
+      return next
     })
   }
 
-  function setField<K extends keyof Project>(field: K, value: Project[K]) {
-    setForm((current) => (current ? { ...current, [field]: value } : current))
+  function setCategory(categoryId: string | null) {
+    if (!canManage) return
+    setForm((current) => {
+      if (!current) return current
+      const next = {
+        ...current,
+        category_id: categoryId,
+        category: categories.find((category) => category.id === categoryId) ?? null,
+      }
+      formRef.current = next
+      return next
+    })
+  }
+
+  function selectProject(projectId: string) {
+    if (projectId === selectedIdRef.current) return
+    if (
+      formDirtyRef.current &&
+      !window.confirm(
+        language === 'de' ? 'Ungespeicherte Änderungen verwerfen?' : 'Discard unsaved changes?'
+      )
+    ) {
+      return
+    }
+    setError(null)
+    selectedIdRef.current = projectId
+    setSelectedId(projectId)
   }
 
   async function mutateProject<T>(
@@ -327,7 +449,7 @@ export default function ProjectsHubPageView() {
   }
 
   async function createProject() {
-    if (!newTitle.trim()) return
+    if (!canManage || !newTitle.trim()) return
     const project = await mutateProject(
       () =>
         apiFetch<Project>('/projects', {
@@ -347,26 +469,8 @@ export default function ProjectsHubPageView() {
   }
 
   async function saveProject() {
-    if (!form) return
-    const payload = {
-      title: form.title.trim(),
-      category_id: form.category_id || null,
-      status: form.status,
-      priority: form.priority,
-      owner_name: nullable(form.owner_name ?? ''),
-      goal: nullable(form.goal ?? ''),
-      brief_md: nullable(form.brief_md ?? ''),
-      requirements_md: nullable(form.requirements_md ?? ''),
-      notes_md: nullable(form.notes_md ?? ''),
-      start_date: form.start_date || null,
-      due_date: form.due_date || null,
-      publish_date: form.publish_date || null,
-      progress_percent: form.progress_percent,
-      preview_required: form.preview_required,
-      preview_status: form.preview_required ? form.preview_status : 'not_required',
-      preview_due_date: form.preview_required ? form.preview_due_date || null : null,
-      preview_notes: form.preview_required ? nullable(form.preview_notes ?? '') : null,
-    }
+    if (!form || !canManage || !formDirty || !form.title.trim()) return
+    const payload = buildProjectUpdatePayload(form, formBaseline)
     await mutateProject(
       () =>
         apiFetch<Project>(`/projects/${form.id}`, {
@@ -379,7 +483,7 @@ export default function ProjectsHubPageView() {
   }
 
   async function deleteProject() {
-    if (!form || !window.confirm(`${text.delete}: ${form.title}?`)) return
+    if (!form || !canDelete || !window.confirm(`${text.delete}: ${form.title}?`)) return
     const id = form.id
     const result = await mutateProject(
       () => apiFetch<{ deleted: boolean }>(`/projects/${id}`, { method: 'DELETE' }),
@@ -390,10 +494,11 @@ export default function ProjectsHubPageView() {
     setProjects(remaining)
     setSelectedId(remaining[0]?.id ?? null)
     setForm(null)
+    setFormBaseline(null)
   }
 
   async function relationAction(path: string, method: 'POST' | 'DELETE' = 'POST', body?: object) {
-    if (!form) return null
+    if (!form || !canManage) return null
     return mutateProject(
       () =>
         apiFetch<Project>(`/projects/${form.id}${path}`, {
@@ -401,24 +506,24 @@ export default function ProjectsHubPageView() {
           body: body ? JSON.stringify(body) : undefined,
         }),
       language === 'de' ? 'Verknüpfungen aktualisiert.' : 'Links updated.',
-      syncProject
+      (project) => syncProject(project, true)
     )
   }
 
   async function linkExistingContent() {
-    if (!linkContentId) return
+    if (!canManage || !canReadContent || !linkContentId) return
     const result = await relationAction(`/content/${linkContentId}`)
     if (result) setLinkContentId('')
   }
 
   async function linkExistingProduct() {
-    if (!linkProductId) return
+    if (!canManage || !canReadProducts || !linkProductId) return
     const result = await relationAction(`/products/${linkProductId}`)
     if (result) setLinkProductId('')
   }
 
   async function createContent() {
-    if (!inlineContentTitle.trim()) return
+    if (!canManage || !canManageContent || !inlineContentTitle.trim()) return
     const result = await relationAction('/content', 'POST', {
       title: inlineContentTitle.trim(),
       platform: inlineContentPlatform,
@@ -433,7 +538,7 @@ export default function ProjectsHubPageView() {
   }
 
   async function createProduct() {
-    if (!inlineProductTitle.trim()) return
+    if (!canManage || !canWriteProducts || !inlineProductTitle.trim()) return
     const result = await relationAction('/products', 'POST', {
       title: inlineProductTitle.trim(),
       brand: nullable(inlineProductBrand),
@@ -449,12 +554,23 @@ export default function ProjectsHubPageView() {
   }
 
   async function createCategory() {
-    if (!newCategoryName.trim()) return
+    if (!canManage) return
+    const patch = normalizeCategoryPatch({
+      name: newCategoryName,
+      color: newCategoryColor,
+    })
+    if (!patch) {
+      const message =
+        language === 'de' ? 'Kategoriename darf nicht leer sein.' : 'Category name cannot be empty.'
+      setError(message)
+      toast.error(message)
+      return
+    }
     const result = await mutateProject(
       () =>
         apiFetch<ProjectCategory>('/projects/categories', {
           method: 'POST',
-          body: JSON.stringify({ name: newCategoryName.trim(), color: newCategoryColor }),
+          body: JSON.stringify(patch),
         }),
       language === 'de' ? 'Kategorie angelegt.' : 'Category created.'
     )
@@ -464,11 +580,20 @@ export default function ProjectsHubPageView() {
   }
 
   async function updateCategory(category: ProjectCategory, patch: Partial<ProjectCategory>) {
+    if (!canManage) return
+    const normalizedPatch = normalizeCategoryPatch(patch)
+    if (!normalizedPatch) {
+      const message =
+        language === 'de' ? 'Kategoriename darf nicht leer sein.' : 'Category name cannot be empty.'
+      setError(message)
+      toast.error(message)
+      return
+    }
     const updated = await mutateProject(
       () =>
         apiFetch<ProjectCategory>(`/projects/categories/${category.id}`, {
           method: 'PATCH',
-          body: JSON.stringify(patch),
+          body: JSON.stringify(normalizedPatch),
         }),
       language === 'de' ? 'Kategorie gespeichert.' : 'Category saved.'
     )
@@ -479,9 +604,20 @@ export default function ProjectsHubPageView() {
         project.category_id === updated.id ? { ...project, category: updated } : project
       )
     )
+    setForm((current) => {
+      const next = current?.category_id === updated.id ? { ...current, category: updated } : current
+      formRef.current = next
+      return next
+    })
+    setFormBaseline((current) => {
+      const next = current?.category_id === updated.id ? { ...current, category: updated } : current
+      formBaselineRef.current = next
+      return next
+    })
   }
 
   async function deleteCategory(category: ProjectCategory) {
+    if (!canManage) return
     if (!window.confirm(`${category.name} löschen? Projekte behalten ihre Daten.`)) return
     const result = await mutateProject(
       () =>
@@ -492,11 +628,24 @@ export default function ProjectsHubPageView() {
     )
     if (!result) return
     setCategories((current) => current.filter((item) => item.id !== category.id))
-    setForm((current) =>
-      current?.category_id === category.id
-        ? { ...current, category_id: null, category: null }
-        : current
-    )
+    setNewCategoryId((current) => (current === category.id ? '' : current))
+    setCategoryFilter((current) => (current === category.id ? '' : current))
+    setForm((current) => {
+      const next =
+        current?.category_id === category.id
+          ? { ...current, category_id: null, category: null }
+          : current
+      formRef.current = next
+      return next
+    })
+    setFormBaseline((current) => {
+      const next =
+        current?.category_id === category.id
+          ? { ...current, category_id: null, category: null }
+          : current
+      formBaselineRef.current = next
+      return next
+    })
     await loadCollections()
   }
 
@@ -591,7 +740,7 @@ export default function ProjectsHubPageView() {
               className={
                 selectedId === project.id ? 'project-list-item active' : 'project-list-item'
               }
-              onClick={() => setSelectedId(project.id)}
+              onClick={() => selectProject(project.id)}
             >
               <div className="row between">
                 <span className="title-strong">{project.title}</span>
@@ -644,7 +793,11 @@ export default function ProjectsHubPageView() {
                 </div>
                 <div className="project-detail-actions">
                   {canManage && (
-                    <button className="btn primary" disabled={saving} onClick={saveProject}>
+                    <button
+                      className="btn primary"
+                      disabled={saving || !formDirty || !form.title.trim()}
+                      onClick={saveProject}
+                    >
                       {saving ? '…' : text.save}
                     </button>
                   )}
@@ -695,7 +848,7 @@ export default function ProjectsHubPageView() {
                       <select
                         value={form.category_id ?? ''}
                         disabled={!canManage}
-                        onChange={(event) => setField('category_id', event.target.value || null)}
+                        onChange={(event) => setCategory(event.target.value || null)}
                       >
                         <option value="">—</option>
                         {categories
@@ -968,67 +1121,71 @@ export default function ProjectsHubPageView() {
                         )}
                       </div>
                     ))}
-                    {canManage && (
+                    {canManage && (canReadContent || canManageContent) && (
                       <>
-                        <div className="project-relation-composer">
-                          <select
-                            value={linkContentId}
-                            onChange={(event) => setLinkContentId(event.target.value)}
-                          >
-                            <option value="">Bestehenden Content wählen …</option>
-                            {availableContent.map((item) => (
-                              <option key={item.id} value={item.id}>
-                                {item.title || item.id.slice(0, 8)} · {item.platform}
-                              </option>
-                            ))}
-                          </select>
-                          <button
-                            className="btn"
-                            disabled={!linkContentId}
-                            onClick={linkExistingContent}
-                          >
-                            Verknüpfen
-                          </button>
-                        </div>
-                        <div className="project-inline-create">
-                          <div className="small title-strong">Direkt neuen Content anlegen</div>
-                          <input
-                            value={inlineContentTitle}
-                            placeholder="Video-/Content-Titel"
-                            onChange={(event) => setInlineContentTitle(event.target.value)}
-                          />
-                          <div className="control-row">
+                        {canReadContent && (
+                          <div className="project-relation-composer">
                             <select
-                              value={inlineContentPlatform}
-                              onChange={(event) => setInlineContentPlatform(event.target.value)}
+                              value={linkContentId}
+                              onChange={(event) => setLinkContentId(event.target.value)}
                             >
-                              {['youtube', 'instagram', 'tiktok', 'shorts', 'x', 'linkedin'].map(
-                                (platform) => (
-                                  <option key={platform} value={platform}>
-                                    {platform}
-                                  </option>
-                                )
-                              )}
-                            </select>
-                            <select
-                              value={inlineContentType}
-                              onChange={(event) => setInlineContentType(event.target.value)}
-                            >
-                              {['review', 'short', 'post', 'story'].map((type) => (
-                                <option key={type} value={type}>
-                                  {type}
+                              <option value="">Bestehenden Content wählen …</option>
+                              {availableContent.map((item) => (
+                                <option key={item.id} value={item.id}>
+                                  {item.title || item.id.slice(0, 8)} · {item.platform}
                                 </option>
                               ))}
                             </select>
                             <button
-                              className="btn primary"
-                              disabled={!inlineContentTitle.trim()}
-                              onClick={createContent}
+                              className="btn"
+                              disabled={!linkContentId}
+                              onClick={linkExistingContent}
                             >
-                              + Anlegen
+                              Verknüpfen
                             </button>
                           </div>
-                        </div>
+                        )}
+                        {canManageContent && (
+                          <div className="project-inline-create">
+                            <div className="small title-strong">Direkt neuen Content anlegen</div>
+                            <input
+                              value={inlineContentTitle}
+                              placeholder="Video-/Content-Titel"
+                              onChange={(event) => setInlineContentTitle(event.target.value)}
+                            />
+                            <div className="control-row">
+                              <select
+                                value={inlineContentPlatform}
+                                onChange={(event) => setInlineContentPlatform(event.target.value)}
+                              >
+                                {['youtube', 'instagram', 'tiktok', 'shorts', 'x', 'linkedin'].map(
+                                  (platform) => (
+                                    <option key={platform} value={platform}>
+                                      {platform}
+                                    </option>
+                                  )
+                                )}
+                              </select>
+                              <select
+                                value={inlineContentType}
+                                onChange={(event) => setInlineContentType(event.target.value)}
+                              >
+                                {['review', 'short', 'post', 'story'].map((type) => (
+                                  <option key={type} value={type}>
+                                    {type}
+                                  </option>
+                                ))}
+                              </select>
+                              <button
+                                className="btn primary"
+                                disabled={!inlineContentTitle.trim()}
+                                onClick={createContent}
+                              >
+                                + Anlegen
+                              </button>
+                            </div>
+                          </div>
+                        )}
                       </>
                     )}
                   </div>
@@ -1063,55 +1220,59 @@ export default function ProjectsHubPageView() {
                         )}
                       </div>
                     ))}
-                    {canManage && (
+                    {canManage && (canReadProducts || canWriteProducts) && (
                       <>
-                        <div className="project-relation-composer">
-                          <select
-                            value={linkProductId}
-                            onChange={(event) => setLinkProductId(event.target.value)}
-                          >
-                            <option value="">Bestehendes Produkt wählen …</option>
-                            {availableProducts.map((item) => (
-                              <option key={item.id} value={item.id}>
-                                {item.title} {item.brand ? `· ${item.brand}` : ''}
-                              </option>
-                            ))}
-                          </select>
-                          <button
-                            className="btn"
-                            disabled={!linkProductId}
-                            onClick={linkExistingProduct}
-                          >
-                            Verknüpfen
-                          </button>
-                        </div>
-                        <div className="project-inline-create">
-                          <div className="small title-strong">Direkt neues Produkt anlegen</div>
-                          <input
-                            value={inlineProductTitle}
-                            placeholder="Produktname"
-                            onChange={(event) => setInlineProductTitle(event.target.value)}
-                          />
-                          <div className="control-row">
-                            <input
-                              value={inlineProductBrand}
-                              placeholder="Brand"
-                              onChange={(event) => setInlineProductBrand(event.target.value)}
-                            />
-                            <input
-                              value={inlineProductModel}
-                              placeholder="Modell"
-                              onChange={(event) => setInlineProductModel(event.target.value)}
-                            />
-                            <button
-                              className="btn primary"
-                              disabled={!inlineProductTitle.trim()}
-                              onClick={createProduct}
+                        {canReadProducts && (
+                          <div className="project-relation-composer">
+                            <select
+                              value={linkProductId}
+                              onChange={(event) => setLinkProductId(event.target.value)}
                             >
-                              + Anlegen
+                              <option value="">Bestehendes Produkt wählen …</option>
+                              {availableProducts.map((item) => (
+                                <option key={item.id} value={item.id}>
+                                  {item.title} {item.brand ? `· ${item.brand}` : ''}
+                                </option>
+                              ))}
+                            </select>
+                            <button
+                              className="btn"
+                              disabled={!linkProductId}
+                              onClick={linkExistingProduct}
+                            >
+                              Verknüpfen
                             </button>
                           </div>
-                        </div>
+                        )}
+                        {canWriteProducts && (
+                          <div className="project-inline-create">
+                            <div className="small title-strong">Direkt neues Produkt anlegen</div>
+                            <input
+                              value={inlineProductTitle}
+                              placeholder="Produktname"
+                              onChange={(event) => setInlineProductTitle(event.target.value)}
+                            />
+                            <div className="control-row">
+                              <input
+                                value={inlineProductBrand}
+                                placeholder="Brand"
+                                onChange={(event) => setInlineProductBrand(event.target.value)}
+                              />
+                              <input
+                                value={inlineProductModel}
+                                placeholder="Modell"
+                                onChange={(event) => setInlineProductModel(event.target.value)}
+                              />
+                              <button
+                                className="btn primary"
+                                disabled={!inlineProductTitle.trim()}
+                                onClick={createProduct}
+                              >
+                                + Anlegen
+                              </button>
+                            </div>
+                          </div>
+                        )}
                       </>
                     )}
                   </div>

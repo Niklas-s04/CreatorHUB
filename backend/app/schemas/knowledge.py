@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.models.knowledge import (
     KnowledgeDocType,
@@ -46,6 +46,22 @@ class KnowledgeDocUpdate(BaseModel):
     trust_level: KnowledgeTrustLevel | None = None
     is_outdated: bool | None = None
     outdated_reason: str | None = None
+
+    @model_validator(mode="after")
+    def required_patch_fields_must_not_be_null(self) -> "KnowledgeDocUpdate":
+        for field in (
+            "type",
+            "title",
+            "content",
+            "workflow_status",
+            "source_type",
+            "source_review_status",
+            "trust_level",
+            "is_outdated",
+        ):
+            if field in self.model_fields_set and getattr(self, field) is None:
+                raise ValueError(f"{field} must not be null")
+        return self
 
 
 class KnowledgeDocVersionOut(BaseModel):

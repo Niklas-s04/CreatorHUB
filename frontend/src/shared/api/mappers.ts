@@ -31,11 +31,26 @@ export function toProductDetailVm(dto: ProductDto): ProductDetailVm {
     title: dto.title,
     brand: dto.brand ?? '',
     model: dto.model ?? '',
+    category: dto.category ?? '',
     status: dto.status,
     condition: dto.condition ?? '',
+    purchasePrice: dto.purchase_price,
+    purchaseDate: dto.purchase_date ?? '',
     currentValue: dto.current_value,
     currency: dto.currency ?? '',
+    storageLocation: dto.storage_location ?? '',
+    serialNumber: dto.serial_number ?? '',
+    quantity: dto.quantity ?? 1,
     notes: dto.notes_md ?? '',
+    workflowStatus: dto.workflow_status ?? 'draft',
+    reviewReason: dto.review_reason ?? '',
+    projectIds: dto.project_ids,
+    statusChangedAt: dto.status_changed_at ?? '',
+    reviewedById: dto.reviewed_by_id ?? '',
+    reviewedByName: dto.reviewed_by_name ?? '',
+    reviewedAt: dto.reviewed_at ?? '',
+    createdAt: dto.created_at ?? '',
+    updatedAt: dto.updated_at ?? '',
   }
 }
 
@@ -56,11 +71,11 @@ export function toProductAssetVm(dto: ProductAssetDto): ProductAssetVm {
 export function toProductTransactionVm(dto: ProductTransactionDto): ProductTransactionVm {
   return {
     id: dto.id,
-    txType: dto.tx_type,
-    txDate: dto.tx_date ?? '',
+    txType: dto.type,
+    txDate: dto.date,
     amount: dto.amount,
-    currency: dto.currency ?? '',
-    note: dto.note ?? '',
+    currency: dto.currency,
+    note: dto.notes ?? '',
   }
 }
 

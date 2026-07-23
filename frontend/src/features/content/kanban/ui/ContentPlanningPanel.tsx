@@ -5,6 +5,7 @@ type Props = {
   planning: PlanningView | null
   templates: ChecklistTemplate[]
   selectedItemId: string | null
+  canManage?: boolean
   onApplyTemplate: (templateId: string) => Promise<void>
 }
 
@@ -12,6 +13,7 @@ export default function ContentPlanningPanel({
   planning,
   templates,
   selectedItemId,
+  canManage = true,
   onApplyTemplate,
 }: Props) {
   const { t } = useI18n()
@@ -52,17 +54,25 @@ export default function ContentPlanningPanel({
           ))}
         </div>
       )}
-      <div className="title-strong">{t('contentHub.applyTemplate')}</div>
-      <div className="control-row">
-        {matchingTemplates.map((template) => (
-          <button key={template.id} className="btn" onClick={() => onApplyTemplate(template.id)}>
-            {template.name}
-          </button>
-        ))}
-        {matchingTemplates.length === 0 && (
-          <div className="muted">{t('contentHub.noMatchingTemplates')}</div>
-        )}
-      </div>
+      {canManage && (
+        <>
+          <div className="title-strong">{t('contentHub.applyTemplate')}</div>
+          <div className="control-row">
+            {matchingTemplates.map((template) => (
+              <button
+                key={template.id}
+                className="btn"
+                onClick={() => onApplyTemplate(template.id)}
+              >
+                {template.name}
+              </button>
+            ))}
+            {matchingTemplates.length === 0 && (
+              <div className="muted">{t('contentHub.noMatchingTemplates')}</div>
+            )}
+          </div>
+        </>
+      )}
       <div className="stack">
         {planning.tasks.map((task) => (
           <div key={task.id} className="row between card tight">

@@ -30,6 +30,11 @@ function asNullableNumber(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) ? value : null
 }
 
+function asStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return []
+  return value.filter((item): item is string => typeof item === 'string')
+}
+
 function asBoolean(value: unknown, fallback = false): boolean {
   return typeof value === 'boolean' ? value : fallback
 }
@@ -66,10 +71,22 @@ export function parseProductDto(input: unknown): ProductDto {
     category: asNullableString(src.category),
     condition: asNullableString(src.condition),
     status: asProductStatus(src.status),
+    purchase_price: asNullableNumber(src.purchase_price),
+    purchase_date: asNullableString(src.purchase_date),
     current_value: asNullableNumber(src.current_value),
     currency: asNullableString(src.currency),
+    storage_location: asNullableString(src.storage_location),
+    serial_number: asNullableString(src.serial_number),
     quantity: asNullableNumber(src.quantity),
     notes_md: asNullableString(src.notes_md),
+    workflow_status: asNullableString(src.workflow_status),
+    review_reason: asNullableString(src.review_reason),
+    project_ids: asStringArray(src.project_ids),
+    status_changed_at: asNullableString(src.status_changed_at),
+    reviewed_by_id: asNullableString(src.reviewed_by_id),
+    reviewed_by_name: asNullableString(src.reviewed_by_name),
+    reviewed_at: asNullableString(src.reviewed_at),
+    created_at: asNullableString(src.created_at),
     updated_at: asNullableString(src.updated_at),
   }
 }
@@ -98,11 +115,13 @@ export function parseProductTransactionsDtoArray(input: unknown): ProductTransac
     const src = isRecord(item) ? item : {}
     return {
       id: asString(src.id),
-      tx_type: asString(src.tx_type, 'unknown'),
-      tx_date: asNullableString(src.tx_date),
+      product_id: asString(src.product_id),
+      type: asString(src.type, 'unknown'),
+      date: asString(src.date),
       amount: asNullableNumber(src.amount),
-      currency: asNullableString(src.currency),
-      note: asNullableString(src.note),
+      currency: asString(src.currency),
+      counterparty: asNullableString(src.counterparty),
+      notes: asNullableString(src.notes),
     }
   })
 }

@@ -50,7 +50,56 @@ function backoff(attempt: number, baseDelay: number) {
   return baseDelay * 2 ** (attempt - 1) + jitter
 }
 
+function toError(error: unknown): Error {
+  if (error instanceof Error) return error
+  if (typeof error === 'object' && error !== null) {
+    const candidate = error as { name?: unknown; message?: unknown }
+    const normalized = new Error(
+      typeof candidate.message === 'string' ? candidate.message : String(error)
+    )
+    if (typeof candidate.name === 'string') normalized.name = candidate.name
+    return normalized
+  }
+  return new Error(String(error))
+}
+
+function createAttemptController(callerSignal: AbortSignal | null | undefined, timeoutMs: number) {
+  const controller = new AbortController()
+  let timedOut = false
+  const abortFromCaller = () => controller.abort(callerSignal?.reason)
+  if (callerSignal?.aborted) {
+    abortFromCaller()
+  } else {
+    callerSignal?.addEventListener('abort', abortFromCaller, { once: true })
+  }
+  const timeout = setTimeout(() => {
+    timedOut = true
+    controller.abort()
+  }, timeoutMs)
+
+  return {
+    signal: controller.signal,
+    didTimeOut: () => timedOut,
+    cleanup: () => {
+      clearTimeout(timeout)
+      callerSignal?.removeEventListener('abort', abortFromCaller)
+    },
+  }
+}
+
 export function createHttpClient(context: HttpClientContext) {
+  let refreshPromise: Promise<void> | null = null
+
+  async function refreshOnce(): Promise<void> {
+    if (!context.onUnauthorizedRetry) return
+    if (!refreshPromise) {
+      refreshPromise = context.onUnauthorizedRetry().finally(() => {
+        refreshPromise = null
+      })
+    }
+    await refreshPromise
+  }
+
   async function request<T = unknown>(
     path: string,
     options: JsonRequestOptions = {},
@@ -61,12 +110,18 @@ export function createHttpClient(context: HttpClientContext) {
     const retries = options.retries ?? (isIdempotent(method) ? 2 : 0)
     const retryDelayMs = options.retryDelayMs ?? 250
     const shouldRetry = options.shouldRetry ?? defaultShouldRetry
+    const {
+      timeoutMs: _timeoutMs,
+      retries: _retries,
+      retryDelayMs: _retryDelayMs,
+      shouldRetry: _shouldRetry,
+      ...requestOptions
+    } = options
 
     let lastError: Error | null = null
 
     for (let attempt = 0; attempt <= retries; attempt += 1) {
-      const controller = new AbortController()
-      const timeout = setTimeout(() => controller.abort(), timeoutMs)
+      const attemptController = createAttemptController(options.signal, timeoutMs)
 
       try {
         const headers = new Headers(options.headers || {})
@@ -77,9 +132,9 @@ export function createHttpClient(context: HttpClientContext) {
         context.beforeRequest?.(headers, options)
 
         const res = await fetch(`${context.baseUrl}${path}`, {
-          ...options,
+          ...requestOptions,
           headers,
-          signal: controller.signal,
+          signal: attemptController.signal,
           credentials: 'include',
         })
 
@@ -92,10 +147,10 @@ export function createHttpClient(context: HttpClientContext) {
             context.onUnauthorizedRetry
           ) {
             try {
-              await context.onUnauthorizedRetry()
+              await refreshOnce()
               return request<T>(path, options, false)
             } catch {
-              context.onUnauthorized?.()
+              // Continue with the original unauthorized response below.
             }
           }
 
@@ -121,11 +176,14 @@ export function createHttpClient(context: HttpClientContext) {
 
         return (await res.text()) as T
       } catch (error: unknown) {
-        const err = error instanceof Error ? error : new Error(String(error))
+        const err = toError(error)
         lastError = err
 
         const isAbortError = err.name === 'AbortError'
-        const canRetry = attempt < retries && (isAbortError || err instanceof TypeError)
+        const canRetry =
+          attempt < retries &&
+          !options.signal?.aborted &&
+          ((isAbortError && attemptController.didTimeOut()) || err instanceof TypeError)
 
         if (!canRetry) {
           throw err
@@ -133,7 +191,7 @@ export function createHttpClient(context: HttpClientContext) {
 
         await delay(backoff(attempt + 1, retryDelayMs))
       } finally {
-        clearTimeout(timeout)
+        attemptController.cleanup()
       }
     }
 
@@ -148,21 +206,29 @@ export function createHttpClient(context: HttpClientContext) {
     const method = (options.method || 'GET').toUpperCase()
     const timeoutMs = options.timeoutMs ?? 12_000
     const retries = options.retries ?? (isIdempotent(method) ? 1 : 0)
+    const retryDelayMs = options.retryDelayMs ?? 250
+    const shouldRetry = options.shouldRetry ?? defaultShouldRetry
+    const {
+      timeoutMs: _timeoutMs,
+      retries: _retries,
+      retryDelayMs: _retryDelayMs,
+      shouldRetry: _shouldRetry,
+      ...requestOptions
+    } = options
 
     let lastError: Error | null = null
 
     for (let attempt = 0; attempt <= retries; attempt += 1) {
-      const controller = new AbortController()
-      const timeout = setTimeout(() => controller.abort(), timeoutMs)
+      const attemptController = createAttemptController(options.signal, timeoutMs)
 
       try {
         const headers = new Headers(options.headers || {})
         context.beforeRequest?.(headers, options)
 
         const res = await fetch(`${context.baseUrl}${path}`, {
-          ...options,
+          ...requestOptions,
           headers,
-          signal: controller.signal,
+          signal: attemptController.signal,
           credentials: 'include',
         })
 
@@ -175,27 +241,36 @@ export function createHttpClient(context: HttpClientContext) {
             context.onUnauthorizedRetry
           ) {
             try {
-              await context.onUnauthorizedRetry()
+              await refreshOnce()
               return requestBlob(path, options, false)
             } catch {
-              context.onUnauthorized?.()
+              // Continue with the original unauthorized response below.
             }
           }
 
           if (res.status === 401) context.onUnauthorized?.()
           const text = await res.text()
-          throw new ApiError(text || res.statusText, res.status, path, text)
+          const err = new ApiError(text || res.statusText, res.status, path, text)
+          if (attempt < retries && shouldRetry(res.status)) {
+            await delay(backoff(attempt + 1, retryDelayMs))
+            continue
+          }
+          throw err
         }
 
         return await res.blob()
       } catch (error: unknown) {
-        const err = error instanceof Error ? error : new Error(String(error))
+        const err = toError(error)
         lastError = err
         const canRetry =
-          attempt < retries && (err.name === 'AbortError' || err instanceof TypeError)
+          attempt < retries &&
+          !options.signal?.aborted &&
+          ((err.name === 'AbortError' && attemptController.didTimeOut()) ||
+            err instanceof TypeError)
         if (!canRetry) throw err
+        await delay(backoff(attempt + 1, retryDelayMs))
       } finally {
-        clearTimeout(timeout)
+        attemptController.cleanup()
       }
     }
 

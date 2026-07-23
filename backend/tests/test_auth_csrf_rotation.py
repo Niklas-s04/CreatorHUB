@@ -31,4 +31,4 @@ def test_old_csrf_rejected_after_logout(client, db_session: Session) -> None:
     )
 
     assert response.status_code == 403
-    assert response.json()["detail"] == "CSRF validation failed"
+    assert response.json()["message"] == "CSRF validation failed"

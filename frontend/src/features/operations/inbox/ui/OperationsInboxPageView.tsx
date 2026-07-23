@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../../../../api'
 import { useI18n } from '../../../../shared/i18n/i18n'
@@ -7,10 +7,27 @@ import { useDebouncedValue } from '../../../../shared/hooks/useDebouncedValue'
 import { ErrorState } from '../../../../shared/ui/states/ErrorState'
 import { ListSkeleton } from '../../../../shared/ui/states/ListSkeleton'
 
-type OperationKind = 'asset_review' | 'registration_approval' | 'email_risk' | 'content_overdue'
+type OperationKind =
+  | 'asset_review'
+  | 'registration_approval'
+  | 'email_risk'
+  | 'content_overdue'
+  | 'deal_checklist'
+  | 'workflow_gap'
 type OperationPriority = 'low' | 'medium' | 'high' | 'critical'
 type OperationRole = 'admin' | 'editor' | 'viewer'
 type DueFilter = 'all' | 'overdue' | 'today' | 'next7' | 'none'
+
+const OPERATION_ROLES = ['admin', 'editor', 'viewer'] as const
+const OPERATION_PRIORITIES = ['low', 'medium', 'high', 'critical'] as const
+const DUE_FILTERS = ['overdue', 'today', 'next7', 'none'] as const
+
+function enumFilterFromQuery<T extends string>(
+  value: string | null,
+  allowed: readonly T[]
+): T | 'all' {
+  return value && allowed.includes(value as T) ? (value as T) : 'all'
+}
 
 type OperationInboxItem = {
   id: string
@@ -39,6 +56,8 @@ const KIND_LABELS: Record<OperationKind, string> = {
   registration_approval: 'Registration approval',
   email_risk: 'Risky email draft',
   content_overdue: 'Overdue content task',
+  deal_checklist: 'Incomplete deal checklist',
+  workflow_gap: 'Workflow gap',
 }
 
 const PRIORITY_LABELS: Record<OperationPriority, string> = {
@@ -65,31 +84,6 @@ function isOverdue(value: string | null): boolean {
   return due < today
 }
 
-function matchesDueFilter(item: OperationInboxItem, dueFilter: DueFilter): boolean {
-  if (dueFilter === 'all') return true
-  if (dueFilter === 'none') return !item.due_at
-  if (!item.due_at) return false
-
-  const due = new Date(item.due_at)
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-  const dueDay = new Date(due)
-  dueDay.setHours(0, 0, 0, 0)
-
-  if (dueFilter === 'overdue') {
-    return dueDay < today
-  }
-  if (dueFilter === 'today') {
-    return dueDay.getTime() === today.getTime()
-  }
-  if (dueFilter === 'next7') {
-    const next7 = new Date(today)
-    next7.setDate(today.getDate() + 7)
-    return dueDay >= today && dueDay <= next7
-  }
-  return true
-}
-
 export default function OperationsInboxPageView() {
   const { language } = useI18n()
   const isEnglish = language === 'en'
@@ -97,28 +91,30 @@ export default function OperationsInboxPageView() {
   const [data, setData] = useState<OperationInboxOut | null>(null)
   const [loading, setLoading] = useState(true)
   const [err, setErr] = useState<string | null>(null)
-  const [searchInput, setSearchInput] = useState(searchParams.get('q') || '')
+  const [searchInput, setSearchInput] = useState((searchParams.get('q') || '').slice(0, 200))
 
   const [userFilter, setUserFilter] = useState(searchParams.get('user') || 'all')
   const [roleFilter, setRoleFilter] = useState<'all' | OperationRole>(
-    (searchParams.get('role') as 'all' | OperationRole) || 'all'
+    enumFilterFromQuery(searchParams.get('role'), OPERATION_ROLES)
   )
   const [priorityFilter, setPriorityFilter] = useState<'all' | OperationPriority>(
-    (searchParams.get('priority') as 'all' | OperationPriority) || 'all'
+    enumFilterFromQuery(searchParams.get('priority'), OPERATION_PRIORITIES)
   )
   const [dueFilter, setDueFilter] = useState<DueFilter>(
-    (searchParams.get('due') as DueFilter) || 'all'
+    enumFilterFromQuery(searchParams.get('due'), DUE_FILTERS)
   )
   const [pageSize, setPageSize] = useState(() => {
     const parsed = Number(searchParams.get('limit') || '50')
     if (![25, 50, 100].includes(parsed)) return 50
     return parsed
   })
-  const [offset, setOffset] = useState(() =>
-    Math.max(0, Number(searchParams.get('offset') || '0') || 0)
-  )
+  const [offset, setOffset] = useState(() => {
+    const parsed = Number(searchParams.get('offset') || '0')
+    return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : 0
+  })
   const debouncedSearch = useDebouncedValue(searchInput.trim().toLowerCase(), 250)
   const tableAnchorRef = useRef<HTMLDivElement | null>(null)
+  const requestSequenceRef = useRef(0)
   function changePage(direction: 'prev' | 'next') {
     setOffset((curr) => {
       if (direction === 'prev') return Math.max(0, curr - pageSize)
@@ -128,28 +124,41 @@ export default function OperationsInboxPageView() {
     tableAnchorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
 
-  async function load() {
+  const load = useCallback(async () => {
+    const requestSequence = ++requestSequenceRef.current
     try {
       setErr(null)
       setLoading(true)
-      const response = await apiFetch<OperationInboxOut>(
-        `/operations/inbox?limit=${pageSize}&offset=${offset}`
-      )
+      const query = new URLSearchParams({
+        limit: String(pageSize),
+        offset: String(offset),
+      })
+      if (userFilter !== 'all') query.set('assignee_user', userFilter)
+      if (roleFilter !== 'all') query.set('role', roleFilter)
+      if (priorityFilter !== 'all') query.set('priority', priorityFilter)
+      if (dueFilter !== 'all') query.set('due', dueFilter)
+      if (debouncedSearch) query.set('q', debouncedSearch)
+
+      const response = await apiFetch<OperationInboxOut>(`/operations/inbox?${query.toString()}`)
+      if (requestSequence !== requestSequenceRef.current) return
       setData(response)
     } catch (e: unknown) {
+      if (requestSequence !== requestSequenceRef.current) return
       setErr(getErrorMessage(e))
     } finally {
-      setLoading(false)
+      if (requestSequence === requestSequenceRef.current) {
+        setLoading(false)
+      }
     }
-  }
+  }, [debouncedSearch, dueFilter, offset, pageSize, priorityFilter, roleFilter, userFilter])
 
   useEffect(() => {
     void load()
-  }, [pageSize, offset])
+  }, [load])
 
   useEffect(() => {
     setOffset(0)
-  }, [userFilter, roleFilter, priorityFilter, dueFilter, pageSize])
+  }, [userFilter, roleFilter, priorityFilter, dueFilter, debouncedSearch, pageSize])
 
   useEffect(() => {
     const next = new URLSearchParams(searchParams)
@@ -180,7 +189,7 @@ export default function OperationsInboxPageView() {
     setSearchParams,
   ])
 
-  const allItems = data?.items ?? []
+  const allItems = useMemo(() => data?.items ?? [], [data?.items])
 
   const assigneeOptions = useMemo(() => {
     const values = new Set<string>()
@@ -190,21 +199,7 @@ export default function OperationsInboxPageView() {
     return Array.from(values).sort((a, b) => a.localeCompare(b, 'de'))
   }, [allItems])
 
-  const filteredItems = useMemo(() => {
-    return allItems.filter((item) => {
-      const assignee = item.assignee_username || 'unassigned'
-      if (userFilter !== 'all' && assignee !== userFilter) return false
-      if (roleFilter !== 'all' && item.responsible_role !== roleFilter) return false
-      if (priorityFilter !== 'all' && item.priority !== priorityFilter) return false
-      if (!matchesDueFilter(item, dueFilter)) return false
-      if (debouncedSearch) {
-        const haystack =
-          `${item.title} ${item.description} ${item.assignee_username || ''} ${item.kind}`.toLowerCase()
-        if (!haystack.includes(debouncedSearch)) return false
-      }
-      return true
-    })
-  }, [allItems, userFilter, roleFilter, priorityFilter, dueFilter, debouncedSearch])
+  const filteredItems = allItems
 
   const prioritySummary = useMemo(() => {
     return filteredItems.reduce(
@@ -259,7 +254,7 @@ export default function OperationsInboxPageView() {
         <div className="control-row mt16">
           <div className="card tight">
             <div className="muted small">{isEnglish ? 'Open' : 'Offen'}</div>
-            <div className="kpi metric-kpi">{filteredItems.length}</div>
+            <div className="kpi metric-kpi">{data?.total_open ?? 0}</div>
           </div>
           <div className="card tight">
             <div className="muted small">{isEnglish ? 'Critical' : 'Kritisch'}</div>
@@ -291,6 +286,7 @@ export default function OperationsInboxPageView() {
                 : 'Suche (Titel, Beschreibung, Assignee, Typ)'
             }
             value={searchInput}
+            maxLength={200}
             onChange={(e) => setSearchInput(e.target.value)}
           />
 
@@ -435,7 +431,7 @@ export default function OperationsInboxPageView() {
         <button
           className="btn"
           onClick={() => changePage('next')}
-          disabled={allItems.length < pageSize}
+          disabled={offset + allItems.length >= (data?.total_open ?? 0)}
         >
           {isEnglish ? 'Next →' : 'Weiter →'}
         </button>

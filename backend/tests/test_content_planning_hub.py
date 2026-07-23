@@ -337,3 +337,93 @@ def test_apply_template_creates_required_tasks_and_planning_blockers(service_db:
     assert planned_item.readiness_score < 100
     assert publish_ready is False
     assert any("Required checklist tasks" in blocker for blocker in blockers)
+
+
+def test_task_updates_and_deletes_recompute_readiness_after_flush(service_db: Session) -> None:
+    admin = _create_admin(service_db, username="planner_readiness")
+    item = content_service.create_item(
+        service_db,
+        payload=ContentItemCreate(title="Readiness", platform="youtube", type="review"),
+        actor=admin,
+    )
+    service_db.query(ContentTask).filter(ContentTask.content_item_id == item.id).delete()
+    blocking_task = ContentTask(
+        content_item_id=item.id,
+        title="Blocking task",
+        status=TaskStatus.todo,
+        required_for_publish=True,
+        can_block_publish=True,
+    )
+    service_db.add(blocking_task)
+    service_db.commit()
+    content_service.refresh_item_readiness(service_db, item_id=item.id)
+    service_db.commit()
+    service_db.refresh(item)
+    blocked_score = item.readiness_score
+
+    content_service.update_task(
+        service_db,
+        task_id=blocking_task.id,
+        payload=ContentTaskUpdate(status=TaskStatus.done),
+        actor=admin,
+    )
+    service_db.refresh(item)
+    assert item.readiness_score > blocked_score
+
+    content_service.update_task(
+        service_db,
+        task_id=blocking_task.id,
+        payload=ContentTaskUpdate(status=TaskStatus.todo),
+        actor=admin,
+    )
+    service_db.refresh(item)
+    assert item.readiness_score == blocked_score
+
+    content_service.delete_task(
+        service_db,
+        task_id=blocking_task.id,
+        actor=admin,
+    )
+    service_db.refresh(item)
+    assert item.readiness_score > blocked_score
+
+
+def test_optional_open_task_does_not_disagree_with_publish_guard(service_db: Session) -> None:
+    admin = _create_admin(service_db, username="planner_optional_task")
+    item = content_service.create_item(
+        service_db,
+        payload=ContentItemCreate(title="Optional task", platform="youtube", type="review"),
+        actor=admin,
+    )
+    service_db.query(ContentTask).filter(ContentTask.content_item_id == item.id).delete()
+    item.workflow_status = WorkflowStatus.approved
+    service_db.add(
+        ContentTask(
+            content_item_id=item.id,
+            title="Optional follow-up",
+            status=TaskStatus.todo,
+            required_for_publish=False,
+            can_block_publish=False,
+        )
+    )
+    service_db.add(
+        Asset(
+            owner_type=AssetOwnerType.content,
+            owner_id=item.id,
+            kind=AssetKind.image,
+            source=AssetSource.upload,
+            review_state=AssetReviewState.approved,
+            local_path="/tmp/optional-task.png",
+            workflow_status=WorkflowStatus.approved,
+        )
+    )
+    service_db.commit()
+
+    _, _, blockers, publish_ready = content_service.get_planning_view(
+        service_db,
+        item_id=item.id,
+    )
+
+    assert publish_ready is True
+    assert blockers == []
+    content_service._ensure_publish_ready(item, service_db)

@@ -242,18 +242,19 @@ def create_product(
     except BusinessRuleViolation as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     db.add(p)
-    db.commit()
-    db.refresh(p)
+    db.flush()
     # Store the initial value in the value history when present.
     if p.current_value is not None:
-        vh = ProductValueHistory(
-            product_id=p.id,
-            date=p.created_at.date(),
-            value=float(p.current_value),
-            currency=p.currency,
+        db.add(
+            ProductValueHistory(
+                product_id=p.id,
+                date=p.created_at.date(),
+                value=float(p.current_value),
+                currency=p.currency,
+            )
         )
-        db.add(vh)
-        db.commit()
+    db.commit()
+    db.refresh(p)
     return p
 
 
@@ -280,44 +281,7 @@ def update_product(
     updates = payload.model_dump(exclude_unset=True)
     requested_workflow_status = updates.pop("workflow_status", None)
     explicit_review_reason = updates.pop("review_reason", None)
-    maybe_status = updates.pop("status", None)
     changed_fields = {key for key, value in updates.items() if getattr(p, key) != value}
-    if maybe_status and maybe_status != p.status:
-        try:
-            validate_product_status_change(
-                current_status=p.status,
-                target_status=maybe_status,
-                amount=None,
-            )
-        except BusinessRuleViolation as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
-        before_status = p.status
-        p.status = maybe_status
-        p.status_changed_at = datetime.now(timezone.utc)
-        record_audit_log(
-            db,
-            actor=current_user,
-            action="product.status_update",
-            entity_type="product",
-            entity_id=str(p.id),
-            description=f"Status {before_status.value} -> {maybe_status.value}",
-            before={"status": before_status.value},
-            after={"status": maybe_status.value},
-        )
-        emit_domain_event(
-            db,
-            actor=current_user,
-            event_name="product.status.changed",
-            entity_type="product",
-            entity_id=str(p.id),
-            payload={
-                "from": before_status.value,
-                "to": maybe_status.value,
-                "source": "products.patch",
-            },
-            description=f"Product status changed: {before_status.value} -> {maybe_status.value}",
-        )
-        changed_fields.add("status")
 
     target_workflow_status = requested_workflow_status or p.workflow_status
     review_reason = explicit_review_reason
@@ -478,9 +442,16 @@ def create_value_history(
         raise HTTPException(status_code=404, detail="Product not found")
     vh = ProductValueHistory(product_id=product_id, **payload.model_dump())
     db.add(vh)
-    # Produktwert mit dem neuesten manuellen Eintrag synchron halten.
-    p.current_value = payload.value
-    p.currency = payload.currency
+    latest_existing_date = (
+        db.query(ProductValueHistory.date)
+        .filter(ProductValueHistory.product_id == product_id)
+        .order_by(ProductValueHistory.date.desc())
+        .limit(1)
+        .scalar()
+    )
+    if latest_existing_date is None or payload.date >= latest_existing_date:
+        p.current_value = payload.value
+        p.currency = payload.currency
     db.commit()
     db.refresh(vh)
     return vh
