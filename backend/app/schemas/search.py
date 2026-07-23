@@ -6,6 +6,7 @@ from pydantic import BaseModel
 
 
 class GlobalSearchEntityType(str, Enum):
+    project = "project"
     product = "product"
     asset = "asset"
     content = "content"

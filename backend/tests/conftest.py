@@ -52,6 +52,7 @@ from app.api.routers import (
     knowledge,
     operations,
     products,
+    projects,
     search,
 )
 from app.core.config import settings
@@ -152,6 +153,7 @@ def app(db_session: Session) -> FastAPI:
     api.include_router(products.router, prefix="/api/v1/products", tags=["products"])
     api.include_router(assets.router, prefix="/api/v1/assets", tags=["assets"])
     api.include_router(content.router, prefix="/api/v1/content", tags=["content"])
+    api.include_router(projects.router, prefix="/api/v1/projects", tags=["projects"])
     api.include_router(email.router, prefix="/api/v1/email", tags=["email"])
     api.include_router(images.router, prefix="/api/v1/images", tags=["images"])
     api.include_router(knowledge.router, prefix="/api/v1/knowledge", tags=["knowledge"])
@@ -166,6 +168,7 @@ def app(db_session: Session) -> FastAPI:
     api.include_router(products.router, prefix="/api/products", tags=["products"], deprecated=True)
     api.include_router(assets.router, prefix="/api/assets", tags=["assets"], deprecated=True)
     api.include_router(content.router, prefix="/api/content", tags=["content"], deprecated=True)
+    api.include_router(projects.router, prefix="/api/projects", tags=["projects"], deprecated=True)
     api.include_router(email.router, prefix="/api/email", tags=["email"], deprecated=True)
     api.include_router(images.router, prefix="/api/images", tags=["images"], deprecated=True)
     api.include_router(

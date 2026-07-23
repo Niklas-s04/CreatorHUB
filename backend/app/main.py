@@ -26,6 +26,7 @@ from app.api.routers import (
     knowledge,
     operations,
     products,
+    projects,
     search,
 )
 from app.core.config import settings
@@ -323,6 +324,7 @@ def create_app() -> FastAPI:
     app.include_router(products.router, prefix=f"{API_BASE_PREFIX}/products", tags=["products"])
     app.include_router(assets.router, prefix=f"{API_BASE_PREFIX}/assets", tags=["assets"])
     app.include_router(content.router, prefix=f"{API_BASE_PREFIX}/content", tags=["content"])
+    app.include_router(projects.router, prefix=f"{API_BASE_PREFIX}/projects", tags=["projects"])
     app.include_router(email.router, prefix=f"{API_BASE_PREFIX}/email", tags=["email"])
     app.include_router(images.router, prefix=f"{API_BASE_PREFIX}/images", tags=["images"])
     app.include_router(knowledge.router, prefix=f"{API_BASE_PREFIX}/knowledge", tags=["knowledge"])
@@ -357,6 +359,12 @@ def create_app() -> FastAPI:
     )
     app.include_router(
         content.router, prefix=f"{LEGACY_API_PREFIX}/content", tags=["content"], deprecated=True
+    )
+    app.include_router(
+        projects.router,
+        prefix=f"{LEGACY_API_PREFIX}/projects",
+        tags=["projects"],
+        deprecated=True,
     )
     app.include_router(
         email.router, prefix=f"{LEGACY_API_PREFIX}/email", tags=["email"], deprecated=True

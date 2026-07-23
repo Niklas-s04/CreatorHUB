@@ -110,6 +110,14 @@ class ContentItem(Base, UUIDMixin, TimestampMixin):
     revisions: Mapped[list["ContentItemRevision"]] = relationship(
         back_populates="content_item", cascade="all, delete-orphan"
     )
+    projects: Mapped[list["Project"]] = relationship(  # noqa: F821
+        secondary="project_content_links",
+        back_populates="content_items",
+    )
+
+    @property
+    def project_ids(self) -> list[uuid.UUID]:
+        return [project.id for project in self.projects]
 
 
 class TaskType(str, enum.Enum):

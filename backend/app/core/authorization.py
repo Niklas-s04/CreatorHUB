@@ -25,6 +25,10 @@ class Permission(str, enum.Enum):
     content_read = "content.read"
     content_manage = "content.manage"
 
+    project_read = "project.read"
+    project_manage = "project.manage"
+    project_delete = "project.delete"
+
     deal_read = "deal.read"
     deal_manage = "deal.manage"
 
@@ -88,6 +92,15 @@ PERMISSION_DEFINITIONS: dict[Permission, PermissionDefinition] = {
     Permission.content_manage: PermissionDefinition(
         Permission.content_manage, PermissionScope.object_scope
     ),
+    Permission.project_read: PermissionDefinition(
+        Permission.project_read, PermissionScope.global_scope
+    ),
+    Permission.project_manage: PermissionDefinition(
+        Permission.project_manage, PermissionScope.object_scope
+    ),
+    Permission.project_delete: PermissionDefinition(
+        Permission.project_delete, PermissionScope.object_scope
+    ),
     Permission.deal_read: PermissionDefinition(Permission.deal_read, PermissionScope.global_scope),
     Permission.deal_manage: PermissionDefinition(
         Permission.deal_manage, PermissionScope.object_scope
@@ -125,6 +138,7 @@ VIEWER_PERMISSIONS: frozenset[Permission] = frozenset(
         Permission.product_read,
         Permission.asset_read,
         Permission.content_read,
+        Permission.project_read,
         Permission.deal_read,
         Permission.email_read,
         Permission.knowledge_read,
@@ -139,6 +153,7 @@ EDITOR_PERMISSIONS: frozenset[Permission] = VIEWER_PERMISSIONS.union(
         Permission.asset_upload,
         Permission.asset_review,
         Permission.content_manage,
+        Permission.project_manage,
         Permission.deal_manage,
         Permission.email_generate,
         Permission.image_search,

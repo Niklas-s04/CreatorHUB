@@ -78,6 +78,14 @@ class Product(Base, UUIDMixin, TimestampMixin):
     value_history: Mapped[list["ProductValueHistory"]] = relationship(
         back_populates="product", cascade="all, delete-orphan"
     )
+    projects: Mapped[list["Project"]] = relationship(  # noqa: F821
+        secondary="project_product_links",
+        back_populates="products",
+    )
+
+    @property
+    def project_ids(self) -> list[uuid.UUID]:
+        return [project.id for project in self.projects]
 
 
 class ProductTransaction(Base, UUIDMixin, TimestampMixin):

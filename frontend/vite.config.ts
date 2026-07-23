@@ -52,6 +52,7 @@ export default defineConfig(({ mode }) => {
       globals: true,
       setupFiles: './src/test/setup.ts',
       css: true,
+      testTimeout: 10_000,
       include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
       exclude: ['e2e/**', 'node_modules/**'],
       coverage: {

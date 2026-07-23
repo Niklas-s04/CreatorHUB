@@ -56,6 +56,22 @@ The repository is split into functional and technical layers.
 - Schemas define API contracts.
 - Core modules handle technical cross-cutting concerns.
 
+### Project Hub
+
+Projects are the parent planning layer for a creative initiative or video production. A project
+stores its category, owner, status, priority, schedule, progress, creative brief, requirements,
+internal notes, and preview/approval state. Content items and products are linked through
+many-to-many relations, so a record can be reused across projects without duplicating domain data.
+
+The project API supports:
+
+- custom category CRUD under `/api/v1/projects/categories`
+- project list, detail, filtering, create, update, and delete
+- linking and unlinking existing content or products
+- creating new content or products directly inside a project
+- reciprocal `project_id` filters on product and content list endpoints
+- audit logging and role-based `project.read`, `project.manage`, and `project.delete` permissions
+
 ## 3. Environment Variables
 
 The most important environment variables are grouped by purpose in `.env.example` and in `backend/app/core/config.py`.

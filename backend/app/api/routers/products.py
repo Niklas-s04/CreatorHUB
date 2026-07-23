@@ -175,6 +175,7 @@ def list_products(
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
     q: str | None = None,
+    project_id: uuid.UUID | None = None,
     status: ProductStatus | None = None,
     category: str | None = None,
     condition: str | None = None,
@@ -194,6 +195,8 @@ def list_products(
         min_value=min_value,
         max_value=max_value,
     )
+    if project_id:
+        qry = qry.filter(Product.projects.any(id=project_id))
 
     total = qry.order_by(None).count()
     qry, selected_sort, selected_order = apply_sorting(

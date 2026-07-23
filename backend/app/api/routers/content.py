@@ -57,6 +57,7 @@ def list_items(
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
     product_id: uuid.UUID | None = None,
+    project_id: uuid.UUID | None = None,
     platform: ContentPlatform | None = None,
     editorial_status: EditorialStatus | None = None,
     publish_window_from: date | None = None,
@@ -68,6 +69,8 @@ def list_items(
     qry = db.query(ContentItem)
     if product_id:
         qry = qry.filter(ContentItem.product_id == product_id)
+    if project_id:
+        qry = qry.filter(ContentItem.projects.any(id=project_id))
     if platform:
         qry = qry.filter(ContentItem.platform == platform)
     if editorial_status:

@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import or_
+from sqlalchemy import inspect, or_
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, get_db
@@ -12,6 +12,7 @@ from app.models.asset import Asset, AssetReviewState
 from app.models.content import ContentItem
 from app.models.knowledge import KnowledgeDoc
 from app.models.product import Product
+from app.models.project import Project
 from app.models.user import User
 from app.schemas.search import (
     GlobalSearchEntityType,
@@ -23,12 +24,54 @@ from app.schemas.search import (
 router = APIRouter()
 
 _TYPE_LABELS: dict[GlobalSearchEntityType, str] = {
+    GlobalSearchEntityType.project: "Projekte",
     GlobalSearchEntityType.product: "Produkte",
     GlobalSearchEntityType.asset: "Assets",
     GlobalSearchEntityType.content: "Content",
     GlobalSearchEntityType.knowledge: "Knowledge",
     GlobalSearchEntityType.user: "Benutzer",
 }
+
+
+def _project_hits(
+    db: Session, query: str, pattern: str, candidate_limit: int
+) -> list[GlobalSearchHit]:
+    rows = (
+        db.query(Project)
+        .filter(
+            or_(
+                Project.title.ilike(pattern),
+                Project.goal.ilike(pattern),
+                Project.brief_md.ilike(pattern),
+                Project.owner_name.ilike(pattern),
+            )
+        )
+        .order_by(Project.updated_at.desc())
+        .limit(candidate_limit)
+        .all()
+    )
+    hits: list[GlobalSearchHit] = []
+    for row in rows:
+        score = (
+            _score_text(query, row.title, 4.2)
+            + _score_text(query, row.goal, 1.8)
+            + _score_text(query, row.brief_md, 0.8)
+            + _score_text(query, row.owner_name, 1.2)
+            + _recency_bonus(row.updated_at)
+        )
+        if score <= 0:
+            continue
+        hits.append(
+            GlobalSearchHit(
+                id=str(row.id),
+                type=GlobalSearchEntityType.project,
+                title=row.title,
+                subtitle=f"{row.status.value} · {row.priority.value}",
+                detail_path=f"/projects#project-{row.id}",
+                score=round(score, 3),
+            )
+        )
+    return hits
 
 
 def _normalize(value: str) -> str:
@@ -269,6 +312,7 @@ def global_search(
     candidate_limit = max(per_type * 8, 24)
 
     grouped_hits: dict[GlobalSearchEntityType, list[GlobalSearchHit]] = {
+        GlobalSearchEntityType.project: [],
         GlobalSearchEntityType.product: [],
         GlobalSearchEntityType.asset: [],
         GlobalSearchEntityType.content: [],
@@ -276,6 +320,11 @@ def global_search(
         GlobalSearchEntityType.user: [],
     }
 
+    project_table_available = db.bind is not None and inspect(db.bind).has_table("projects")
+    if has_permission(current_user, Permission.project_read) and project_table_available:
+        grouped_hits[GlobalSearchEntityType.project] = _project_hits(
+            db, query, pattern, candidate_limit
+        )
     if has_permission(current_user, Permission.product_read):
         grouped_hits[GlobalSearchEntityType.product] = _product_hits(
             db, query, pattern, candidate_limit
@@ -302,6 +351,7 @@ def global_search(
     groups: list[GlobalSearchGroup] = []
     total = 0
     for entity_type in [
+        GlobalSearchEntityType.project,
         GlobalSearchEntityType.product,
         GlobalSearchEntityType.asset,
         GlobalSearchEntityType.content,

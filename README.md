@@ -9,6 +9,7 @@ The project combines product lifecycle workflows, media review, content task tra
 - Product inventory with workflow and transaction history
 - Asset storage with upload, review, and primary-selection support
 - Content planning with structured workflow states
+- Project hubs with custom categories, creative briefs, preview approvals, and linked content/products
 - AI-assisted email drafting with risk checks
 - Knowledge base support for policy and brand context
 - Open-source image search with optional local AI assistance
@@ -192,6 +193,7 @@ Main route groups:
 - `/api/v1/products`
 - `/api/v1/assets`
 - `/api/v1/content`
+- `/api/v1/projects`
 - `/api/v1/email`
 - `/api/v1/images`
 - `/api/v1/knowledge`

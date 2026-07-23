@@ -19,7 +19,7 @@ type MeSummary = {
 
 type SearchHit = {
   id: string
-  type: 'product' | 'asset' | 'content' | 'knowledge' | 'user'
+  type: 'project' | 'product' | 'asset' | 'content' | 'knowledge' | 'user'
   label: string
   subtitle: string | null
   to: string
@@ -77,7 +77,8 @@ function parseSearchGroups(input: unknown): SearchGroup[] {
               const title = asString(item.title)
               const detailPath = asString(item.detail_path)
               if (!id || !title || !detailPath) return null
-              if (!['product', 'asset', 'content', 'knowledge', 'user'].includes(type)) return null
+              if (!['project', 'product', 'asset', 'content', 'knowledge', 'user'].includes(type))
+                return null
               return {
                 id,
                 type: type as SearchHit['type'],

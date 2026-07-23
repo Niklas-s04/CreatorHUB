@@ -46,6 +46,12 @@ export function buildNavSections(language: Language): NavSection[] {
       title: translate(language, 'nav.sections.content'),
       items: [
         {
+          to: '/projects',
+          label: translate(language, 'nav.projects'),
+          icon: '◆',
+          keywords: ['projekte', 'projekt', 'briefing', 'kampagne', 'projects', 'campaign'],
+        },
+        {
           to: '/products',
           label: translate(language, 'nav.products'),
           icon: '◫',
@@ -110,6 +116,7 @@ export function routeLabel(pathname: string, language: Language = 'de'): string 
   if (pathname === '/dashboard') return translate(language, 'breadcrumbs.dashboard')
   if (pathname === '/operations') return translate(language, 'nav.operationsInbox')
   if (pathname === '/products') return translate(language, 'nav.products')
+  if (pathname === '/projects') return translate(language, 'nav.projects')
   if (pathname.startsWith('/products/')) return translate(language, 'breadcrumbs.productDetail')
   if (pathname === '/assets') return translate(language, 'nav.assets')
   if (pathname === '/content') return translate(language, 'nav.contentPlan')

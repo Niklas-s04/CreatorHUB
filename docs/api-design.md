@@ -5,6 +5,19 @@
 - Stable API routes live under `/api/v1/...`.
 - Legacy routes under `/api/...` remain available for compatibility and are marked as deprecated in OpenAPI.
 
+## Project Hub
+
+- `GET /api/v1/projects` supports `q`, `status`, `category_id`, `preview_status`,
+  `due_before`, `attention_only`, pagination, and sorting.
+- `POST /api/v1/projects` can include `content_item_ids` and `product_ids`.
+- `GET|PATCH|DELETE /api/v1/projects/{project_id}` manages the project record.
+- `POST|DELETE /api/v1/projects/{project_id}/content/{content_item_id}` manages an
+  existing content relation.
+- `POST /api/v1/projects/{project_id}/content` creates and links content atomically at
+  the workflow level.
+- Product relations follow the same pattern under `/products`.
+- Category management is available under `/api/v1/projects/categories`.
+
 ## Error Format
 
 All error responses use a shared envelope:

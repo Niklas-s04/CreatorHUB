@@ -88,6 +88,7 @@ class ContentItemOut(ContentItemCreate):
     model_config = ConfigDict(from_attributes=True)
 
     id: uuid.UUID
+    project_ids: list[uuid.UUID] = Field(default_factory=list)
     reviewed_by_id: uuid.UUID | None
     reviewed_by_name: str | None
     reviewed_at: datetime | None

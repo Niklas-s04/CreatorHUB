@@ -15,6 +15,7 @@ const ProductDetailPage = lazy(() => import('./pages/ProductDetailPage'))
 const EmailPage = lazy(() => import('./pages/EmailPage'))
 const SettingsPage = lazy(() => import('./pages/SettingsPage'))
 const ContentPage = lazy(() => import('./pages/ContentPage'))
+const ProjectsPage = lazy(() => import('./pages/ProjectsPage'))
 const AssetsPage = lazy(() => import('./pages/AssetsPage'))
 const LoginPage = lazy(() => import('./pages/LoginPage'))
 const AdminPage = lazy(() => import('./pages/AdminPage'))
@@ -180,6 +181,7 @@ function AppInner() {
               <Route path="/products/:id" element={<ProductDetailPage />} />
               <Route path="/assets" element={<AssetsPage />} />
               <Route path="/content" element={<ContentPage />} />
+              <Route path="/projects" element={<ProjectsPage />} />
               <Route path="/email" element={<EmailPage />} />
               <Route path="/settings" element={<SettingsPage />} />
               <Route path="/admin" element={<AdminPage />} />
