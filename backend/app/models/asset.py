@@ -5,7 +5,17 @@ import uuid
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import Boolean, DateTime, Enum, Index, Integer, String, Text, text
+from sqlalchemy import (
+    Boolean,
+    DateTime,
+    Enum,
+    Index,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+    text,
+)
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -44,6 +54,7 @@ class AssetReviewState(str, enum.Enum):
 class Asset(Base, UUIDMixin, TimestampMixin):
     __tablename__ = "assets"
     __table_args__ = (
+        Index("ix_assets_owner", "owner_type", "owner_id"),
         Index(
             "uq_assets_one_primary_product_image",
             "owner_id",
@@ -53,6 +64,7 @@ class Asset(Base, UUIDMixin, TimestampMixin):
             ),
             sqlite_where=text("owner_type = 'product' AND kind = 'image' AND is_primary IS TRUE"),
         ),
+        UniqueConstraint("hash", name="uq_assets_hash"),
     )
 
     owner_type: Mapped[AssetOwnerType] = mapped_column(

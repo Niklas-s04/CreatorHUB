@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import JSON, DateTime, String, Text
+from sqlalchemy import JSON, DateTime, Index, String, Text
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -13,6 +13,10 @@ from app.models.base import Base, UUIDMixin, utcnow
 
 class AuditLog(Base, UUIDMixin):
     __tablename__ = "audit_logs"
+    __table_args__ = (
+        Index("ix_audit_logs_action", "action"),
+        Index("ix_audit_logs_entity", "entity_type", "entity_id"),
+    )
 
     actor_id: Mapped[uuid.UUID | None] = mapped_column(PG_UUID(as_uuid=True), nullable=True)
     actor_name: Mapped[str | None] = mapped_column(String(128), nullable=True)

@@ -4,7 +4,7 @@ import enum
 import uuid
 from datetime import date, datetime
 
-from sqlalchemy import Date, DateTime, Enum, ForeignKey, Numeric, String, Text
+from sqlalchemy import Date, DateTime, Enum, ForeignKey, Index, Numeric, String, Text
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -39,6 +39,7 @@ class TransactionType(str, enum.Enum):
 
 class Product(Base, UUIDMixin, TimestampMixin):
     __tablename__ = "products"
+    __table_args__ = (Index("ix_products_updated_at", "updated_at"),)
 
     title: Mapped[str] = mapped_column(String(256), index=True)
     brand: Mapped[str | None] = mapped_column(String(128), nullable=True)

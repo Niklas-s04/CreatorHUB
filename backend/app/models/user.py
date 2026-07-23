@@ -32,5 +32,8 @@ class User(Base, UUIDMixin, TimestampMixin):
     mfa_secret: Mapped[str | None] = mapped_column(String(256), nullable=True)
     mfa_recovery_codes: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
     deletion_requested_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True, index=True
+        DateTime(timezone=True),
+        nullable=True,
+        index=True,
+        comment="Timestamp when user requested account deletion (soft delete)",
     )
