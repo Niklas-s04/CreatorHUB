@@ -5,17 +5,7 @@ import uuid
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import (
-    Boolean,
-    DateTime,
-    Enum,
-    Index,
-    Integer,
-    String,
-    Text,
-    UniqueConstraint,
-    text,
-)
+from sqlalchemy import Boolean, DateTime, Enum, Index, Integer, String, Text, text
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -64,7 +54,6 @@ class Asset(Base, UUIDMixin, TimestampMixin):
             ),
             sqlite_where=text("owner_type = 'product' AND kind = 'image' AND is_primary IS TRUE"),
         ),
-        UniqueConstraint("hash", name="uq_assets_hash"),
     )
 
     owner_type: Mapped[AssetOwnerType] = mapped_column(
