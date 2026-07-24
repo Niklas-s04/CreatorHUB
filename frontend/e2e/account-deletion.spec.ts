@@ -4,6 +4,7 @@ import {
   csrfHeaders,
   e2eApiPath,
   generateTotpCode,
+  gotoLogin,
   loginAsAdmin,
   logout,
   uniqueSuffix,
@@ -28,7 +29,7 @@ test.describe('Account deletion E2E', () => {
     expect(createResponse.status()).toBe(200)
     await logout(page)
 
-    await page.goto('/login')
+    await gotoLogin(page)
     const form = page.locator('form')
     await form.getByLabel('Username').fill(username)
     await form.locator('input[type="password"]').first().fill(password)

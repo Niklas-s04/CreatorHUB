@@ -6,6 +6,7 @@ import {
   csrfHeaders,
   e2eApiPath,
   generateTotpCode,
+  gotoLogin,
   loginAsAdmin,
   logout,
   uniqueSuffix,
@@ -13,7 +14,7 @@ import {
 
 test.describe('Auth E2E', () => {
   test('zeigt Fehlerszenario bei ungültigem Login', async ({ page }) => {
-    await page.goto('/login')
+    await gotoLogin(page)
 
     const form = page.locator('form')
     await form.getByLabel('Username').fill(E2E_ADMIN_USER)
@@ -28,6 +29,8 @@ test.describe('Auth E2E', () => {
     await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible()
 
     await logout(page)
+
+    await gotoLogin(page)
 
     const form = page.locator('form')
     await form.getByLabel('Username').fill(E2E_ADMIN_USER)
@@ -52,7 +55,7 @@ test.describe('Auth E2E', () => {
     expect(createResponse.status()).toBe(200)
     await logout(page)
 
-    await page.goto('/login')
+    await gotoLogin(page)
     const form = page.locator('form')
     await form.getByLabel('Username').fill(username)
     await form.locator('input[type="password"]').first().fill(password)
