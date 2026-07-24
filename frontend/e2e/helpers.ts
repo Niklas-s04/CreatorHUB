@@ -18,6 +18,12 @@ export function uniqueSuffix(prefix: string): string {
   return `${prefix}_${stamp}_${rnd}`
 }
 
+async function seedNecessaryCookieConsent(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    window.localStorage.setItem('consent_level', 'necessary')
+  })
+}
+
 function decodeBase32(secret: string): Buffer {
   const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567'
   const normalized = secret.replace(/=+$/g, '').replace(/\s+/g, '').toUpperCase()
@@ -52,6 +58,7 @@ export function generateTotpCode(secret: string, time = Date.now()): string {
 }
 
 export async function gotoLogin(page: Page): Promise<void> {
+  await seedNecessaryCookieConsent(page)
   await page.goto('/login')
   await expect(page.getByRole('heading', { name: 'Login' })).toBeVisible()
   await acceptNecessaryCookies(page)
