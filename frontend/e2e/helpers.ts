@@ -81,45 +81,9 @@ async function submitLogin(page: Page, username: string, password: string): Prom
   await form.getByRole('button').last().click()
 }
 
-async function setupAdminPassword(page: Page, password: string): Promise<void> {
-  if (!E2E_BOOTSTRAP_TOKEN) {
-    throw new Error('Admin password setup required, but E2E_BOOTSTRAP_TOKEN is not set.')
-  }
-
-  const tokenInput = page.getByPlaceholder(/Install-Token|Install token/i)
-  if (!(await tokenInput.isVisible().catch(() => false))) {
-    await page.getByRole('button', { name: /Erstsetup|First setup/i }).click()
-  }
-
-  await tokenInput.fill(E2E_BOOTSTRAP_TOKEN)
-  await page.getByRole('button', { name: /Erstsetup prüfen|Check first setup/i }).click()
-
-  const form = page.locator('form')
-  await form.getByLabel('Password').first().fill(password)
-  await form.getByLabel(/Password wiederholen|Repeat password/i).fill(password)
-
-  await page.getByRole('button', { name: /Admin-Passwort setzen|Set admin password/i }).click()
-}
-
 export async function login(page: Page, username: string, password: string): Promise<void> {
   await gotoLogin(page)
   await submitLogin(page, username, password)
-
-  const onProtectedRoute = await page
-    .waitForURL(/\/($|dashboard|admin|products|assets|content|email|settings)/, { timeout: 2500 })
-    .then(() => true)
-    .catch(() => false)
-
-  if (!onProtectedRoute) {
-    const setupAvailable = await page
-      .getByRole('button', { name: /Erstsetup|First setup/i })
-      .isVisible()
-      .catch(() => false)
-
-    if (setupAvailable) {
-      await setupAdminPassword(page, password)
-    }
-  }
 
   const reachedProtected = await page
     .waitForURL(/\/($|dashboard|admin|products|assets|content|email|settings)/, { timeout: 10000 })
