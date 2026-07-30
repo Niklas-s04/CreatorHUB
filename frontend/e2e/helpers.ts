@@ -83,7 +83,16 @@ async function submitLogin(page: Page, username: string, password: string): Prom
 
 export async function login(page: Page, username: string, password: string): Promise<void> {
   await gotoLogin(page)
+  const loginResponsePromise = page
+    .waitForResponse(
+      (response) =>
+        response.request().method() === 'POST' &&
+        response.url().includes(e2eApiPath('/auth/token')),
+      { timeout: 15000 }
+    )
+    .catch(() => null)
   await submitLogin(page, username, password)
+  const loginResponse = await loginResponsePromise
 
   const reachedProtected = await page
     .waitForURL(/\/($|dashboard|admin|products|assets|content|email|settings)/, { timeout: 10000 })
@@ -94,20 +103,53 @@ export async function login(page: Page, username: string, password: string): Pro
     const inlineError = await page
       .locator('.error')
       .first()
-      .textContent()
+      .textContent({ timeout: 1000 })
       .catch(() => null)
     const statusHint = await page
       .locator('[role="status"]')
       .first()
-      .textContent()
+      .textContent({ timeout: 1000 })
       .catch(() => null)
+    const responseDetails = loginResponse
+      ? `HTTP ${loginResponse.status()}: ${await loginResponse.text().catch(() => 'unreadable response')}`
+      : 'no login response observed'
     throw new Error(
-      `E2E login failed and stayed on /login. Error: ${inlineError ?? 'unknown'}. Hint: ${statusHint ?? 'none'}`
+      `E2E login failed and stayed on /login. ${responseDetails}. Error: ${inlineError ?? 'unknown'}. Hint: ${statusHint ?? 'none'}`
     )
   }
 }
 
+async function ensureAdminBootstrap(page: Page): Promise<void> {
+  const headers = { 'X-Bootstrap-Token': E2E_BOOTSTRAP_TOKEN }
+  const statusResponse = await page.request.get(e2eApiPath('/auth/bootstrap-status'), { headers })
+
+  if (statusResponse.status() === 404) return
+  if (!statusResponse.ok()) {
+    throw new Error(
+      `Unable to inspect E2E admin bootstrap state (HTTP ${statusResponse.status()}): ${await statusResponse.text()}`
+    )
+  }
+
+  const status = (await statusResponse.json()) as { needs_password_setup?: boolean }
+  if (!status.needs_password_setup) return
+
+  const setupResponse = await page.request.post(e2eApiPath('/auth/setup-admin-password'), {
+    headers,
+    data: { password: E2E_ADMIN_PASSWORD },
+  })
+  if (![200, 404, 409].includes(setupResponse.status())) {
+    throw new Error(
+      `Unable to initialize the E2E admin password (HTTP ${setupResponse.status()}): ${await setupResponse.text()}`
+    )
+  }
+
+  // The setup endpoint also creates an authenticated session. Clear it so the
+  // login helper still verifies the real interactive login flow.
+  await page.context().clearCookies()
+}
+
 export async function loginAsAdmin(page: Page): Promise<void> {
+  await ensureAdminBootstrap(page)
   await login(page, E2E_ADMIN_USER, E2E_ADMIN_PASSWORD)
 }
 
