@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { getErrorMessage } from '../../../shared/lib/errors'
+import { formatGermanDateTime as formatDate } from '../../../shared/lib/dateTime'
 import { useAuthz } from '../../../shared/hooks/useAuthz'
 import { useI18n } from '../../../shared/i18n/i18n'
 import { EmptyState } from '../../../shared/ui/states/EmptyState'
@@ -171,15 +172,6 @@ export default function AdminPage() {
   function selectUser(userId: string) {
     setSelectedUserId(userId)
     setAdminResetToken(null)
-  }
-
-  function formatDate(value: string | null | undefined) {
-    if (!value) return '–'
-    try {
-      return new Date(value).toLocaleString('de-DE')
-    } catch {
-      return value
-    }
   }
 
   function formatSessionStatus(session: {

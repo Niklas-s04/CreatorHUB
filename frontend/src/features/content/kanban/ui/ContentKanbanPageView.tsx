@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { apiFetch } from '../../../../api'
 import { useAuthz } from '../../../../shared/hooks/useAuthz'
 import { useI18n } from '../../../../shared/i18n/i18n'
+import { formatGermanDate } from '../../../../shared/lib/dateTime'
 import { getErrorMessage } from '../../../../shared/lib/errors'
 import ContentItemEditor from './ContentItemEditor'
 import ContentPlanningPanel from './ContentPlanningPanel'
@@ -447,7 +448,7 @@ export default function ContentKanbanPageView() {
                 setActiveTab('board')
               }}
             >
-              <span>{item.publish_date || item.planned_date || '-'}</span>
+              <span>{formatGermanDate(item.publish_date || item.planned_date, '-')}</span>
               <strong>{item.title || item.id.slice(0, 8)}</strong>
               <span>{item.platform}</span>
               <span>{t(`contentHub.status.${item.status}`)}</span>

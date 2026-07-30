@@ -3,6 +3,7 @@ import { Link, useSearchParams } from 'react-router'
 import { apiFetch } from '../../../../api'
 import { useI18n } from '../../../../shared/i18n/i18n'
 import { getErrorMessage } from '../../../../shared/lib/errors'
+import { formatGermanDateTime } from '../../../../shared/lib/dateTime'
 import { useDebouncedValue } from '../../../../shared/hooks/useDebouncedValue'
 import { ErrorState } from '../../../../shared/ui/states/ErrorState'
 import { ListSkeleton } from '../../../../shared/ui/states/ListSkeleton'
@@ -65,15 +66,6 @@ const PRIORITY_LABELS: Record<OperationPriority, string> = {
   medium: 'Medium',
   high: 'High',
   critical: 'Critical',
-}
-
-function formatDateTime(value: string | null, locale: 'de-DE' | 'en-US'): string {
-  if (!value) return '—'
-  try {
-    return new Date(value).toLocaleString(locale)
-  } catch {
-    return value
-  }
 }
 
 function isOverdue(value: string | null): boolean {
@@ -406,7 +398,7 @@ export default function OperationsInboxPageView() {
                   </div>
                 </td>
                 <td>
-                  <div>{formatDateTime(item.due_at, isEnglish ? 'en-US' : 'de-DE')}</div>
+                  <div>{formatGermanDateTime(item.due_at)}</div>
                   {isOverdue(item.due_at) && (
                     <div className="muted small">{isEnglish ? 'overdue' : 'überfällig'}</div>
                   )}

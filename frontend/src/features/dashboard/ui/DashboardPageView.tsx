@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router'
 import { apiFetch } from '../../../api'
 import { getErrorMessage } from '../../../shared/lib/errors'
+import { formatGermanDateTime } from '../../../shared/lib/dateTime'
 import { ErrorState } from '../../../shared/ui/states/ErrorState'
 import { ListSkeleton } from '../../../shared/ui/states/ListSkeleton'
 import { useI18n } from '../../../shared/i18n/i18n'
@@ -49,15 +50,6 @@ const TONE_CLASS: Record<DashboardTone, string> = {
   info: 'kpi-info',
   warn: 'kpi-warn',
   danger: 'kpi-danger',
-}
-
-function formatTime(value: string | null): string {
-  if (!value) return ''
-  try {
-    return new Date(value).toLocaleString()
-  } catch {
-    return value
-  }
 }
 
 export default function DashboardPage() {
@@ -154,7 +146,9 @@ export default function DashboardPage() {
                       <div className="worklist-title">{item.title}</div>
                       {item.subtitle && <div className="worklist-subtitle">{item.subtitle}</div>}
                       {item.updated_at && (
-                        <div className="worklist-time">{formatTime(item.updated_at)}</div>
+                        <div className="worklist-time">
+                          {formatGermanDateTime(item.updated_at, '')}
+                        </div>
                       )}
                     </div>
                   ))}

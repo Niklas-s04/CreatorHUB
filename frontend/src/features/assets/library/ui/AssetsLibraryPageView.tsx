@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router'
 import { apiFetchBlob } from '../../../../api'
 import { getErrorMessage } from '../../../../shared/lib/errors'
+import { formatGermanDate } from '../../../../shared/lib/dateTime'
 import { useDebouncedValue } from '../../../../shared/hooks/useDebouncedValue'
 import { EmptyState } from '../../../../shared/ui/states/EmptyState'
 import { ErrorState } from '../../../../shared/ui/states/ErrorState'
@@ -57,18 +58,6 @@ function formatBytes(size: number | null) {
 function summarizeDimension(asset: AssetLibraryItem) {
   if (!asset.width || !asset.height) return 'n/a'
   return `${asset.width}×${asset.height}`
-}
-
-function formatDate(value: string, locale: 'de-DE' | 'en-US' = 'de-DE') {
-  try {
-    return new Date(value).toLocaleDateString(locale, {
-      day: '2-digit',
-      month: '2-digit',
-      year: '2-digit',
-    })
-  } catch {
-    return value
-  }
 }
 
 function hasLicense(asset: AssetLibraryItem) {
@@ -462,9 +451,7 @@ export default function AssetsPage() {
                 <div className="asset-meta">
                   <span className="pill small">{ownerLabels[asset.owner_type]}</span>
                   <span className="pill small">{asset.kind}</span>
-                  <span className="pill small">
-                    {formatDate(asset.created_at, language === 'en' ? 'en-US' : 'de-DE')}
-                  </span>
+                  <span className="pill small">{formatGermanDate(asset.created_at)}</span>
                 </div>
                 <div className="muted small mt12">
                   {language === 'en' ? 'Source' : 'Quelle'}:{' '}

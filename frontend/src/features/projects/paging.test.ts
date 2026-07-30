@@ -24,11 +24,11 @@ describe('fetchAllPages', () => {
       .mockResolvedValueOnce(page(['project-100'], 100, 101))
 
     await expect(
-      fetchAllPages(fetchPage, '/projects?sort_by=updated_at&sort_order=desc')
+      fetchAllPages(fetchPage, '/projects?sort_by=due_date&sort_order=asc')
     ).resolves.toHaveLength(101)
     expect(fetchPage).toHaveBeenNthCalledWith(
       2,
-      '/projects?sort_by=updated_at&sort_order=desc&limit=100&offset=100'
+      '/projects?sort_by=due_date&sort_order=asc&limit=100&offset=100'
     )
   })
 

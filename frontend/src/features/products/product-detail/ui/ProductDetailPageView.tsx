@@ -14,6 +14,10 @@ import {
 import { useAuthz } from '../../../../shared/hooks/useAuthz'
 import { useI18n } from '../../../../shared/i18n/i18n'
 import { getErrorMessage } from '../../../../shared/lib/errors'
+import {
+  formatGermanDate,
+  formatGermanDateTime as formatDate,
+} from '../../../../shared/lib/dateTime'
 import { ListSkeleton } from '../../../../shared/ui/states/ListSkeleton'
 import {
   buildProductMasterPatch,
@@ -69,15 +73,6 @@ function asArray(value: unknown): unknown[] {
 function parsePageItems(input: unknown): unknown[] {
   if (!isRecord(input)) return []
   return asArray(input.items)
-}
-
-function formatDate(value?: string | null): string {
-  if (!value) return '—'
-  try {
-    return new Date(value).toLocaleString()
-  } catch {
-    return value
-  }
 }
 
 export default function ProductDetailPageView() {
@@ -904,7 +899,7 @@ export default function ProductDetailPageView() {
             {workspaceLoading && !valueHistory.length && <ListSkeleton rows={3} />}
             {valueHistory.map((entry) => (
               <div key={entry.id} className="row between mt8">
-                <span>{entry.date}</span>
+                <span>{formatGermanDate(entry.date)}</span>
                 <span>
                   {entry.value} {entry.currency}
                 </span>

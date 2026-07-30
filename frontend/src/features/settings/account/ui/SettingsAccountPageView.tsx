@@ -31,6 +31,7 @@ import {
 import { useUnsavedChangesWarning } from '../../../../shared/forms/useUnsavedChangesWarning'
 import { parseKnowledgeDocsPage } from '../../../../shared/api/validators'
 import { getErrorKind, getErrorMessage, type ErrorKind } from '../../../../shared/lib/errors'
+import { formatGermanDateTime } from '../../../../shared/lib/dateTime'
 import { EmptyState } from '../../../../shared/ui/states/EmptyState'
 import { ErrorState } from '../../../../shared/ui/states/ErrorState'
 import { InlineHint } from '../../../../shared/ui/states/InlineHint'
@@ -473,8 +474,8 @@ export default function SettingsPage() {
                         {s.is_current ? (language === 'en' ? ' (current)' : ' (aktuell)') : ''}
                       </td>
                       <td>{s.ip_address || '-'}</td>
-                      <td>{new Date(s.last_activity_at).toLocaleString()}</td>
-                      <td>{new Date(s.expires_at).toLocaleString()}</td>
+                      <td>{formatGermanDateTime(s.last_activity_at)}</td>
+                      <td>{formatGermanDateTime(s.expires_at)}</td>
                       <td>
                         {!s.is_current && (
                           <button
@@ -518,7 +519,7 @@ export default function SettingsPage() {
                 <tbody>
                   {history.map((h) => (
                     <tr key={h.id}>
-                      <td>{new Date(h.occurred_at).toLocaleString()}</td>
+                      <td>{formatGermanDateTime(h.occurred_at)}</td>
                       <td>{h.ip_address || '-'}</td>
                       <td>
                         {h.success
@@ -855,7 +856,7 @@ function DocEditor({ doc, onSave }: DocEditorProps) {
             </div>
           )}
           {doc.outdatedAt && (
-            <div className="muted mt8">Seit: {new Date(doc.outdatedAt).toLocaleString()}</div>
+            <div className="muted mt8">Seit: {formatGermanDateTime(doc.outdatedAt)}</div>
           )}
         </div>
 
@@ -878,9 +879,7 @@ function DocEditor({ doc, onSave }: DocEditorProps) {
                 {doc.versions.map((version) => (
                   <tr key={version.id}>
                     <td>{version.versionNumber}</td>
-                    <td>
-                      {version.createdAt ? new Date(version.createdAt).toLocaleString() : '-'}
-                    </td>
+                    <td>{formatGermanDateTime(version.createdAt, '-')}</td>
                     <td>{version.changedByName || '-'}</td>
                     <td>{version.changeNote || '-'}</td>
                   </tr>
@@ -908,7 +907,7 @@ function DocEditor({ doc, onSave }: DocEditorProps) {
                 {doc.draftLinks.map((link) => (
                   <tr key={link.id}>
                     <td>{link.emailDraftId}</td>
-                    <td>{link.linkedAt ? new Date(link.linkedAt).toLocaleString() : '-'}</td>
+                    <td>{formatGermanDateTime(link.linkedAt, '-')}</td>
                     <td>{link.linkedByName || '-'}</td>
                   </tr>
                 ))}

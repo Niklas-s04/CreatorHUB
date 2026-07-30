@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import type { Page, Project } from '../model'
 import ProjectsHubPageView from './ProjectsHubPageView'
@@ -71,8 +71,8 @@ function page(items: Project[]): Page<Project> {
       limit: 100,
       offset: 0,
       total: items.length,
-      sort_by: 'updated_at',
-      sort_order: 'desc',
+      sort_by: 'due_date',
+      sort_order: 'asc',
     },
   }
 }
@@ -138,5 +138,37 @@ describe('ProjectsHubPageView', () => {
     expect(screen.queryByText('Direkt neues Produkt anlegen')).not.toBeInTheDocument()
     expect(screen.queryByText('Bestehenden Content wählen …')).not.toBeInTheDocument()
     expect(screen.queryByText('Bestehendes Produkt wählen …')).not.toBeInTheDocument()
+  })
+
+  it('sorts projects by the nearest due or review date and formats it in German', async () => {
+    const undated = project('undated', 'Undated project')
+    const later = { ...project('later', 'Later project'), due_date: '2026-08-20' }
+    const nearestReview = {
+      ...project('review', 'Review project'),
+      preview_due_date: '2026-08-05',
+    }
+    const projectItems = [undated, later, nearestReview]
+    mocks.apiFetch.mockImplementation(async (path: string) => {
+      if (path.startsWith('/projects?')) return page(projectItems)
+      if (path === '/projects/categories?include_inactive=true') return []
+      if (path.startsWith('/projects/')) {
+        const id = path.split('/').at(-1)
+        return projectItems.find((item) => item.id === id)
+      }
+      throw new Error(`Unexpected path: ${path}`)
+    })
+
+    renderPage()
+
+    const projectList = await screen.findByRole('complementary', { name: 'Projects' })
+    const projectButtons = within(projectList).getAllByRole('button')
+    expect(projectButtons.map((button) => button.textContent)).toEqual([
+      expect.stringContaining('Review project'),
+      expect.stringContaining('Later project'),
+      expect.stringContaining('Undated project'),
+    ])
+    expect(projectButtons[0]).toHaveTextContent('05.08.2026')
+    expect(projectButtons[1]).toHaveTextContent('20.08.2026')
+    expect(projectButtons[2]).toHaveTextContent('—')
   })
 })

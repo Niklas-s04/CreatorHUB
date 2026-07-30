@@ -3,9 +3,11 @@ import { Link } from 'react-router'
 import { apiFetch } from '../../../api'
 import { useAuthz } from '../../../shared/hooks/useAuthz'
 import { useI18n } from '../../../shared/i18n/i18n'
+import { formatGermanDate } from '../../../shared/lib/dateTime'
 import { getErrorMessage } from '../../../shared/lib/errors'
 import { useToast } from '../../../shared/ui/toast/ToastProvider'
 import { fetchAllPages } from '../paging'
+import { compareProjectsByDeadline, getProjectDeadline } from '../projectDeadline'
 import {
   buildProjectUpdatePayload,
   isProjectDirty,
@@ -279,13 +281,14 @@ export default function ProjectsHubPageView() {
       const [projectItems, categoryItems, contentResult, productResult] = await Promise.all([
         fetchAllPages<Project>(
           (path) => apiFetch<Page<Project>>(path),
-          '/projects?sort_by=updated_at&sort_order=desc'
+          '/projects?sort_by=due_date&sort_order=asc'
         ),
         apiFetch<ProjectCategory[]>('/projects/categories?include_inactive=true'),
         contentRequest,
         productRequest,
       ])
-      setProjects(projectItems)
+      const sortedProjectItems = [...projectItems].sort(compareProjectsByDeadline)
+      setProjects(sortedProjectItems)
       setCategories(categoryItems)
       if (!contentResult.error) setContentOptions(contentResult.items)
       if (!productResult.error) setProductOptions(productResult.items)
@@ -300,11 +303,13 @@ export default function ProjectsHubPageView() {
         : null
       const currentId = selectedIdRef.current
       const currentStillExists = Boolean(
-        currentId && projectItems.some((item) => item.id === currentId)
+        currentId && sortedProjectItems.some((item) => item.id === currentId)
       )
       if (!currentStillExists) {
         const nextId =
-          projectItems.find((item) => item.id === hashProjectId)?.id ?? projectItems[0]?.id ?? null
+          sortedProjectItems.find((item) => item.id === hashProjectId)?.id ??
+          sortedProjectItems[0]?.id ??
+          null
         if (
           !formDirtyRef.current ||
           window.confirm(
@@ -363,19 +368,21 @@ export default function ProjectsHubPageView() {
 
   const filteredProjects = useMemo(() => {
     const normalized = query.trim().toLocaleLowerCase()
-    return projects.filter((project) => {
-      if (
-        normalized &&
-        ![project.title, project.goal, project.owner_name, project.category?.name]
-          .filter(Boolean)
-          .some((value) => value!.toLocaleLowerCase().includes(normalized))
-      )
-        return false
-      if (statusFilter && project.status !== statusFilter) return false
-      if (categoryFilter && project.category_id !== categoryFilter) return false
-      if (attentionOnly && !project.overdue && !project.preview_attention_required) return false
-      return true
-    })
+    return projects
+      .filter((project) => {
+        if (
+          normalized &&
+          ![project.title, project.goal, project.owner_name, project.category?.name]
+            .filter(Boolean)
+            .some((value) => value!.toLocaleLowerCase().includes(normalized))
+        )
+          return false
+        if (statusFilter && project.status !== statusFilter) return false
+        if (categoryFilter && project.category_id !== categoryFilter) return false
+        if (attentionOnly && !project.overdue && !project.preview_attention_required) return false
+        return true
+      })
+      .sort(compareProjectsByDeadline)
   }, [projects, query, statusFilter, categoryFilter, attentionOnly])
 
   const availableContent = useMemo(() => {
@@ -783,7 +790,9 @@ export default function ProjectsHubPageView() {
                 <span>
                   ▤ {project.content_count} · ◇ {project.product_count}
                 </span>
-                <span className={project.overdue ? 'error' : ''}>{project.due_date ?? '—'}</span>
+                <span className={project.overdue ? 'error' : ''}>
+                  {formatGermanDate(getProjectDeadline(project))}
+                </span>
               </div>
               {(project.overdue || project.preview_attention_required) && (
                 <div className="project-attention">

@@ -3,6 +3,7 @@ import { apiFetch, apiUrl } from '../../../../api'
 import { useI18n } from '../../../../shared/i18n/i18n'
 import { useAuthz } from '../../../../shared/hooks/useAuthz'
 import { getErrorMessage } from '../../../../shared/lib/errors'
+import { formatGermanDateTime as formatDate } from '../../../../shared/lib/dateTime'
 import { ErrorState } from '../../../../shared/ui/states/ErrorState'
 import { ListSkeleton } from '../../../../shared/ui/states/ListSkeleton'
 
@@ -83,14 +84,6 @@ function prettyJson(data: unknown): string {
     return JSON.stringify(data ?? {}, null, 2)
   } catch {
     return String(data)
-  }
-}
-
-function formatDate(value: string): string {
-  try {
-    return new Date(value).toLocaleString('de-DE')
-  } catch {
-    return value
   }
 }
 

@@ -1,4 +1,5 @@
 import { useI18n } from '../../../../shared/i18n/i18n'
+import { formatGermanDate } from '../../../../shared/lib/dateTime'
 import type { ChecklistTemplate, PlanningView } from './contentTypes'
 
 type Props = {
@@ -80,7 +81,7 @@ export default function ContentPlanningPanel({
               <strong>{task.title || t('contentHub.taskFallback')}</strong>
               <div className="small muted">
                 {task.type} / {task.priority}
-                {task.due_date ? ` / ${task.due_date}` : ''}
+                {task.due_date ? ` / ${formatGermanDate(task.due_date)}` : ''}
               </div>
             </div>
             <span className="pill">{t(`contentHub.taskStatus.${task.status}`)}</span>

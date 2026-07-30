@@ -5,6 +5,7 @@ import { useAuthz } from '../../../../shared/hooks/useAuthz'
 import { useDebouncedValue } from '../../../../shared/hooks/useDebouncedValue'
 import { useRateCardDoc } from '../../../../shared/hooks/useRateCardDoc'
 import { getErrorMessage } from '../../../../shared/lib/errors'
+import { formatGermanDateTime as formatDate } from '../../../../shared/lib/dateTime'
 import { useI18n } from '../../../../shared/i18n/i18n'
 
 type EmailTone = 'short' | 'neutral' | 'friendly' | 'firm'
@@ -226,15 +227,6 @@ function buildDealFormState(draft: DealDraft | null): DealDraftFormState {
     deadlines: draft?.deadlines || '',
     notes: draft?.notes || '',
     status: draft?.status || 'intake',
-  }
-}
-
-function formatDate(value?: string) {
-  if (!value) return ''
-  try {
-    return new Date(value).toLocaleString()
-  } catch {
-    return value
   }
 }
 
