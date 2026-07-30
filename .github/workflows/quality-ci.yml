@@ -137,3 +137,33 @@ jobs:
 
       - name: Verify Alembic state
         run: python -m alembic current
+
+      - name: Verify recovery from historical schema drift
+        run: |
+          python -m alembic downgrade 0023
+          python - <<'PY'
+          import os
+
+          from sqlalchemy import create_engine, text
+
+          engine = create_engine(os.environ["DATABASE_URL"])
+          with engine.begin() as connection:
+              connection.execute(text("DROP TABLE registration_requests"))
+          engine.dispose()
+          PY
+          python -m alembic upgrade head
+          python - <<'PY'
+          import os
+
+          from sqlalchemy import create_engine, inspect
+
+          engine = create_engine(os.environ["DATABASE_URL"])
+          inspector = inspect(engine)
+          assert inspector.has_table("registration_requests")
+          columns = {
+              column["name"]
+              for column in inspector.get_columns("registration_requests")
+          }
+          assert {"reviewed_at", "rejection_reason"} <= columns
+          engine.dispose()
+          PY

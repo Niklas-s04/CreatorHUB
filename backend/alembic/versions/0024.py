@@ -80,9 +80,7 @@ def upgrade() -> None:
         _create_registration_requests_table()
         return
 
-    existing_columns = {
-        column["name"] for column in inspector.get_columns(TABLE_NAME)
-    }
+    existing_columns = {column["name"] for column in inspector.get_columns(TABLE_NAME)}
     if "reviewed_at" not in existing_columns:
         op.add_column(
             TABLE_NAME,
@@ -100,9 +98,7 @@ def downgrade() -> None:
     if not inspector.has_table(TABLE_NAME):
         return
 
-    existing_columns = {
-        column["name"] for column in inspector.get_columns(TABLE_NAME)
-    }
+    existing_columns = {column["name"] for column in inspector.get_columns(TABLE_NAME)}
     if "rejection_reason" in existing_columns:
         op.drop_column(TABLE_NAME, "rejection_reason")
     if "reviewed_at" in existing_columns:
