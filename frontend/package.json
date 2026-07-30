@@ -49,7 +49,7 @@
     "eslint-config-prettier": "^10.1.2",
     "eslint-plugin-react-hooks": "^5.2.0",
     "eslint-plugin-react-refresh": "^0.4.19",
-    "jsdom": "^29.0.0",
+    "jsdom": "^29.1.1",
     "prettier": "^3.5.3",
     "typescript": "5.5.4",
     "vite": "8.1.0",
