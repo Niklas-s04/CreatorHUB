@@ -228,7 +228,7 @@ jobs:
         env:
           E2E_BASE_URL: http://127.0.0.1:31080
           E2E_ADMIN_USER: admin
-          E2E_ADMIN_PASSWORD: test_admin_password_1234567890
+          E2E_ADMIN_PASSWORD: Test_Admin!Password_1234567890
           E2E_BOOTSTRAP_TOKEN: test_bootstrap_token_1234567890
         run: npm run e2e:ci
 

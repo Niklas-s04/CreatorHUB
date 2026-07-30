@@ -3,7 +3,7 @@ import crypto from 'node:crypto'
 import { expect, Page } from '@playwright/test'
 
 export const E2E_ADMIN_USER = process.env.E2E_ADMIN_USER || 'admin'
-export const E2E_ADMIN_PASSWORD = process.env.E2E_ADMIN_PASSWORD || 'test_admin_password_1234567890'
+export const E2E_ADMIN_PASSWORD = process.env.E2E_ADMIN_PASSWORD || 'Test_Admin!Password_1234567890'
 export const E2E_BOOTSTRAP_TOKEN =
   process.env.E2E_BOOTSTRAP_TOKEN || 'test_bootstrap_token_1234567890'
 export const E2E_API_BASE = process.env.E2E_API_BASE || '/api/v1'
@@ -66,7 +66,10 @@ export async function gotoLogin(page: Page): Promise<void> {
 
 export async function acceptNecessaryCookies(page: Page): Promise<void> {
   const banner = page.locator('.cookie-consent')
-  const visible = await banner.isVisible({ timeout: 2000 }).catch(() => false)
+  const visible = await banner
+    .waitFor({ state: 'visible', timeout: 2000 })
+    .then(() => true)
+    .catch(() => false)
   if (!visible) return
 
   const button = page.getByRole('button', { name: /necessary only|nur notwendige cookies/i })
