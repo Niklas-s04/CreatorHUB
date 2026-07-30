@@ -28,6 +28,7 @@ vi.mock('../../../shared/ui/toast/ToastProvider', () => ({
 }))
 
 vi.mock('../../../api', () => ({
+  ACTION_CONFIRMATION_HEADERS: { 'X-Action-Confirm': 'CONFIRM' },
   apiFetch: mocks.apiFetch,
 }))
 
@@ -138,6 +139,34 @@ describe('ProjectsHubPageView', () => {
     expect(screen.queryByText('Direkt neues Produkt anlegen')).not.toBeInTheDocument()
     expect(screen.queryByText('Bestehenden Content wählen …')).not.toBeInTheDocument()
     expect(screen.queryByText('Bestehendes Produkt wählen …')).not.toBeInTheDocument()
+  })
+
+  it('deletes a project after a click confirmation without requesting MFA', async () => {
+    mocks.permissions = ['project.manage', 'project.delete']
+    mocks.apiFetch.mockImplementation(async (path: string, options?: RequestInit) => {
+      if (path.startsWith('/projects?')) return page([firstProject])
+      if (path === '/projects/categories?include_inactive=true') return []
+      if (path === '/projects/project-1' && options?.method === 'DELETE') {
+        return { deleted: true }
+      }
+      if (path === '/projects/project-1') return { ...firstProject }
+      throw new Error(`Unexpected path: ${path}`)
+    })
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true)
+
+    renderPage()
+    await screen.findByLabelText('Project name')
+    fireEvent.click(screen.getByRole('button', { name: 'Delete project' }))
+
+    await waitFor(() =>
+      expect(mocks.apiFetch).toHaveBeenCalledWith('/projects/project-1', {
+        method: 'DELETE',
+        headers: { 'X-Action-Confirm': 'CONFIRM' },
+      })
+    )
+    expect(confirm).toHaveBeenCalledWith('Delete project: First project?')
+    expect(mocks.toastSuccess).toHaveBeenCalledWith('Project deleted.')
+    confirm.mockRestore()
   })
 
   it('sorts projects by the nearest due or review date and formats it in German', async () => {

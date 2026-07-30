@@ -103,7 +103,13 @@ def delete_doc(
     doc_id: uuid.UUID,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_permission(Permission.knowledge_manage)),
-    _: SensitiveActionContext = Depends(require_sensitive_action("knowledge.doc.delete")),
+    _: SensitiveActionContext = Depends(
+        require_sensitive_action(
+            "knowledge.doc.delete",
+            confirmation_required=True,
+            step_up_required=False,
+        )
+    ),
 ) -> dict:
     try:
         knowledge_service.delete_doc(db, doc_id=doc_id, actor=current_user)

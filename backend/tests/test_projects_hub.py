@@ -6,6 +6,7 @@ import pytest
 from sqlalchemy import UniqueConstraint
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.models.content import ContentItem
 from app.models.product import Product
 from app.models.project import (
@@ -108,6 +109,37 @@ def test_project_full_lifecycle_with_inline_content_and_product(
     assert update_response.status_code == 200
     assert update_response.json()["progress_percent"] == 40
     assert update_response.json()["preview_attention_required"] is True
+
+
+def test_project_delete_requires_click_confirmation_without_mfa_step_up(
+    client,
+    db_session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(settings, "SECURITY_SENSITIVE_ACTION_CONFIRMATION_REQUIRED", False)
+    monkeypatch.setattr(settings, "SECURITY_SENSITIVE_ACTION_REQUIRE_STEP_UP_MFA", True)
+
+    admin = create_user(db_session, username="project_delete_admin", role=UserRole.admin)
+    token, _ = create_tokens_for_user(db_session, user=admin)
+    project = Project(title="Delete after confirmation")
+    db_session.add(project)
+    db_session.commit()
+    db_session.refresh(project)
+
+    denied = client.delete(
+        f"/api/v1/projects/{project.id}",
+        headers=_auth(token),
+    )
+    assert denied.status_code == 428
+    assert denied.json()["message"] == "Sensitive action confirmation required"
+
+    allowed = client.delete(
+        f"/api/v1/projects/{project.id}",
+        headers={**_auth(token), "x-action-confirm": "CONFIRM"},
+    )
+    assert allowed.status_code == 200
+    assert allowed.json() == {"deleted": True}
+    assert db_session.query(Project).filter(Project.id == project.id).first() is None
 
 
 def test_project_and_category_names_reject_whitespace(client, db_session: Session) -> None:

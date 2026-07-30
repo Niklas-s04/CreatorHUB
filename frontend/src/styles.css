@@ -916,6 +916,8 @@ caption {
 }
 
 .inline-hint {
+  width: fit-content;
+  max-width: 100%;
   border-radius: var(--radius);
   border: 1px solid var(--border);
   padding: 8px 10px;

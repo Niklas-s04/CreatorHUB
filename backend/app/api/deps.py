@@ -190,26 +190,39 @@ def require_permissions_any(*permissions: Permission):
     return _dep
 
 
-def require_sensitive_action(action: str):
+def require_sensitive_action(
+    action: str,
+    *,
+    confirmation_required: bool | None = None,
+    step_up_required: bool | None = None,
+):
     def _dep(
         request: Request,
         context: AuthContext = Depends(get_current_auth_context),
     ) -> SensitiveActionContext:
-        confirmation_required = settings.SECURITY_SENSITIVE_ACTION_CONFIRMATION_REQUIRED
+        confirmation_is_required = (
+            settings.SECURITY_SENSITIVE_ACTION_CONFIRMATION_REQUIRED
+            if confirmation_required is None
+            else confirmation_required
+        )
         header_name = settings.SECURITY_SENSITIVE_ACTION_CONFIRMATION_HEADER.strip().lower()
         expected_value = settings.SECURITY_SENSITIVE_ACTION_CONFIRMATION_VALUE
         header_value = request.headers.get(header_name)
         confirmation_provided = bool(header_value) and header_value == expected_value
 
-        if confirmation_required and not confirmation_provided:
+        if confirmation_is_required and not confirmation_provided:
             raise HTTPException(
                 status_code=status.HTTP_428_PRECONDITION_REQUIRED,
                 detail="Sensitive action confirmation required",
             )
 
-        step_up_required = settings.SECURITY_SENSITIVE_ACTION_REQUIRE_STEP_UP_MFA
+        step_up_is_required = (
+            settings.SECURITY_SENSITIVE_ACTION_REQUIRE_STEP_UP_MFA
+            if step_up_required is None
+            else step_up_required
+        )
         step_up_satisfied = _step_up_satisfied(context.session)
-        if step_up_required and not step_up_satisfied:
+        if step_up_is_required and not step_up_satisfied:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Step-up authentication required",
@@ -217,9 +230,9 @@ def require_sensitive_action(action: str):
 
         return SensitiveActionContext(
             action=action,
-            confirmation_required=confirmation_required,
+            confirmation_required=confirmation_is_required,
             confirmation_provided=confirmation_provided,
-            step_up_required=step_up_required,
+            step_up_required=step_up_is_required,
             step_up_satisfied=step_up_satisfied,
             request_id=getattr(request.state, "request_id", None)
             or request.headers.get("x-request-id"),

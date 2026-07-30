@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { apiFetch } from '../../../../api'
+import { ACTION_CONFIRMATION_HEADERS, apiFetch } from '../../../../api'
 import { useAuthz } from '../../../../shared/hooks/useAuthz'
 import { useI18n } from '../../../../shared/i18n/i18n'
 import { formatGermanDate } from '../../../../shared/lib/dateTime'
@@ -74,7 +74,7 @@ function profilePayload(draft: ProfileDraft) {
 }
 
 export default function ContentKanbanPageView() {
-  const { t } = useI18n()
+  const { language, t } = useI18n()
   const { hasPermission } = useAuthz()
   const canManage = hasPermission('content.manage')
   const [activeTab, setActiveTab] = useState<TabKey>('board')
@@ -192,11 +192,31 @@ export default function ContentKanbanPageView() {
 
   async function deleteItem(itemId: string) {
     if (!canManage) return
-    await api(`/content/items/${itemId}`, { method: 'DELETE' })
-    setItems((prev) => prev.filter((item) => item.id !== itemId))
-    setTasks((prev) => prev.filter((task) => task.content_item_id !== itemId))
-    setSelectedId(null)
-    setPlanning(null)
+    const item = items.find((candidate) => candidate.id === itemId)
+    const itemName = item?.title || (language === 'en' ? 'this content item' : 'diesen Inhalt')
+    if (
+      !window.confirm(
+        language === 'en'
+          ? `Delete ${itemName}? This action cannot be undone.`
+          : `${itemName} löschen? Diese Aktion kann nicht rückgängig gemacht werden.`
+      )
+    ) {
+      return
+    }
+
+    setError(null)
+    try {
+      await api(`/content/items/${itemId}`, {
+        method: 'DELETE',
+        headers: ACTION_CONFIRMATION_HEADERS,
+      })
+      setItems((prev) => prev.filter((candidate) => candidate.id !== itemId))
+      setTasks((prev) => prev.filter((task) => task.content_item_id !== itemId))
+      setSelectedId(null)
+      setPlanning(null)
+    } catch (deleteError) {
+      setError(errorMessage(deleteError))
+    }
   }
 
   async function createTask(itemId: string, draft: Partial<ContentTask>) {
@@ -252,6 +272,16 @@ export default function ContentKanbanPageView() {
 
   async function deleteTemplate(templateId: string) {
     if (!canManage) return
+    const template = templates.find((candidate) => candidate.id === templateId)
+    if (
+      !window.confirm(
+        language === 'en'
+          ? `Delete template ${template?.name || ''}?`
+          : `Vorlage ${template?.name || ''} löschen?`
+      )
+    ) {
+      return
+    }
     await api(`/content/checklist-templates/${templateId}`, { method: 'DELETE' })
     setTemplates(await api<ChecklistTemplate[]>('/content/checklist-templates'))
   }
@@ -281,6 +311,16 @@ export default function ContentKanbanPageView() {
 
   async function deleteProfile(profileId: string) {
     if (!canManage) return
+    const profile = profiles.find((candidate) => candidate.id === profileId)
+    if (
+      !window.confirm(
+        language === 'en'
+          ? `Delete platform profile ${profile?.name || ''}?`
+          : `Plattformprofil ${profile?.name || ''} löschen?`
+      )
+    ) {
+      return
+    }
     await api(`/content/platform-profiles/${profileId}`, { method: 'DELETE' })
     setProfiles(await api<PlatformProfile[]>('/content/platform-profiles'))
   }

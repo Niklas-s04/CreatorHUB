@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
 }))
 
 vi.mock('../../../../api', () => ({
+  ACTION_CONFIRMATION_HEADERS: { 'X-Action-Confirm': 'CONFIRM' },
   apiFetch: mocks.apiFetch,
 }))
 
@@ -37,7 +38,7 @@ const contentItem = {
 beforeEach(() => {
   vi.clearAllMocks()
   mocks.canManage = false
-  mocks.apiFetch.mockImplementation(async (path: string) => {
+  mocks.apiFetch.mockImplementation(async (path: string, options?: RequestInit) => {
     if (path.startsWith('/content/items?')) return { items: [contentItem] }
     if (path.startsWith('/content/tasks?')) return { items: [] }
     if (path === '/content/platform-profiles') return []
@@ -52,6 +53,9 @@ beforeEach(() => {
         publish_ready: false,
         blockers: [],
       }
+    }
+    if (path === '/content/items/content-1' && options?.method === 'DELETE') {
+      return { deleted: true }
     }
     throw new Error(`Unexpected path: ${path}`)
   })
@@ -87,5 +91,33 @@ describe('ContentKanbanPageView RBAC', () => {
     expect(document.querySelector('#content-new-title')).not.toBeNull()
     expect(screen.getByRole('tab', { name: 'Vorlagen' })).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: 'Plattformfelder' })).toBeInTheDocument()
+  })
+
+  it('requires a click confirmation and sends it with content deletion', async () => {
+    mocks.canManage = true
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
+    render(<ContentKanbanPageView />)
+
+    fireEvent.click(await screen.findByRole('button', { name: /Camera review/ }))
+    const deleteButton = await screen.findByRole('button', { name: 'Löschen' })
+    fireEvent.click(deleteButton)
+    expect(mocks.apiFetch).not.toHaveBeenCalledWith(
+      '/content/items/content-1',
+      expect.objectContaining({ method: 'DELETE' })
+    )
+
+    confirm.mockReturnValue(true)
+    fireEvent.click(deleteButton)
+
+    await waitFor(() =>
+      expect(mocks.apiFetch).toHaveBeenCalledWith('/content/items/content-1', {
+        method: 'DELETE',
+        headers: { 'X-Action-Confirm': 'CONFIRM' },
+      })
+    )
+    expect(confirm).toHaveBeenCalledWith(
+      'Camera review löschen? Diese Aktion kann nicht rückgängig gemacht werden.'
+    )
+    confirm.mockRestore()
   })
 })

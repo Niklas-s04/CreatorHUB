@@ -356,7 +356,13 @@ def delete_product(
     product_id: uuid.UUID,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_permission(Permission.product_delete)),
-    sensitive_action: SensitiveActionContext = Depends(require_sensitive_action("product.delete")),
+    sensitive_action: SensitiveActionContext = Depends(
+        require_sensitive_action(
+            "product.delete",
+            confirmation_required=True,
+            step_up_required=False,
+        )
+    ),
 ) -> dict:
     p = db.query(Product).filter(Product.id == product_id).first()
     if not p:

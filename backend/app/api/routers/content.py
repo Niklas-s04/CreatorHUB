@@ -153,7 +153,13 @@ def delete_item(
     item_id: uuid.UUID,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_permission(Permission.content_manage)),
-    _: SensitiveActionContext = Depends(require_sensitive_action("content.item.delete")),
+    _: SensitiveActionContext = Depends(
+        require_sensitive_action(
+            "content.item.delete",
+            confirmation_required=True,
+            step_up_required=False,
+        )
+    ),
 ) -> dict:
     try:
         content_service.delete_item(db, item_id=item_id, actor=current_user)
@@ -356,7 +362,13 @@ def delete_task(
     task_id: uuid.UUID,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_permission(Permission.content_manage)),
-    _: SensitiveActionContext = Depends(require_sensitive_action("content.task.delete")),
+    _: SensitiveActionContext = Depends(
+        require_sensitive_action(
+            "content.task.delete",
+            confirmation_required=True,
+            step_up_required=False,
+        )
+    ),
 ) -> dict:
     try:
         content_service.delete_task(db, task_id=task_id, actor=current_user)

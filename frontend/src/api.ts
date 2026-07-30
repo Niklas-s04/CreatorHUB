@@ -4,6 +4,9 @@ declare const __API_BASE__: string
 
 export const API_BASE = __API_BASE__ || '/api/v1'
 const AUTH_HINT_KEY = 'auth_session'
+export const ACTION_CONFIRMATION_HEADERS = {
+  'X-Action-Confirm': 'CONFIRM',
+} as const
 const CSRF_COOKIE_NAME = 'creatorhub_csrf'
 const AUTH_REQUEST_TIMEOUT_MS = 12_000
 const ADMIN_SETUP_TIMEOUT_MS = 60_000

@@ -218,7 +218,13 @@ def delete_project(
     project_id: uuid.UUID,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_permission(Permission.project_delete)),
-    _: SensitiveActionContext = Depends(require_sensitive_action("project.delete")),
+    _: SensitiveActionContext = Depends(
+        require_sensitive_action(
+            "project.delete",
+            confirmation_required=True,
+            step_up_required=False,
+        )
+    ),
 ) -> dict[str, bool]:
     try:
         project_service.delete_project(db, project_id=project_id, actor=current_user)

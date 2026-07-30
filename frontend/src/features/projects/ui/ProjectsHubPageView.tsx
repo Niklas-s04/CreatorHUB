@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router'
-import { apiFetch } from '../../../api'
+import { ACTION_CONFIRMATION_HEADERS, apiFetch } from '../../../api'
 import { useAuthz } from '../../../shared/hooks/useAuthz'
 import { useI18n } from '../../../shared/i18n/i18n'
 import { formatGermanDate } from '../../../shared/lib/dateTime'
@@ -493,7 +493,11 @@ export default function ProjectsHubPageView() {
     if (!form || !canDelete || !window.confirm(`${text.delete}: ${form.title}?`)) return
     const id = form.id
     const result = await mutateProject(
-      () => apiFetch<{ deleted: boolean }>(`/projects/${id}`, { method: 'DELETE' }),
+      () =>
+        apiFetch<{ deleted: boolean }>(`/projects/${id}`, {
+          method: 'DELETE',
+          headers: ACTION_CONFIRMATION_HEADERS,
+        }),
       language === 'de' ? 'Projekt gelöscht.' : 'Project deleted.'
     )
     if (!result) return
