@@ -758,6 +758,7 @@ def create_user(
         username=username,
         hashed_password=hash_password(password),
         role=payload.role,
+        is_active=payload.is_active,
         needs_password_setup=False,
         password_changed_at=_utcnow(),
     )

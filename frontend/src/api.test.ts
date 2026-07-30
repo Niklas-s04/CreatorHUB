@@ -7,6 +7,7 @@ import {
   changePassword,
   checkSession,
   confirmPasswordReset,
+  createUser,
   deleteAccount,
   disableMfa,
   enableMfa,
@@ -264,6 +265,12 @@ describe('apiFetch step-up retry flow', () => {
     await revokeSession('session-1')
     await getLoginHistory(12)
     await getUsers()
+    await createUser({
+      username: 'new-user',
+      password: 'NewStrong!Pass123',
+      role: 'editor',
+      is_active: false,
+    })
     await getUserSessions('user-1')
     await requestAdminPasswordReset('user-1')
     await lockUser('user-1')
@@ -290,6 +297,18 @@ describe('apiFetch step-up retry flow', () => {
       'POST',
     ])
     expect(calls).toContainEqual(['/api/v1/auth/users/user-1/lock?minutes=15', 'POST'])
+    expect(calls).toContainEqual(['/api/v1/auth/users', 'POST'])
+    const createUserCall = fetchMock.mock.calls.find(
+      (call) => call[0] === '/api/v1/auth/users' && call[1]?.method === 'POST'
+    )
+    expect(createUserCall?.[1]?.body).toBe(
+      JSON.stringify({
+        username: 'new-user',
+        password: 'NewStrong!Pass123',
+        role: 'editor',
+        is_active: false,
+      })
+    )
     expect(calls).toContainEqual(['/api/v1/auth/mfa/step-up', 'POST'])
     expect(calls).toContainEqual(['/api/v1/auth/password-reset/confirm', 'POST'])
   })

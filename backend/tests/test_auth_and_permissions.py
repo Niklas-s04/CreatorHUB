@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import uuid
 from datetime import datetime, timedelta
 
 import pyotp
@@ -13,7 +14,7 @@ from app.models.audit import AuditLog
 from app.models.auth_session import AuthSession, PasswordResetToken, RevokedToken
 from app.models.product import Product
 from app.models.registration_request import RegistrationRequest, RegistrationRequestStatus
-from app.models.user import UserRole
+from app.models.user import User, UserRole
 from app.services.auth_security import create_totp_secret
 from tests.factories import DEFAULT_PASSWORD, create_tokens_for_user, create_user
 
@@ -132,12 +133,22 @@ def test_create_user_writes_audit_log(client, db_session: Session) -> None:
 
     response = client.post(
         "/api/auth/users",
-        json={"username": "new_editor_audit", "password": "NewStrong!Pass123", "role": "editor"},
+        json={
+            "username": "new_editor_audit",
+            "password": "NewStrong!Pass123",
+            "role": "editor",
+            "is_active": False,
+        },
         headers=_auth_header(access_token),
     )
 
     assert response.status_code == 200
     created_user = response.json()
+    assert created_user["role"] == "editor"
+    assert created_user["is_active"] is False
+
+    persisted_user = db_session.query(User).filter(User.id == uuid.UUID(created_user["id"])).one()
+    assert persisted_user.is_active is False
 
     audit = (
         db_session.query(AuditLog)
@@ -148,6 +159,11 @@ def test_create_user_writes_audit_log(client, db_session: Session) -> None:
     assert isinstance(audit.meta, dict)
     assert audit.meta.get("audit_category") == "permission_change"
     assert bool(audit.meta.get("critical")) is True
+    assert audit.after == {
+        "username": "new_editor_audit",
+        "role": "editor",
+        "is_active": False,
+    }
 
 
 def test_me_includes_effective_permissions(client, db_session: Session) -> None:

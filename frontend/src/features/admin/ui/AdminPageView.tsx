@@ -12,11 +12,45 @@ import {
   useAdminRoleAuditQuery,
   useAdminUserActionsMutation,
   useAdminUserSessionsQuery,
+  useCreateUserMutation,
   usePendingRegistrationRequestsQuery,
   useRegistrationRequestHistoryQuery,
   useUsersQuery,
 } from '../../../shared/api/queries/admin'
-import type { AdminSession, RegistrationRequest, UserSummary } from '../../../api'
+import type { AdminSession, Permission, RegistrationRequest, UserSummary } from '../../../api'
+
+type CreatableUserRole = 'editor' | 'viewer'
+
+const ROLE_PERMISSIONS: Record<CreatableUserRole, Permission[]> = {
+  editor: [
+    'product.read',
+    'product.write',
+    'product.import',
+    'product.export',
+    'asset.read',
+    'asset.upload',
+    'asset.review',
+    'content.read',
+    'content.manage',
+    'project.read',
+    'project.manage',
+    'deal.read',
+    'deal.manage',
+    'email.read',
+    'email.generate',
+    'image.search',
+    'knowledge.read',
+  ],
+  viewer: [
+    'product.read',
+    'asset.read',
+    'content.read',
+    'project.read',
+    'deal.read',
+    'email.read',
+    'knowledge.read',
+  ],
+}
 
 type RoleAuditEntry = {
   id: string
@@ -44,7 +78,15 @@ export default function AdminPage() {
   const [err, setErr] = useState<string | null>(null)
   const [adminResetToken, setAdminResetToken] = useState<string | null>(null)
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null)
+  const [sessionsExpanded, setSessionsExpanded] = useState(false)
   const [rejectionReasons, setRejectionReasons] = useState<Record<string, string>>({})
+  const [newUsername, setNewUsername] = useState('')
+  const [newPassword, setNewPassword] = useState('')
+  const [newPasswordConfirmation, setNewPasswordConfirmation] = useState('')
+  const [newUserRole, setNewUserRole] = useState<CreatableUserRole>('editor')
+  const [newUserIsActive, setNewUserIsActive] = useState(true)
+  const [showNewUserPassword, setShowNewUserPassword] = useState(false)
+  const [createUserError, setCreateUserError] = useState<string | null>(null)
 
   const canApprove = hasPermission('user.approve_registration')
   const canReadUsers = hasPermission('user.read')
@@ -54,7 +96,11 @@ export default function AdminPage() {
   const requestHistoryQuery = useRegistrationRequestHistoryQuery(!authzLoading && canApprove)
   const usersQuery = useUsersQuery(!authzLoading && canReadUsers)
   const decideMutation = useDecideRegistrationRequestMutation()
-  const userSessionsQuery = useAdminUserSessionsQuery(selectedUserId, !authzLoading && canReadUsers)
+  const createUserMutation = useCreateUserMutation()
+  const userSessionsQuery = useAdminUserSessionsQuery(
+    selectedUserId,
+    !authzLoading && canReadUsers && sessionsExpanded
+  )
   const roleAuditQuery = useAdminRoleAuditQuery(selectedUserId, !authzLoading && canReadUsers)
   const adminActions = useAdminUserActionsMutation()
 
@@ -63,6 +109,7 @@ export default function AdminPage() {
     requestsQuery.isFetching ||
     usersQuery.isFetching ||
     decideMutation.isPending ||
+    createUserMutation.isPending ||
     adminActions.passwordReset.isPending ||
     adminActions.lock.isPending ||
     adminActions.unlock.isPending
@@ -73,10 +120,10 @@ export default function AdminPage() {
     return null
   }, [requestsQuery.error, requestHistoryQuery.error, usersQuery.error])
   const detailErr = useMemo(() => {
-    if (userSessionsQuery.error) return getErrorMessage(userSessionsQuery.error)
+    if (sessionsExpanded && userSessionsQuery.error) return getErrorMessage(userSessionsQuery.error)
     if (roleAuditQuery.error) return getErrorMessage(roleAuditQuery.error)
     return null
-  }, [userSessionsQuery.error, roleAuditQuery.error])
+  }, [sessionsExpanded, userSessionsQuery.error, roleAuditQuery.error])
 
   const requests: RegistrationRequest[] = canApprove ? (requestsQuery.data ?? []) : []
   const requestHistory: RegistrationRequest[] = canApprove ? (requestHistoryQuery.data ?? []) : []
@@ -169,9 +216,76 @@ export default function AdminPage() {
     }
   }
 
-  function selectUser(userId: string) {
+  function selectUser(userId: string, expandSessions = false) {
+    if (userId !== selectedUserId) {
+      setSessionsExpanded(expandSessions)
+    } else if (expandSessions) {
+      setSessionsExpanded(true)
+    }
     setSelectedUserId(userId)
     setAdminResetToken(null)
+  }
+
+  async function submitNewUser(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    setCreateUserError(null)
+
+    const username = newUsername.trim()
+    const normalizedPassword = newPassword.trim()
+    if (!/^[A-Za-z0-9_.-]{3,64}$/.test(username)) {
+      setCreateUserError(
+        isEnglish
+          ? 'The username must be 3–64 characters and may only contain letters, numbers, dots, underscores and hyphens.'
+          : 'Der Benutzername muss 3–64 Zeichen lang sein und darf nur Buchstaben, Zahlen, Punkte, Unterstriche und Bindestriche enthalten.'
+      )
+      return
+    }
+    if (newPassword !== newPasswordConfirmation) {
+      setCreateUserError(
+        isEnglish ? 'The passwords do not match.' : 'Die Passwörter stimmen nicht überein.'
+      )
+      return
+    }
+    if (
+      normalizedPassword.length < 8 ||
+      !/[a-z]/.test(normalizedPassword) ||
+      !/[A-Z]/.test(normalizedPassword) ||
+      !/\d/.test(normalizedPassword) ||
+      !/[^A-Za-z0-9]/.test(normalizedPassword)
+    ) {
+      setCreateUserError(
+        isEnglish
+          ? 'The password needs at least 8 characters, upper and lower case letters, a number and a special character.'
+          : 'Das Passwort benötigt mindestens 8 Zeichen, Groß- und Kleinbuchstaben, eine Zahl und ein Sonderzeichen.'
+      )
+      return
+    }
+
+    try {
+      const createdUser = await createUserMutation.mutateAsync({
+        username,
+        password: newPassword,
+        role: newUserRole,
+        is_active: newUserIsActive,
+      })
+      setNewUsername('')
+      setNewPassword('')
+      setNewPasswordConfirmation('')
+      setNewUserRole('editor')
+      setNewUserIsActive(true)
+      setShowNewUserPassword(false)
+      setSelectedUserId(createdUser.id)
+      setSessionsExpanded(false)
+      toast.success(
+        isEnglish
+          ? `User ${createdUser.username} was created`
+          : `Benutzer ${createdUser.username} wurde angelegt`
+      )
+    } catch (error: unknown) {
+      const message = getErrorMessage(error)
+      setCreateUserError(message)
+      toast.error(message)
+    }
   }
 
   function formatSessionStatus(session: {
@@ -237,8 +351,8 @@ export default function AdminPage() {
           <h2 className="page-title">{isEnglish ? 'Administration' : 'Administration'}</h2>
           <div className="page-subtitle">
             {isEnglish
-              ? 'Manage registration requests centrally.'
-              : 'Verwalte Registrierungsanfragen zentral.'}
+              ? 'Manage users, permissions, sessions and registration requests centrally.'
+              : 'Verwalte Benutzer, Rechte, Sitzungen und Registrierungsanfragen zentral.'}
           </div>
         </div>
         <button
@@ -284,6 +398,198 @@ export default function AdminPage() {
 
       {me && (
         <>
+          {canManageUsers && (
+            <section className="card section-gap admin-create-user-card">
+              <div className="page-header no-margin">
+                <div>
+                  <h3>{isEnglish ? 'Create user' : 'Neuen Benutzer anlegen'}</h3>
+                  <div className="muted small">
+                    {isEnglish
+                      ? 'Create a ready-to-use account and assign its access level immediately.'
+                      : 'Lege ein sofort nutzbares Konto an und weise direkt die passende Zugriffsstufe zu.'}
+                  </div>
+                </div>
+                <span className="pill primary">
+                  {isEnglish ? 'Admin function' : 'Admin-Funktion'}
+                </span>
+              </div>
+
+              <div className="admin-create-user-layout section-gap">
+                <form
+                  className="admin-create-user-form"
+                  onSubmit={(event) => void submitNewUser(event)}
+                >
+                  <div className="form-grid">
+                    <label className="form-field" htmlFor="admin-new-username">
+                      <span>{isEnglish ? 'Username / name' : 'Benutzername / Name'}</span>
+                      <input
+                        id="admin-new-username"
+                        name="username"
+                        type="text"
+                        minLength={3}
+                        maxLength={64}
+                        pattern="[A-Za-z0-9_.-]{3,64}"
+                        autoComplete="off"
+                        placeholder={isEnglish ? 'e.g. max.mustermann' : 'z. B. max.mustermann'}
+                        value={newUsername}
+                        onChange={(event) => setNewUsername(event.target.value)}
+                        disabled={createUserMutation.isPending}
+                        required
+                      />
+                    </label>
+
+                    <label className="form-field" htmlFor="admin-new-role">
+                      <span>{isEnglish ? 'Role' : 'Rolle'}</span>
+                      <select
+                        id="admin-new-role"
+                        name="role"
+                        value={newUserRole}
+                        onChange={(event) =>
+                          setNewUserRole(event.target.value as CreatableUserRole)
+                        }
+                        disabled={createUserMutation.isPending}
+                      >
+                        <option value="editor">{isEnglish ? 'Editor' : 'Bearbeiter'}</option>
+                        <option value="viewer">{isEnglish ? 'Viewer' : 'Betrachter'}</option>
+                      </select>
+                    </label>
+
+                    <label className="form-field" htmlFor="admin-new-password">
+                      <span>{isEnglish ? 'Password' : 'Passwort'}</span>
+                      <input
+                        id="admin-new-password"
+                        name="password"
+                        type={showNewUserPassword ? 'text' : 'password'}
+                        minLength={8}
+                        maxLength={128}
+                        autoComplete="new-password"
+                        value={newPassword}
+                        onChange={(event) => setNewPassword(event.target.value)}
+                        disabled={createUserMutation.isPending}
+                        aria-describedby="admin-new-password-hint"
+                        required
+                      />
+                    </label>
+
+                    <label className="form-field" htmlFor="admin-new-password-confirmation">
+                      <span>{isEnglish ? 'Confirm password' : 'Passwort bestätigen'}</span>
+                      <input
+                        id="admin-new-password-confirmation"
+                        name="passwordConfirmation"
+                        type={showNewUserPassword ? 'text' : 'password'}
+                        minLength={8}
+                        maxLength={128}
+                        autoComplete="new-password"
+                        value={newPasswordConfirmation}
+                        onChange={(event) => setNewPasswordConfirmation(event.target.value)}
+                        disabled={createUserMutation.isPending}
+                        required
+                      />
+                    </label>
+                  </div>
+
+                  <div id="admin-new-password-hint" className="muted small">
+                    {isEnglish
+                      ? 'At least 8 characters with upper/lower case, a number and a special character.'
+                      : 'Mindestens 8 Zeichen mit Groß-/Kleinbuchstaben, Zahl und Sonderzeichen.'}
+                  </div>
+
+                  <div className="admin-create-options">
+                    <label className="admin-option-control">
+                      <input
+                        type="checkbox"
+                        checked={newUserIsActive}
+                        onChange={(event) => setNewUserIsActive(event.target.checked)}
+                        disabled={createUserMutation.isPending}
+                      />
+                      <span>
+                        <strong>{isEnglish ? 'Create active' : 'Aktiv anlegen'}</strong>
+                        <small>
+                          {isEnglish
+                            ? 'The account can sign in immediately.'
+                            : 'Das Konto kann sich sofort anmelden.'}
+                        </small>
+                      </span>
+                    </label>
+                    <label className="admin-option-control">
+                      <input
+                        type="checkbox"
+                        checked={showNewUserPassword}
+                        onChange={(event) => setShowNewUserPassword(event.target.checked)}
+                        disabled={createUserMutation.isPending}
+                      />
+                      <span>
+                        <strong>{isEnglish ? 'Show passwords' : 'Passwörter anzeigen'}</strong>
+                        <small>
+                          {isEnglish
+                            ? 'Useful for checking before creation.'
+                            : 'Hilfreich zur Kontrolle vor dem Anlegen.'}
+                        </small>
+                      </span>
+                    </label>
+                  </div>
+
+                  {createUserError && (
+                    <div className="error admin-create-user-error" role="alert">
+                      {createUserError}
+                    </div>
+                  )}
+
+                  <div className="admin-create-user-actions">
+                    <button
+                      className="btn primary"
+                      type="submit"
+                      disabled={createUserMutation.isPending}
+                    >
+                      {createUserMutation.isPending
+                        ? isEnglish
+                          ? 'Creating…'
+                          : 'Wird angelegt…'
+                        : isEnglish
+                          ? 'Create user'
+                          : 'Benutzer anlegen'}
+                    </button>
+                    <span className="muted small">
+                      {isEnglish
+                        ? 'Additional admin accounts remain protected and are managed through bootstrap.'
+                        : 'Weitere Admin-Konten bleiben geschützt und werden über das Bootstrap-Admin-Konto verwaltet.'}
+                    </span>
+                  </div>
+                </form>
+
+                <aside className="admin-role-preview" aria-live="polite">
+                  <div className="admin-role-preview-header">
+                    <div>
+                      <div className="admin-role-preview-eyebrow">
+                        {isEnglish ? 'Effective permissions' : 'Wirksame Rechte'}
+                      </div>
+                      <h4>
+                        {newUserRole === 'editor'
+                          ? isEnglish
+                            ? 'Editor'
+                            : 'Bearbeiter'
+                          : isEnglish
+                            ? 'Viewer'
+                            : 'Betrachter'}
+                      </h4>
+                    </div>
+                    <span className="pill primary">{ROLE_PERMISSIONS[newUserRole].length}</span>
+                  </div>
+                  <p className="muted small">
+                    {newUserRole === 'editor'
+                      ? isEnglish
+                        ? 'Can read and edit operational content, but cannot delete projects or products and cannot manage users.'
+                        : 'Kann operative Inhalte lesen und bearbeiten, aber keine Projekte oder Produkte löschen und keine Benutzer verwalten.'
+                      : isEnglish
+                        ? 'Has read-only access to products, assets, content, projects, deals, email and knowledge.'
+                        : 'Hat Lesezugriff auf Produkte, Assets, Inhalte, Projekte, Deals, E-Mail und Wissen.'}
+                  </p>
+                  {renderPermissionPills(ROLE_PERMISSIONS[newUserRole])}
+                </aside>
+              </div>
+            </section>
+          )}
+
           {hasPermission('user.read') && (
             <div className="card section-gap">
               <div className="page-header no-margin">
@@ -364,7 +670,7 @@ export default function AdminPage() {
                         <td>{user.active_sessions}</td>
                         <td>
                           <div className="table-actions">
-                            <button className="btn" onClick={() => selectUser(user.id)}>
+                            <button className="btn" onClick={() => selectUser(user.id, true)}>
                               {isEnglish ? 'Sessions' : 'Sessions'}
                             </button>
                             {canManageUsers && (
@@ -470,64 +776,115 @@ export default function AdminPage() {
 
               {detailErr && <div className="error">{detailErr}</div>}
 
-              <div className="section-gap">
-                <h4>{isEnglish ? 'Session overview' : 'Sitzungsübersicht'}</h4>
-                {userSessionsQuery.isFetching && <ListSkeleton rows={3} />}
-                {!userSessionsQuery.isFetching && !userSessions.length && (
-                  <EmptyState
-                    title={isEnglish ? 'No sessions' : 'Keine Sessions'}
-                    message={
-                      isEnglish
-                        ? 'No sessions exist for this user.'
-                        : 'Für diesen Benutzer sind keine Sessions vorhanden.'
-                    }
-                  />
-                )}
-                {!!userSessions.length && (
-                  <table>
-                    <caption className="sr-only">
-                      {isEnglish ? 'User session overview' : 'Sitzungsübersicht des Benutzers'}
-                    </caption>
-                    <thead>
-                      <tr>
-                        <th scope="col">{isEnglish ? 'Device' : 'Gerät'}</th>
-                        <th scope="col">{isEnglish ? 'Status' : 'Status'}</th>
-                        <th scope="col">{isEnglish ? 'Last activity' : 'Letzte Aktivität'}</th>
-                        <th scope="col">{isEnglish ? 'Expiry' : 'Ablauf'}</th>
-                        <th scope="col">{isEnglish ? 'MFA' : 'MFA'}</th>
-                        <th scope="col">IP</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {userSessions.map((session) => (
-                        <tr key={session.id}>
-                          <td>
-                            {session.device_label || (isEnglish ? 'Unknown' : 'Unbekannt')}
-                            {session.is_current ? (isEnglish ? ' (current)' : ' (aktuell)') : ''}
-                          </td>
-                          <td>
-                            <span className="pill">{formatSessionStatus(session)}</span>
-                            {session.revoked_reason ? (
-                              <div className="muted small">{session.revoked_reason}</div>
-                            ) : null}
-                          </td>
-                          <td>{formatDate(session.last_activity_at)}</td>
-                          <td>{formatDate(session.expires_at)}</td>
-                          <td>
-                            {session.mfa_verified
-                              ? isEnglish
-                                ? 'Yes'
-                                : 'Ja'
-                              : isEnglish
-                                ? 'No'
-                                : 'Nein'}
-                          </td>
-                          <td>{session.ip_address || '–'}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                )}
+              <div
+                className={`admin-session-disclosure section-gap ${
+                  sessionsExpanded ? 'is-open' : ''
+                }`.trim()}
+              >
+                <button
+                  type="button"
+                  className="admin-session-disclosure-trigger"
+                  aria-expanded={sessionsExpanded}
+                  aria-controls="admin-session-disclosure-content"
+                  onClick={() => setSessionsExpanded((expanded) => !expanded)}
+                >
+                  <span>
+                    <strong>{isEnglish ? 'Session overview' : 'Sitzungsübersicht'}</strong>
+                    <small>
+                      {isEnglish
+                        ? 'Devices, activity, expiry and MFA status'
+                        : 'Geräte, Aktivität, Ablauf und MFA-Status'}
+                    </small>
+                  </span>
+                  <span className="admin-session-disclosure-meta">
+                    <span className="pill primary">
+                      {selectedUser.active_sessions}{' '}
+                      {isEnglish
+                        ? selectedUser.active_sessions === 1
+                          ? 'active session'
+                          : 'active sessions'
+                        : selectedUser.active_sessions === 1
+                          ? 'aktive Sitzung'
+                          : 'aktive Sitzungen'}
+                    </span>
+                    <span className="admin-session-chevron" aria-hidden="true" />
+                  </span>
+                </button>
+                <div
+                  id="admin-session-disclosure-content"
+                  className="admin-session-disclosure-content"
+                  aria-hidden={!sessionsExpanded}
+                  inert={sessionsExpanded ? undefined : true}
+                >
+                  <div className="admin-session-disclosure-inner">
+                    <div className="admin-session-disclosure-body">
+                      {userSessionsQuery.isFetching && <ListSkeleton rows={3} />}
+                      {!userSessionsQuery.isFetching && !userSessions.length && (
+                        <EmptyState
+                          title={isEnglish ? 'No sessions' : 'Keine Sessions'}
+                          message={
+                            isEnglish
+                              ? 'No sessions exist for this user.'
+                              : 'Für diesen Benutzer sind keine Sessions vorhanden.'
+                          }
+                        />
+                      )}
+                      {!!userSessions.length && (
+                        <table>
+                          <caption className="sr-only">
+                            {isEnglish
+                              ? 'User session overview'
+                              : 'Sitzungsübersicht des Benutzers'}
+                          </caption>
+                          <thead>
+                            <tr>
+                              <th scope="col">{isEnglish ? 'Device' : 'Gerät'}</th>
+                              <th scope="col">{isEnglish ? 'Status' : 'Status'}</th>
+                              <th scope="col">
+                                {isEnglish ? 'Last activity' : 'Letzte Aktivität'}
+                              </th>
+                              <th scope="col">{isEnglish ? 'Expiry' : 'Ablauf'}</th>
+                              <th scope="col">{isEnglish ? 'MFA' : 'MFA'}</th>
+                              <th scope="col">IP</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {userSessions.map((session) => (
+                              <tr key={session.id}>
+                                <td>
+                                  {session.device_label || (isEnglish ? 'Unknown' : 'Unbekannt')}
+                                  {session.is_current
+                                    ? isEnglish
+                                      ? ' (current)'
+                                      : ' (aktuell)'
+                                    : ''}
+                                </td>
+                                <td>
+                                  <span className="pill">{formatSessionStatus(session)}</span>
+                                  {session.revoked_reason ? (
+                                    <div className="muted small">{session.revoked_reason}</div>
+                                  ) : null}
+                                </td>
+                                <td>{formatDate(session.last_activity_at)}</td>
+                                <td>{formatDate(session.expires_at)}</td>
+                                <td>
+                                  {session.mfa_verified
+                                    ? isEnglish
+                                      ? 'Yes'
+                                      : 'Ja'
+                                    : isEnglish
+                                      ? 'No'
+                                      : 'Nein'}
+                                </td>
+                                <td>{session.ip_address || '–'}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      )}
+                    </div>
+                  </div>
+                </div>
               </div>
 
               <div className="section-gap">

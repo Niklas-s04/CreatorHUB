@@ -6,6 +6,7 @@ import {
   useAdminRoleAuditQuery,
   useAdminUserActionsMutation,
   useAdminUserSessionsQuery,
+  useCreateUserMutation,
   useDecideRegistrationRequestMutation,
   usePendingRegistrationRequestsQuery,
   useRegistrationRequestHistoryQuery,
@@ -15,6 +16,7 @@ import {
 vi.mock('../../../api', () => ({
   approveRegistrationRequest: vi.fn(),
   apiFetch: vi.fn(),
+  createUser: vi.fn(),
   getRegistrationRequests: vi.fn(),
   getUserSessions: vi.fn(),
   getUsers: vi.fn(),
@@ -27,6 +29,7 @@ vi.mock('../../../api', () => ({
 import {
   approveRegistrationRequest,
   apiFetch,
+  createUser,
   getRegistrationRequests,
   getUserSessions,
   getUsers,
@@ -180,6 +183,39 @@ describe('admin queries and mutations', () => {
     expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ['admin', 'registrationRequests'] })
     expect(invalidateQueries).toHaveBeenCalledWith({
       queryKey: ['admin', 'registrationRequests', 'all'],
+    })
+    expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ['auth', 'users'] })
+  })
+
+  it('creates users and refreshes the user overview', async () => {
+    const queryClient = createQueryClient()
+    const invalidateQueries = vi.spyOn(queryClient, 'invalidateQueries')
+    ;(createUser as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
+      id: 'u2',
+      username: 'bob',
+      role: 'viewer',
+      is_active: false,
+      permissions: ['content.read'],
+    })
+
+    const { result } = renderHook(() => useCreateUserMutation(), {
+      wrapper: createWrapper(queryClient),
+    })
+
+    await act(async () => {
+      await result.current.mutateAsync({
+        username: 'bob',
+        password: 'NewStrong!Pass123',
+        role: 'viewer',
+        is_active: false,
+      })
+    })
+
+    expect(createUser).toHaveBeenCalledWith({
+      username: 'bob',
+      password: 'NewStrong!Pass123',
+      role: 'viewer',
+      is_active: false,
     })
     expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ['auth', 'users'] })
   })

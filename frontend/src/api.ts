@@ -60,6 +60,13 @@ export type UserSummary = {
   permissions: Permission[]
 }
 
+export type CreateUserInput = {
+  username: string
+  password: string
+  role: 'editor' | 'viewer'
+  is_active: boolean
+}
+
 export type Permission =
   | 'product.read'
   | 'product.write'
@@ -361,6 +368,13 @@ export async function getLoginHistory(limit = 30): Promise<LoginHistoryEntry[]> 
 
 export async function getUsers(): Promise<UserSummary[]> {
   return apiFetch('/auth/users')
+}
+
+export async function createUser(input: CreateUserInput): Promise<UserSummary> {
+  return apiFetch('/auth/users', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  })
 }
 
 export async function getUserSessions(userId: string): Promise<AdminSession[]> {

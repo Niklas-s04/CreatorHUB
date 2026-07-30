@@ -27,3 +27,4 @@ class UserCreate(BaseModel):
     username: str = Field(min_length=3, max_length=64, pattern=r"^[A-Za-z0-9_.-]{3,64}$")
     password: str = Field(min_length=8, max_length=128)
     role: UserRole = UserRole.editor
+    is_active: bool = True

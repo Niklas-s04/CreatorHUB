@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   approveRegistrationRequest,
   apiFetch,
+  createUser,
   getRegistrationRequests,
   getUserSessions,
   getUsers,
@@ -10,6 +11,7 @@ import {
   requestAdminPasswordReset,
   unlockUser,
   type AdminSession,
+  type CreateUserInput,
   type RegistrationRequest,
   type UserSummary,
 } from '../../../api'
@@ -56,6 +58,17 @@ export function useUsersQuery(enabled: boolean) {
     enabled,
     staleTime: 20_000,
     queryFn: async () => getUsers(),
+  })
+}
+
+export function useCreateUserMutation() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async (input: CreateUserInput) => createUser(input),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: queryKeys.auth.users() })
+    },
   })
 }
 

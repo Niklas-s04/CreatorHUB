@@ -5,6 +5,7 @@ import AdminPage from './AdminPageView'
 
 const toastSuccess = vi.fn()
 const toastError = vi.fn()
+const createUserMutate = vi.fn()
 
 vi.mock('../../../shared/hooks/useAuthz', () => ({
   useAuthz: () => ({
@@ -121,6 +122,10 @@ vi.mock('../../../shared/api/queries/admin', () => ({
     mutateAsync: vi.fn().mockResolvedValue(undefined),
     isPending: false,
   }),
+  useCreateUserMutation: () => ({
+    mutateAsync: createUserMutate,
+    isPending: false,
+  }),
   useAdminUserActionsMutation: () => ({
     passwordReset: {
       mutateAsync: vi.fn().mockResolvedValue({ reset_token: 'reset-1' }),
@@ -138,6 +143,13 @@ vi.mock('../../../shared/ui/toast/ToastProvider', () => ({
 describe('AdminPageView', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    createUserMutate.mockResolvedValue({
+      id: 'u2',
+      username: 'bob',
+      role: 'viewer',
+      is_active: false,
+      permissions: ['content.read'],
+    })
   })
 
   it('renders user details, approval controls and admin actions', async () => {
@@ -153,7 +165,11 @@ describe('AdminPageView', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Details für alice anzeigen' }))
     expect(await screen.findByText('Benutzerdetails: alice')).toBeInTheDocument()
-    expect(screen.getByText('Sitzungsübersicht')).toBeInTheDocument()
+    const sessionToggle = screen.getByRole('button', { name: /Sitzungsübersicht/ })
+    expect(sessionToggle).toHaveAttribute('aria-expanded', 'false')
+    fireEvent.click(sessionToggle)
+    expect(sessionToggle).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByText('Desktop (aktuell)')).toBeInTheDocument()
     expect(screen.getByText('Rollen- und Rechte-Audit')).toBeInTheDocument()
 
     fireEvent.change(screen.getByPlaceholderText('Begründung für eine Ablehnung'), {
@@ -167,5 +183,38 @@ describe('AdminPageView', () => {
 
     fireEvent.click(screen.getAllByRole('button', { name: 'Sperren' })[0])
     await waitFor(() => expect(toastSuccess).toHaveBeenCalledWith('Benutzer gesperrt'))
+  })
+
+  it('creates a user with role, password and initial status', async () => {
+    render(
+      <MemoryRouter>
+        <AdminPage />
+      </MemoryRouter>
+    )
+
+    fireEvent.change(screen.getByLabelText('Benutzername / Name'), {
+      target: { value: 'bob' },
+    })
+    fireEvent.change(screen.getByLabelText('Rolle'), {
+      target: { value: 'viewer' },
+    })
+    fireEvent.change(screen.getByLabelText('Passwort'), {
+      target: { value: 'NewStrong!Pass123' },
+    })
+    fireEvent.change(screen.getByLabelText('Passwort bestätigen'), {
+      target: { value: 'NewStrong!Pass123' },
+    })
+    fireEvent.click(screen.getByLabelText(/Aktiv anlegen/))
+    fireEvent.click(screen.getByRole('button', { name: 'Benutzer anlegen' }))
+
+    await waitFor(() =>
+      expect(createUserMutate).toHaveBeenCalledWith({
+        username: 'bob',
+        password: 'NewStrong!Pass123',
+        role: 'viewer',
+        is_active: false,
+      })
+    )
+    expect(toastSuccess).toHaveBeenCalledWith('Benutzer bob wurde angelegt')
   })
 })
