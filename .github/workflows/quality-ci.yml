@@ -159,6 +159,12 @@ jobs:
           engine = create_engine(os.environ["DATABASE_URL"])
           with engine.begin() as connection:
               connection.execute(text("DROP TABLE registration_requests"))
+              connection.execute(
+                  text(
+                      "CREATE TYPE registration_requests AS "
+                      "(legacy_id uuid)"
+                  )
+              )
           engine.dispose()
           PY
           python -m alembic upgrade head

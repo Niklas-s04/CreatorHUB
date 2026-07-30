@@ -34,6 +34,12 @@ registrationrequeststatus_col = postgresql.ENUM(
 
 
 def _create_registration_requests_table() -> None:
+    # Affected installations can retain a standalone PostgreSQL composite type
+    # after the original table disappeared. PostgreSQL reserves relation row
+    # type names, so remove that orphan before recreating the table. Deliberately
+    # omit CASCADE: unexpected dependencies must stop the migration rather than
+    # be deleted implicitly.
+    op.execute(sa.text(f'DROP TYPE IF EXISTS "{TABLE_NAME}"'))
     registrationrequeststatus_enum.create(op.get_bind(), checkfirst=True)
     op.create_table(
         TABLE_NAME,

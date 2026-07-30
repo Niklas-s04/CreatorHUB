@@ -31,9 +31,11 @@ def test_upgrade_recreates_missing_registration_requests_table(
     create_table = Mock()
     create_index = Mock()
     add_column = Mock()
+    execute = Mock()
     monkeypatch.setattr(migration_0024.op, "create_table", create_table)
     monkeypatch.setattr(migration_0024.op, "create_index", create_index)
     monkeypatch.setattr(migration_0024.op, "add_column", add_column)
+    monkeypatch.setattr(migration_0024.op, "execute", execute)
     enum_create = Mock()
     monkeypatch.setattr(
         migration_0024.registrationrequeststatus_enum,
@@ -43,6 +45,8 @@ def test_upgrade_recreates_missing_registration_requests_table(
 
     migration_0024.upgrade()
 
+    execute.assert_called_once()
+    assert str(execute.call_args.args[0]) == ('DROP TYPE IF EXISTS "registration_requests"')
     enum_create.assert_called_once_with(bind, checkfirst=True)
     create_table.assert_called_once()
     created_columns = {
