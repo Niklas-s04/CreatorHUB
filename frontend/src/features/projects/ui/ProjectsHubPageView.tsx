@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link } from 'react-router'
 import { apiFetch } from '../../../api'
 import { useAuthz } from '../../../shared/hooks/useAuthz'
 import { useI18n } from '../../../shared/i18n/i18n'

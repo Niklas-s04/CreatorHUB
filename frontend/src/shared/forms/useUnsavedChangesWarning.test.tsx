@@ -2,11 +2,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { renderHook } from '@testing-library/react'
 import { useUnsavedChangesWarning } from './useUnsavedChangesWarning'
 
-vi.mock('react-router-dom', () => ({
+vi.mock('react-router', () => ({
   useBeforeUnload: vi.fn(),
 }))
 
-import { useBeforeUnload } from 'react-router-dom'
+import { useBeforeUnload } from 'react-router'
 
 describe('useUnsavedChangesWarning', () => {
   beforeEach(() => {

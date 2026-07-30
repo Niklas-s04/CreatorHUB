@@ -1,5 +1,5 @@
 import { Suspense, lazy, useEffect, useRef, useState } from 'react'
-import { Navigate, Outlet, Route, Routes } from 'react-router-dom'
+import { Navigate, Outlet, Route, Routes } from 'react-router'
 import TopBar from './components/TopBar'
 import Sidebar from './components/Sidebar'
 import CookieConsentBanner from './components/CookieConsentBanner'

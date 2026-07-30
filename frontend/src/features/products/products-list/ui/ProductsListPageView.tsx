@@ -1,6 +1,6 @@
 import React, { useCallback, useMemo, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { useSearchParams } from 'react-router-dom'
+import { useSearchParams } from 'react-router'
 import { apiFetch, apiUrl } from '../../../../api'
 import { toProductDetailVm } from '../../../../shared/api/mappers'
 import { queryKeys } from '../../../../shared/api/queryKeys'

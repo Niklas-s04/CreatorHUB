@@ -1,4 +1,4 @@
-import { Link, useLocation } from 'react-router-dom'
+import { Link, useLocation } from 'react-router'
 import { useI18n } from '../../i18n/i18n'
 import { routeLabel } from '../../navigation/navConfig'
 

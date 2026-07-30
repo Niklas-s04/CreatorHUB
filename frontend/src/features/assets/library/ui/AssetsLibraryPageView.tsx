@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useSearchParams } from 'react-router'
 import { apiFetchBlob } from '../../../../api'
 import { getErrorMessage } from '../../../../shared/lib/errors'
 import { useDebouncedValue } from '../../../../shared/hooks/useDebouncedValue'

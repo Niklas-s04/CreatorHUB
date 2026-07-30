@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { useBeforeUnload } from 'react-router-dom'
+import { useBeforeUnload } from 'react-router'
 
 const DEFAULT_MESSAGE = 'Du hast ungespeicherte Änderungen. Wirklich verlassen?'
 

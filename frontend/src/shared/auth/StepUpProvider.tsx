@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router'
 import { getMfaStatus, performMfaStepUp, setStepUpHandler } from '../../api'
 import { getErrorMessage } from '../lib/errors'
 import { useI18n } from '../i18n/i18n'

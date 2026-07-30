@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link } from 'react-router'
 import { apiFetch } from '../../../api'
 import { getErrorMessage } from '../../../shared/lib/errors'
 import { ErrorState } from '../../../shared/ui/states/ErrorState'

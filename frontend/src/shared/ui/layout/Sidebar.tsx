@@ -1,4 +1,4 @@
-import { NavLink } from 'react-router-dom'
+import { NavLink } from 'react-router'
 import { logout } from '../../../api'
 import { useAuthz } from '../../hooks/useAuthz'
 import { useI18n } from '../../i18n/i18n'

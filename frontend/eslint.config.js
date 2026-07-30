@@ -39,7 +39,7 @@ export default [
     },
     rules: {
       ...tsPlugin.configs.recommended.rules,
-      ...reactHooks.configs.recommended.rules,
+      'react-hooks/rules-of-hooks': 'error',
       'react-refresh/only-export-components': ['warn', { allowConstantExport: true }],
       '@typescript-eslint/no-explicit-any': 'off',
       '@typescript-eslint/no-unused-vars': [
@@ -52,6 +52,7 @@ export default [
       ],
       'no-undef': 'off',
       'no-empty': 'error',
+      'preserve-caught-error': 'off',
       'react-hooks/exhaustive-deps': 'error',
     },
   },

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useParams } from 'react-router'
 import { apiFetch } from '../../../../api'
 import { PRODUCT_STATUS_OPTIONS } from '../../../../entities/product/model'
 import type { ImageSearchJobDto } from '../../../../shared/api/contracts'
