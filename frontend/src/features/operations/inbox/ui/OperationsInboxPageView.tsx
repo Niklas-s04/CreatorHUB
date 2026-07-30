@@ -290,7 +290,11 @@ export default function OperationsInboxPageView() {
             onChange={(e) => setSearchInput(e.target.value)}
           />
 
-          <select value={userFilter} onChange={(e) => setUserFilter(e.target.value)}>
+          <select
+            aria-label={isEnglish ? 'Filter by user' : 'Nach Benutzer filtern'}
+            value={userFilter}
+            onChange={(e) => setUserFilter(e.target.value)}
+          >
             <option value="all">{isEnglish ? 'User: all' : 'Benutzer: Alle'}</option>
             {assigneeOptions.map((value) => (
               <option key={value} value={value}>
@@ -301,6 +305,7 @@ export default function OperationsInboxPageView() {
           </select>
 
           <select
+            aria-label={isEnglish ? 'Filter by role' : 'Nach Rolle filtern'}
             value={roleFilter}
             onChange={(e) => setRoleFilter(e.target.value as 'all' | OperationRole)}
           >
@@ -311,6 +316,7 @@ export default function OperationsInboxPageView() {
           </select>
 
           <select
+            aria-label={isEnglish ? 'Filter by priority' : 'Nach Priorität filtern'}
             value={priorityFilter}
             onChange={(e) => setPriorityFilter(e.target.value as 'all' | OperationPriority)}
           >
@@ -323,7 +329,11 @@ export default function OperationsInboxPageView() {
             </option>
           </select>
 
-          <select value={dueFilter} onChange={(e) => setDueFilter(e.target.value as DueFilter)}>
+          <select
+            aria-label={isEnglish ? 'Filter by due date' : 'Nach Fälligkeit filtern'}
+            value={dueFilter}
+            onChange={(e) => setDueFilter(e.target.value as DueFilter)}
+          >
             <option value="all">{isEnglish ? 'Due date: all' : 'Fälligkeit: Alle'}</option>
             <option value="overdue">
               {isEnglish ? 'Due date: overdue' : 'Fälligkeit: Überfällig'}
@@ -336,6 +346,7 @@ export default function OperationsInboxPageView() {
           </select>
 
           <select
+            aria-label={isEnglish ? 'Results per page' : 'Ergebnisse pro Seite'}
             value={String(pageSize)}
             onChange={(e) => {
               setPageSize(Number(e.target.value))
@@ -354,7 +365,7 @@ export default function OperationsInboxPageView() {
         <div className="card-head">
           <h3>{isEnglish ? 'Open approvals & todos' : 'Offene Freigaben & ToDos'}</h3>
         </div>
-        <table className="status-table">
+        <table className="status-table" tabIndex={0}>
           <caption className="sr-only">
             {isEnglish ? 'Operations inbox entries' : 'Operations Inbox Einträge'}
           </caption>

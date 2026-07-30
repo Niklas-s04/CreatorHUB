@@ -395,7 +395,12 @@ export default function ProductDetailPageView() {
       await apiFetch('/assets/upload', { method: 'POST', body: form })
       await Promise.all([assetsQuery.refetch(), loadWorkspaceData()])
     } catch (e: unknown) {
-      setErr(getErrorMessage(e))
+      const message = getErrorMessage(e)
+      setErr(
+        language === 'en'
+          ? `Upload failed. Please check the file and try again. ${message}`
+          : `Upload fehlgeschlagen. Bitte Datei prüfen und erneut versuchen. ${message}`
+      )
     }
   }
 
@@ -792,7 +797,10 @@ export default function ProductDetailPageView() {
             onChange={(event) => {
               const file = event.target.files?.[0]
               if (file) {
-                void upload(file)
+                const input = event.currentTarget
+                void upload(file).finally(() => {
+                  input.value = ''
+                })
               }
             }}
           />

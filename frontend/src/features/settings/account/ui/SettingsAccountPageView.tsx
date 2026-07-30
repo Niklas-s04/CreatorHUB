@@ -452,7 +452,7 @@ export default function SettingsPage() {
               <div className="muted">{language === 'en' ? 'No sessions.' : 'Keine Sessions.'}</div>
             )}
             {!!sessions.length && (
-              <table>
+              <table tabIndex={0}>
                 <caption className="sr-only">
                   {language === 'en' ? 'List of active sessions' : 'Liste aktiver Sitzungen'}
                 </caption>
@@ -503,7 +503,7 @@ export default function SettingsPage() {
               <div className="muted">{language === 'en' ? 'No entries.' : 'Keine Einträge.'}</div>
             )}
             {!!history.length && (
-              <table>
+              <table tabIndex={0}>
                 <caption className="sr-only">
                   {language === 'en' ? 'Login history' : 'Anmeldehistorie'}
                 </caption>
@@ -678,8 +678,12 @@ function DocEditor({ doc, onSave }: DocEditorProps) {
   }
 
   return (
-    <div id={`knowledge-${doc.id}`} className="card section-gap no-margin">
-      <div className="page-header no-margin">
+    <details
+      id={`knowledge-${doc.id}`}
+      className="card section-gap no-margin knowledge-editor"
+      open={isDirty ? true : undefined}
+    >
+      <summary>
         <div>
           <div className="pill">{doc.type}</div>
           <div className="title-strong mt8">{doc.title}</div>
@@ -689,204 +693,230 @@ function DocEditor({ doc, onSave }: DocEditorProps) {
             {doc.isOutdated ? ' • Veraltet' : ''}
           </div>
         </div>
-        <button className="btn" onClick={handleSubmit(submit)} disabled={!isDirty || !isValid}>
-          Speichern
-        </button>
-      </div>
-      <div className="section-gap">
-        <label htmlFor={`knowledge-title-${doc.id}`} className="field-label">
-          Titel
-        </label>
-        <input
-          id={`knowledge-title-${doc.id}`}
-          className="full-width"
-          {...register('title')}
-          aria-invalid={Boolean(errors.title?.message)}
-          aria-describedby={errors.title?.message ? `knowledge-title-${doc.id}-error` : undefined}
-        />
-        {errors.title?.message && (
-          <div id={`knowledge-title-${doc.id}-error`} className="error mt8" role="alert">
-            {errors.title.message}
+      </summary>
+      <div className="knowledge-editor-body">
+        <div className="page-header section-gap">
+          <div>
+            <h3 className="no-margin">Dokument bearbeiten</h3>
+            <div className="muted small mt8">Änderungen werden erst mit Speichern übernommen.</div>
           </div>
-        )}
-      </div>
-      <div className="section-gap">
-        <label htmlFor={`knowledge-content-${doc.id}`} className="field-label">
-          Inhalt
-        </label>
-        <textarea
-          id={`knowledge-content-${doc.id}`}
-          className="full-width"
-          {...register('content')}
-          rows={10}
-          aria-invalid={Boolean(errors.content?.message)}
-          aria-describedby={
-            errors.content?.message ? `knowledge-content-${doc.id}-error` : undefined
-          }
-        />
-        {errors.content?.message && (
-          <div id={`knowledge-content-${doc.id}-error`} className="error mt8" role="alert">
-            {errors.content.message}
-          </div>
-        )}
-      </div>
+          <button
+            className="btn primary"
+            onClick={handleSubmit(submit)}
+            disabled={!isDirty || !isValid}
+          >
+            Speichern
+          </button>
+        </div>
+        <div className="section-gap">
+          <label htmlFor={`knowledge-title-${doc.id}`} className="field-label">
+            Titel
+          </label>
+          <input
+            id={`knowledge-title-${doc.id}`}
+            className="full-width"
+            {...register('title')}
+            aria-invalid={Boolean(errors.title?.message)}
+            aria-describedby={errors.title?.message ? `knowledge-title-${doc.id}-error` : undefined}
+          />
+          {errors.title?.message && (
+            <div id={`knowledge-title-${doc.id}-error`} className="error mt8" role="alert">
+              {errors.title.message}
+            </div>
+          )}
+        </div>
+        <div className="section-gap">
+          <label htmlFor={`knowledge-content-${doc.id}`} className="field-label">
+            Inhalt
+          </label>
+          <textarea
+            id={`knowledge-content-${doc.id}`}
+            className="full-width"
+            {...register('content')}
+            rows={10}
+            aria-invalid={Boolean(errors.content?.message)}
+            aria-describedby={
+              errors.content?.message ? `knowledge-content-${doc.id}-error` : undefined
+            }
+          />
+          {errors.content?.message && (
+            <div id={`knowledge-content-${doc.id}-error`} className="error mt8" role="alert">
+              {errors.content.message}
+            </div>
+          )}
+        </div>
 
-      <div className="section-gap">
-        <h4>Quellenverwaltung</h4>
-        <label htmlFor={`knowledge-source-name-${doc.id}`} className="field-label">
-          Quelle
-        </label>
-        <input
-          id={`knowledge-source-name-${doc.id}`}
-          className="full-width"
-          {...register('sourceName')}
-        />
-        <label htmlFor={`knowledge-source-url-${doc.id}`} className="field-label mt8">
-          Quellen-URL
-        </label>
-        <input
-          id={`knowledge-source-url-${doc.id}`}
-          className="full-width"
-          {...register('sourceUrl')}
-        />
-        <label htmlFor={`knowledge-source-type-${doc.id}`} className="field-label mt8">
-          Herkunftstyp
-        </label>
-        <select
-          id={`knowledge-source-type-${doc.id}`}
-          className="full-width"
-          {...register('sourceType')}
-        >
-          <option value="internal">intern</option>
-          <option value="external">extern</option>
-          <option value="customer">kundenseitig</option>
-          <option value="legal">rechtlich</option>
-          <option value="other">sonstiges</option>
-        </select>
-        <label htmlFor={`knowledge-source-review-${doc.id}`} className="field-label mt8">
-          Review-Status Quelle
-        </label>
-        <select
-          id={`knowledge-source-review-${doc.id}`}
-          className="full-width"
-          {...register('sourceReviewStatus')}
-        >
-          <option value="pending">offen</option>
-          <option value="approved">freigegeben</option>
-          <option value="rejected">abgelehnt</option>
-          <option value="needs_update">Update nötig</option>
-        </select>
-        <label htmlFor={`knowledge-trust-${doc.id}`} className="field-label mt8">
-          Vertrauensgrad
-        </label>
-        <select id={`knowledge-trust-${doc.id}`} className="full-width" {...register('trustLevel')}>
-          <option value="low">niedrig</option>
-          <option value="medium">mittel</option>
-          <option value="high">hoch</option>
-          <option value="verified">verifiziert</option>
-        </select>
-        <label htmlFor={`knowledge-origin-summary-${doc.id}`} className="field-label mt8">
-          Herkunftszusammenfassung
-        </label>
-        <textarea
-          id={`knowledge-origin-summary-${doc.id}`}
-          className="full-width"
-          rows={3}
-          {...register('originSummary')}
-        />
-        <label htmlFor={`knowledge-source-note-${doc.id}`} className="field-label mt8">
-          Review-Notiz zur Quelle
-        </label>
-        <textarea
-          id={`knowledge-source-note-${doc.id}`}
-          className="full-width"
-          rows={3}
-          {...register('sourceReviewNote')}
-        />
-      </div>
+        <div className="section-gap">
+          <h4>Quellenverwaltung</h4>
+          <label htmlFor={`knowledge-source-name-${doc.id}`} className="field-label">
+            Quelle
+          </label>
+          <input
+            id={`knowledge-source-name-${doc.id}`}
+            className="full-width"
+            {...register('sourceName')}
+          />
+          <label htmlFor={`knowledge-source-url-${doc.id}`} className="field-label mt8">
+            Quellen-URL
+          </label>
+          <input
+            id={`knowledge-source-url-${doc.id}`}
+            className="full-width"
+            {...register('sourceUrl')}
+          />
+          <label htmlFor={`knowledge-source-type-${doc.id}`} className="field-label mt8">
+            Herkunftstyp
+          </label>
+          <select
+            id={`knowledge-source-type-${doc.id}`}
+            className="full-width"
+            {...register('sourceType')}
+          >
+            <option value="internal">intern</option>
+            <option value="external">extern</option>
+            <option value="customer">kundenseitig</option>
+            <option value="legal">rechtlich</option>
+            <option value="other">sonstiges</option>
+          </select>
+          <label htmlFor={`knowledge-source-review-${doc.id}`} className="field-label mt8">
+            Review-Status Quelle
+          </label>
+          <select
+            id={`knowledge-source-review-${doc.id}`}
+            className="full-width"
+            {...register('sourceReviewStatus')}
+          >
+            <option value="pending">offen</option>
+            <option value="approved">freigegeben</option>
+            <option value="rejected">abgelehnt</option>
+            <option value="needs_update">Update nötig</option>
+          </select>
+          <label htmlFor={`knowledge-trust-${doc.id}`} className="field-label mt8">
+            Vertrauensgrad
+          </label>
+          <select
+            id={`knowledge-trust-${doc.id}`}
+            className="full-width"
+            {...register('trustLevel')}
+          >
+            <option value="low">niedrig</option>
+            <option value="medium">mittel</option>
+            <option value="high">hoch</option>
+            <option value="verified">verifiziert</option>
+          </select>
+          <label htmlFor={`knowledge-origin-summary-${doc.id}`} className="field-label mt8">
+            Herkunftszusammenfassung
+          </label>
+          <textarea
+            id={`knowledge-origin-summary-${doc.id}`}
+            className="full-width"
+            rows={3}
+            {...register('originSummary')}
+          />
+          <label htmlFor={`knowledge-source-note-${doc.id}`} className="field-label mt8">
+            Review-Notiz zur Quelle
+          </label>
+          <textarea
+            id={`knowledge-source-note-${doc.id}`}
+            className="full-width"
+            rows={3}
+            {...register('sourceReviewNote')}
+          />
+        </div>
 
-      <div className="section-gap">
-        <h4>Veralterung</h4>
-        <label className="field-label" htmlFor={`knowledge-outdated-${doc.id}`}>
-          Als veraltet markieren
-        </label>
-        <input id={`knowledge-outdated-${doc.id}`} type="checkbox" {...register('isOutdated')} />
-        <label htmlFor={`knowledge-outdated-reason-${doc.id}`} className="field-label mt8">
-          Grund
-        </label>
-        <textarea
-          id={`knowledge-outdated-reason-${doc.id}`}
-          className="full-width"
-          rows={3}
-          {...register('outdatedReason')}
-          aria-invalid={Boolean(errors.outdatedReason?.message)}
-          aria-describedby={
-            errors.outdatedReason?.message ? `knowledge-outdated-reason-${doc.id}-error` : undefined
-          }
-        />
-        {errors.outdatedReason?.message && (
-          <div id={`knowledge-outdated-reason-${doc.id}-error`} className="error mt8" role="alert">
-            {errors.outdatedReason.message}
-          </div>
-        )}
-        {doc.outdatedAt && (
-          <div className="muted mt8">Seit: {new Date(doc.outdatedAt).toLocaleString()}</div>
-        )}
-      </div>
+        <div className="section-gap">
+          <h4>Veralterung</h4>
+          <label className="field-label" htmlFor={`knowledge-outdated-${doc.id}`}>
+            Als veraltet markieren
+          </label>
+          <input id={`knowledge-outdated-${doc.id}`} type="checkbox" {...register('isOutdated')} />
+          <label htmlFor={`knowledge-outdated-reason-${doc.id}`} className="field-label mt8">
+            Grund
+          </label>
+          <textarea
+            id={`knowledge-outdated-reason-${doc.id}`}
+            className="full-width"
+            rows={3}
+            {...register('outdatedReason')}
+            aria-invalid={Boolean(errors.outdatedReason?.message)}
+            aria-describedby={
+              errors.outdatedReason?.message
+                ? `knowledge-outdated-reason-${doc.id}-error`
+                : undefined
+            }
+          />
+          {errors.outdatedReason?.message && (
+            <div
+              id={`knowledge-outdated-reason-${doc.id}-error`}
+              className="error mt8"
+              role="alert"
+            >
+              {errors.outdatedReason.message}
+            </div>
+          )}
+          {doc.outdatedAt && (
+            <div className="muted mt8">Seit: {new Date(doc.outdatedAt).toLocaleString()}</div>
+          )}
+        </div>
 
-      <div className="section-gap">
-        <h4>Versionshistorie</h4>
-        {!doc.versions.length && (
-          <div className="muted">Noch keine Versionshistorie vorhanden.</div>
-        )}
-        {!!doc.versions.length && (
-          <table>
-            <thead>
-              <tr>
-                <th scope="col">Version</th>
-                <th scope="col">Zeit</th>
-                <th scope="col">Person</th>
-                <th scope="col">Änderung</th>
-              </tr>
-            </thead>
-            <tbody>
-              {doc.versions.map((version) => (
-                <tr key={version.id}>
-                  <td>{version.versionNumber}</td>
-                  <td>{version.createdAt ? new Date(version.createdAt).toLocaleString() : '-'}</td>
-                  <td>{version.changedByName || '-'}</td>
-                  <td>{version.changeNote || '-'}</td>
+        <div className="section-gap">
+          <h4>Versionshistorie</h4>
+          {!doc.versions.length && (
+            <div className="muted">Noch keine Versionshistorie vorhanden.</div>
+          )}
+          {!!doc.versions.length && (
+            <table tabIndex={0}>
+              <thead>
+                <tr>
+                  <th scope="col">Version</th>
+                  <th scope="col">Zeit</th>
+                  <th scope="col">Person</th>
+                  <th scope="col">Änderung</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
+              </thead>
+              <tbody>
+                {doc.versions.map((version) => (
+                  <tr key={version.id}>
+                    <td>{version.versionNumber}</td>
+                    <td>
+                      {version.createdAt ? new Date(version.createdAt).toLocaleString() : '-'}
+                    </td>
+                    <td>{version.changedByName || '-'}</td>
+                    <td>{version.changeNote || '-'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
 
-      <div className="section-gap">
-        <h4>Genutzte Entwürfe</h4>
-        {!doc.draftLinks.length && <div className="muted">Noch mit keinem Entwurf verknüpft.</div>}
-        {!!doc.draftLinks.length && (
-          <table>
-            <thead>
-              <tr>
-                <th scope="col">Entwurf</th>
-                <th scope="col">Zeit</th>
-                <th scope="col">Verknüpft von</th>
-              </tr>
-            </thead>
-            <tbody>
-              {doc.draftLinks.map((link) => (
-                <tr key={link.id}>
-                  <td>{link.emailDraftId}</td>
-                  <td>{link.linkedAt ? new Date(link.linkedAt).toLocaleString() : '-'}</td>
-                  <td>{link.linkedByName || '-'}</td>
+        <div className="section-gap">
+          <h4>Genutzte Entwürfe</h4>
+          {!doc.draftLinks.length && (
+            <div className="muted">Noch mit keinem Entwurf verknüpft.</div>
+          )}
+          {!!doc.draftLinks.length && (
+            <table tabIndex={0}>
+              <thead>
+                <tr>
+                  <th scope="col">Entwurf</th>
+                  <th scope="col">Zeit</th>
+                  <th scope="col">Verknüpft von</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
+              </thead>
+              <tbody>
+                {doc.draftLinks.map((link) => (
+                  <tr key={link.id}>
+                    <td>{link.emailDraftId}</td>
+                    <td>{link.linkedAt ? new Date(link.linkedAt).toLocaleString() : '-'}</td>
+                    <td>{link.linkedByName || '-'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
       </div>
-    </div>
+    </details>
   )
 }

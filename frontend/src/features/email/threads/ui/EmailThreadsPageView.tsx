@@ -903,6 +903,7 @@ export default function EmailPage() {
               onChange={(event) => setThreadSearchInput(event.target.value)}
             />
             <select
+              aria-label={language === 'en' ? 'Threads per page' : 'Threads pro Seite'}
               value={String(threadsPageSize)}
               onChange={(event) => {
                 setThreadsPageSize(Number(event.target.value))

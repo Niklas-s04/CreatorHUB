@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { apiFetch } from '../../../../api'
 import { useAuthz } from '../../../../shared/hooks/useAuthz'
 import { useI18n } from '../../../../shared/i18n/i18n'
+import { getErrorMessage } from '../../../../shared/lib/errors'
 import ContentItemEditor from './ContentItemEditor'
 import ContentPlanningPanel from './ContentPlanningPanel'
 import ContentPlatformProfilesPanel, { type ProfileDraft } from './ContentPlatformProfilesPanel'
@@ -27,8 +28,7 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 function errorMessage(error: unknown) {
-  if (error instanceof Error) return error.message
-  return String(error)
+  return getErrorMessage(error)
 }
 
 function templatePayload(draft: TemplateDraft) {
@@ -322,6 +322,7 @@ export default function ContentKanbanPageView() {
                   onChange={(event) => setNewTitle(event.target.value)}
                 />
                 <select
+                  aria-label={t('contentHub.fields.platform')}
                   value={newPlatform}
                   onChange={(event) => setNewPlatform(event.target.value)}
                 >
@@ -331,7 +332,11 @@ export default function ContentKanbanPageView() {
                     </option>
                   ))}
                 </select>
-                <select value={newType} onChange={(event) => setNewType(event.target.value)}>
+                <select
+                  aria-label={t('contentHub.fields.type')}
+                  value={newType}
+                  onChange={(event) => setNewType(event.target.value)}
+                >
                   {CONTENT_TYPES.map((type) => (
                     <option key={type} value={type}>
                       {type}

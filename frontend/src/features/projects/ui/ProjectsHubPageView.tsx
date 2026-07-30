@@ -667,6 +667,9 @@ export default function ProjectsHubPageView() {
               }}
             />
             <select
+              aria-label={
+                language === 'de' ? 'Kategorie für neues Projekt' : 'Category for new project'
+              }
               value={newCategoryId}
               onChange={(event) => setNewCategoryId(event.target.value)}
             >
@@ -698,7 +701,11 @@ export default function ProjectsHubPageView() {
           placeholder={text.search}
           onChange={(event) => setQuery(event.target.value)}
         />
-        <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
+        <select
+          aria-label={language === 'de' ? 'Nach Status filtern' : 'Filter by status'}
+          value={statusFilter}
+          onChange={(event) => setStatusFilter(event.target.value)}
+        >
           <option value="">{text.allStatuses}</option>
           {PROJECT_STATUSES.map((status) => (
             <option key={status} value={status}>
@@ -706,7 +713,11 @@ export default function ProjectsHubPageView() {
             </option>
           ))}
         </select>
-        <select value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)}>
+        <select
+          aria-label={language === 'de' ? 'Nach Kategorie filtern' : 'Filter by category'}
+          value={categoryFilter}
+          onChange={(event) => setCategoryFilter(event.target.value)}
+        >
           <option value="">{text.allCategories}</option>
           {categories.map((category) => (
             <option key={category.id} value={category.id}>
@@ -731,7 +742,17 @@ export default function ProjectsHubPageView() {
         <aside className="project-list card" aria-label={text.title}>
           {loading && <div className="muted">{language === 'de' ? 'Lädt …' : 'Loading …'}</div>}
           {!loading && filteredProjects.length === 0 && (
-            <div className="muted">{text.noProjects}</div>
+            <div className="project-empty-state">
+              <span className="project-empty-icon" aria-hidden="true">
+                ◇
+              </span>
+              <strong>{text.noProjects}</strong>
+              <span>
+                {language === 'de'
+                  ? 'Lege oben dein erstes Projekt an oder passe die Filter an.'
+                  : 'Create your first project above or adjust the filters.'}
+              </span>
+            </div>
           )}
           {filteredProjects.map((project) => (
             <button
@@ -775,8 +796,16 @@ export default function ProjectsHubPageView() {
 
         <section className="project-detail">
           {!form ? (
-            <div className="card muted">
-              {language === 'de' ? 'Wähle ein Projekt aus.' : 'Select a project.'}
+            <div className="card project-empty-state">
+              <span className="project-empty-icon" aria-hidden="true">
+                ↗
+              </span>
+              <strong>{language === 'de' ? 'Projektdetails' : 'Project details'}</strong>
+              <span>
+                {language === 'de'
+                  ? 'Wähle links ein Projekt aus, um Briefing, Status und Verknüpfungen zu bearbeiten.'
+                  : 'Select a project to edit its brief, status and relations.'}
+              </span>
             </div>
           ) : (
             <>

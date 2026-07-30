@@ -11,9 +11,11 @@ async function createTemplate(page: Page, templateName: string, firstItemTitle: 
   await templateCreateCard.locator('input').nth(0).fill(templateName)
   await templateCreateCard.locator('input').nth(1).fill(firstItemTitle)
   await templateCreateCard.getByRole('button', { name: /Speichern|Save/i }).click()
-  await expect(page.locator('.card.tight strong', { hasText: templateName }).first()).toBeVisible({
-    timeout: 15_000,
-  })
+  await expect(
+    page.getByRole('button', {
+      name: new RegExp(templateName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')),
+    })
+  ).toBeVisible({ timeout: 15_000 })
 }
 
 async function createItemOnBoard(page: Page, videoTitle: string) {
@@ -54,12 +56,10 @@ test.describe('Content Hub planning E2E', () => {
 
     // Apply template in checklist tab.
     await page.getByRole('tab', { name: /Checkliste|Checklist/i }).click()
-    await page
-      .getByRole('button', { name: new RegExp(`(Anwenden|Apply):\\s*${templateName}`) })
-      .click()
+    await page.getByRole('button', { name: templateName, exact: true }).click()
 
     await expect(page.getByText(/Readiness/i)).toBeVisible({ timeout: 15_000 })
-    await expect(page.getByText(/Publish ready/i)).toBeVisible({ timeout: 15_000 })
+    await expect(page.getByText(/Nicht bereit|Not ready/i)).toBeVisible({ timeout: 15_000 })
     await expect(page.getByText(/Required checklist tasks are open/i)).toBeVisible({
       timeout: 15_000,
     })
@@ -67,7 +67,7 @@ test.describe('Content Hub planning E2E', () => {
     // Verify generated task is visible in board details.
     await page.getByRole('tab', { name: /Plan/i }).click()
     await page.locator('.kanban-card', { hasText: videoTitle }).first().click()
-    await expect(page.getByText('Recording done')).toBeVisible({ timeout: 15_000 })
+    await expect(page.locator('input[value="Recording done"]')).toBeVisible({ timeout: 15_000 })
   })
 
   test('Negativpfad: Publish bleibt blockiert solange required checklist tasks offen sind', async ({
@@ -85,9 +85,7 @@ test.describe('Content Hub planning E2E', () => {
     await createItemOnBoard(page, videoTitle)
 
     await page.getByRole('tab', { name: /Checkliste|Checklist/i }).click()
-    await page
-      .getByRole('button', { name: new RegExp(`(Anwenden|Apply):\\s*${templateName}`) })
-      .click()
+    await page.getByRole('button', { name: templateName, exact: true }).click()
     await expect(page.getByText(/Required checklist tasks are open/i)).toBeVisible({
       timeout: 15_000,
     })
@@ -104,8 +102,7 @@ test.describe('Content Hub planning E2E', () => {
     await expect(statusSelect).not.toHaveValue('published')
 
     await page.getByRole('tab', { name: /Checkliste|Checklist/i }).click()
-    await expect(page.getByText(/Publish ready/i)).toBeVisible({ timeout: 15_000 })
-    await expect(page.getByText(/Publish ready: (No|Nein)/i)).toBeVisible({ timeout: 15_000 })
+    await expect(page.getByText(/Nicht bereit|Not ready/i)).toBeVisible({ timeout: 15_000 })
     await expect(page.getByText(/Required checklist tasks are open/i)).toBeVisible({
       timeout: 15_000,
     })

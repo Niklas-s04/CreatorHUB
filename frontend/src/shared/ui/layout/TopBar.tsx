@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router'
 import { apiFetch } from '../../../api'
 import { useDebouncedValue } from '../../hooks/useDebouncedValue'
 import { useI18n } from '../../i18n/i18n'
+import { ThemeToggle } from '../../theme/ThemeToggle'
 
 type DashboardMetric = {
   key: string
@@ -165,7 +166,7 @@ export default function TopBar({
     ;(async () => {
       setLoading(true)
       try {
-        const response = await apiFetch<unknown>(`/search?q=${encodeURIComponent(q)}&per_type=4`)
+        const response = await apiFetch<unknown>(`/search/?q=${encodeURIComponent(q)}&per_type=4`)
         if (!active) return
         const parsedGroups = parseSearchGroups(response)
         setGroups(parsedGroups)
@@ -397,9 +398,10 @@ export default function TopBar({
           )}
         </div>
         <div className="topbar-right">
+          <ThemeToggle />
           <button
             type="button"
-            className="topbar-icon-btn"
+            className="topbar-icon-btn topbar-notification-btn"
             onClick={() => navigate('/operations')}
             aria-label={language === 'en' ? 'Notifications' : 'Benachrichtigungen'}
             title={language === 'en' ? 'Open operations inbox' : 'Operations Inbox öffnen'}

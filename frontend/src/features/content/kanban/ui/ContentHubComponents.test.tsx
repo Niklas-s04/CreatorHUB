@@ -98,9 +98,11 @@ describe('Content Hub components', () => {
     )
     expect(screen.getByLabelText(/Titel/)).toHaveValue('Unsaved local title')
 
+    fireEvent.change(screen.getByLabelText(/Status/), { target: { value: 'published' } })
     fireEvent.click(screen.getByRole('button', { name: 'Speichern' }))
     await waitFor(() => expect(onSave).toHaveBeenCalled())
     expect(screen.getByLabelText(/Titel/)).toHaveValue('Unsaved local title')
+    expect(screen.getByLabelText(/Status/)).toHaveValue('idea')
   })
 
   it('patches only locally changed fields after a concurrent refetch', async () => {

@@ -1,4 +1,4 @@
-import logoUrl from '../../../assets/logo.png'
+import logoUrl from '../../../assets/logo.webp'
 import { useI18n } from '../../i18n/i18n'
 
 type AppLogoProps = {

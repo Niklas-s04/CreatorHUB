@@ -23,6 +23,7 @@ import { useToast } from '../../../../shared/ui/toast/ToastProvider'
 import { useI18n } from '../../../../shared/i18n/i18n'
 import { AppLogo } from '../../../../shared/ui/brand/AppLogo'
 import { ApiError } from '../../../../shared/api/httpClient'
+import { ThemeToggle } from '../../../../shared/theme/ThemeToggle'
 
 type PasswordFieldProps = {
   id: string
@@ -289,6 +290,7 @@ export default function LoginPage() {
 
   return (
     <main className="login-shell">
+      <ThemeToggle className="login-theme-switch" />
       <div className="login-stage">
         <aside className="login-brand-panel" aria-label={t('login.brandSubline')}>
           <div className="login-brand-mark">

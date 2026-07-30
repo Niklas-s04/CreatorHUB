@@ -164,7 +164,11 @@ export default function ContentItemEditor({ item, profiles, error, onSave, onDel
       }
       setBaseline(currentForm)
     } catch {
-      // The parent displays the API error; retain the user's draft for a retry.
+      // Retain editable content for a retry, but never leave a rejected workflow state
+      // selected because that suggests the transition succeeded.
+      if (currentForm.status !== currentItem.status) {
+        setForm((current) => (current ? { ...current, status: currentItem.status } : current))
+      }
     } finally {
       setSaving(false)
     }

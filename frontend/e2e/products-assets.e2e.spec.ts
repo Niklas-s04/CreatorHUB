@@ -36,11 +36,8 @@ test.describe('Products + Assets E2E', () => {
     await page.getByPlaceholder('z.B. 120').fill('123')
     await expect(page.getByPlaceholder('z.B. 120')).toHaveValue('123')
     await page.getByRole('button', { name: /Status anwenden|Apply/ }).click()
-    await expect(
-      page.getByText(/Status active -> sold|Product status changed: active -> sold/).first()
-    ).toBeVisible({
-      timeout: 15000,
-    })
+    await expect(statusSelect).toHaveValue('sold')
+    await expect(page.getByText('123 EUR').first()).toBeVisible({ timeout: 15000 })
 
     const uploadInput = page.locator('input[type="file"]').first()
     await uploadInput.setInputFiles({
