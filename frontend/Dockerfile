@@ -11,7 +11,7 @@ COPY . /app/
 RUN npm run build
 
 # Run stage
-FROM nginxinc/nginx-unprivileged:1.27-alpine
+FROM nginxinc/nginx-unprivileged:1.30-alpine
 COPY --from=build /app/dist /usr/share/nginx/html
 COPY --chown=101:0 --chmod=644 nginx.conf /etc/nginx/conf.d/default.conf
 
