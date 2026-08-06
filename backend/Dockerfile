@@ -1,4 +1,4 @@
-FROM python:3.11-slim AS builder
+FROM python:3.14-slim AS builder
 
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
@@ -13,7 +13,7 @@ COPY requirements.txt /app/requirements.txt
 RUN python -m pip install --upgrade pip \
 	&& pip wheel --wheel-dir /wheels -r /app/requirements.txt
 
-FROM python:3.11-slim AS runtime
+FROM python:3.14-slim AS runtime
 
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
